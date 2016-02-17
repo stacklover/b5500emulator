@@ -23,49 +23,57 @@
 //   should really implement the X register to be 100% correct,
 //   right now we use a 9 bit extension which should be good enough for
 //   rounding purposes :)
-word48 b5500_sp_addsub(word48 A, word48 B, bit subtract)
+void b5500_sp_addsub(CPU *this, BIT subtract)
 {
 	int	ea;	// signed exponent of A
 	int	eb;	// signed exponent of B
-	word49	ma;	// absolute mantissa of A (left justified in word) + 9 bits of extension
-	word49	mb;	// absolute mantissa of B (left justified in word) + 9 bits of extension
-	bit	sa;	// mantissa sign of A (0=positive)
-	bit	sb;	// mantissa sign of B (ditto)
+	WORD49	ma;	// absolute mantissa of A (left justified in word) + 9 bits of extension
+	WORD49	mb;	// absolute mantissa of B (left justified in word) + 9 bits of extension
+	BIT	sa;	// mantissa sign of A (0=positive)
+	BIT	sb;	// mantissa sign of B (ditto)
 
-	// if subtracting, complement sign of A
-	// why do it more complicated than this?
-	if (subtract)
-		A ^= MASK_SIGNMANT;
+	ma = (this->r.A & MASK_MANTISSA) << SHFT_MANTISSALJ; // extract the A mantissa and shift left
+	mb = (this->r.B & MASK_MANTISSA) << SHFT_MANTISSALJ; // extract the B mantissa and shift left
 
-	ma = (A & MASK_MANTISSA) << SHFT_MANTISSALJ; // extract the A mantissa and shift left
-	mb = (B & MASK_MANTISSA) << SHFT_MANTISSALJ; // extract the B mantissa and shift left
-
-	ea = (A & MASK_EXPONENT) >> SHFT_EXPONENT;
-	sa = (A & MASK_SIGNMANT) >> SHFT_SIGNMANT;
-	if (A & MASK_SIGNEXPO)
-		ea = -((A & MASK_EXPONENT) >> SHFT_EXPONENT);
+	ea = (this->r.A & MASK_EXPONENT) >> SHFT_EXPONENT;
+	sa = (this->r.A & MASK_SIGNMANT) >> SHFT_SIGNMANT;
+	if (this->r.A & MASK_SIGNEXPO)
+		ea = -((this->r.A & MASK_EXPONENT) >> SHFT_EXPONENT);
 	else
-		ea = ((A & MASK_EXPONENT) >> SHFT_EXPONENT);
+		ea = ((this->r.A & MASK_EXPONENT) >> SHFT_EXPONENT);
 
-	eb = (B & MASK_EXPONENT) >> SHFT_EXPONENT;
-	sb = (B & MASK_SIGNMANT) >> SHFT_SIGNMANT;
-	if (B & MASK_SIGNEXPO)
-		eb = -((B & MASK_EXPONENT) >> SHFT_EXPONENT);
+	eb = (this->r.B & MASK_EXPONENT) >> SHFT_EXPONENT;
+	sb = (this->r.B & MASK_SIGNMANT) >> SHFT_SIGNMANT;
+	if (this->r.B & MASK_SIGNEXPO)
+		eb = -((this->r.B & MASK_EXPONENT) >> SHFT_EXPONENT);
 	else
-		eb = ((B & MASK_EXPONENT) >> SHFT_EXPONENT);
+		eb = ((this->r.B & MASK_EXPONENT) >> SHFT_EXPONENT);
 
 #if DEBUG
 	printf("ma='%016llo' sa='%d' ea='%d'\n", ma, sa, ea);
 	printf("mb='%016llo' sb='%d' eb='%d'\n", mb, sb, eb);
 #endif
 
+	// if subtracting, complement sign of A
+	if (subtract)
+		sa ^= 1;
+
 	// trivial cases
-	if (ma == 0 && mb == 0)
-		return 0;
-	if (ma == 0)
-		return B & MASK_NUMBER;
-	if (mb == 0)
-		return A & MASK_NUMBER;
+	if (ma == 0 && mb == 0) {
+		this->r.B = 0;
+		this->r.AROF = 0;
+		return;
+	}
+	if (ma == 0) {
+		this->r.B = this->r.B & MASK_NUMBER;
+		this->r.AROF = 0;
+		return;
+	}
+	if (mb == 0) {
+		this->r.B = this->r.A & MASK_NUMBER;
+		this->r.AROF = 0;
+		return;
+	}
 
         // If the exponents are unequal, normalize the larger and scale the smaller
         // until they are in alignment
@@ -129,33 +137,40 @@ word48 b5500_sp_addsub(word48 A, word48 B, bit subtract)
 	// highest bit in extension set?
 	// note that here our "extension" is just the 9 bits at the right end of
 	// the mantissa and not the full "X" register!
-	if (mb & 0400)
+	// do NOT round when the mantissa is all ones!
+	if ((mb & 0400) && ((mb & MASK_MANTLJ) != MASK_MANTLJ))
 		mb += 0400;	// round up
 
 	// Check for exponent overflow
-	if (eb > 63) {
-		eb = 63;
-	} else if (eb < -63) {
-		eb = -63;
-        }
+	if (eb > 077) {
+		eb &= 077;
+		if (this->r.NCSF) {
+			// signal overflow here
+			this->r.I = (this->r.I & 0x0F) | 0xB0;	// set I05/6/8: exponent-overflow
+			signalInterrupt(this);
+		}
+	}
+	// underflow cannot happen here
 
 #if DEBUG
 	printf("mr='%016llo' sr='%d' er='%d'\n", mb, sb, eb);
 #endif
 
-	B = (mb >> SHFT_MANTISSALJ) & MASK_MANTISSA;
+	this->r.B = (mb >> SHFT_MANTISSALJ) & MASK_MANTISSA;
 	// if B is zero, no exponent, no signs
-	if (B == 0)
-		return 0ll;
+	if (this->r.B == 0) {
+		this->r.AROF = 0;
+		return;
+	}
 
 	// put in mantissa sign
 	if (sb)
-		B |= MASK_SIGNMANT;
+		this->r.B |= MASK_SIGNMANT;
 
 	// put in exponent
 	if (eb >= 0)
-		B |= ((long long)eb << SHFT_EXPONENT);
+		this->r.B |= ((long long)eb << SHFT_EXPONENT);
 	else
-		B |= (((long long)-eb << SHFT_EXPONENT) | MASK_SIGNEXPO);
-	return B; 
+		this->r.B |= (((long long)-eb << SHFT_EXPONENT) | MASK_SIGNEXPO);
+	this->r.AROF = 0; 
 }

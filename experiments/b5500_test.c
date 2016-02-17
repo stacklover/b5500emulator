@@ -19,13 +19,13 @@
 #include <math.h>
 #include "b5500_common.h"
 
-void b5500_sp_print(word48 A)
+void b5500_sp_print(WORD48 A)
 {
 	int	e;	// exponent
-	word48	m;	// mantissa
-	bit	se;	// mantissa sign
-	bit	sm;	// exponent sign
-	bit	cw;	// control word
+	WORD48	m;	// mantissa
+	BIT	se;	// mantissa sign
+	BIT	sm;	// exponent sign
+	BIT	cw;	// control word
 	double	d;	// number in host format
 
 	m = (A & MASK_MANTISSA) >> SHFT_MANTISSA;
@@ -46,11 +46,17 @@ void b5500_sp_print(word48 A)
 		printf(" CONTROL WORD!");
 }
 
+void signalInterrupt(CPU *this)
+{
+	printf("\nIRQ=$%02x\n", this->r.I);
+}
+
 int main(int argc, char *argv[])
 {
-	word48	testa, testb, testc;
+	WORD48	testa, testb;
 	int	i;
 	int	sub = 0;
+	CPU	this;
 
 	if (argc < 3) {
 		printf("needs 2 octal B5500 numbers\n");
@@ -69,13 +75,22 @@ int main(int argc, char *argv[])
 	b5500_sp_print(testb);
 	printf("\n");
 
-	i = b5500_sp_compare(testa, testb);
+	this.r.NCSF = 1;
+	this.r.I = 0;
+
+	this.r.A = testa;
+	this.r.B = testb;
+	this.r.AROF = this.r.BROF = 1;
+	i = b5500_sp_compare(&this);
 	printf("sp_compare='%d'\n\n", i);
 
-	testc = b5500_sp_addsub(testa, testb, sub);
+	this.r.A = testa;
+	this.r.B = testb;
+	this.r.AROF = this.r.BROF = 1;
+	b5500_sp_addsub(&this, sub);
 
 	printf("\nsp_add=");
-	b5500_sp_print(testc);
+	b5500_sp_print(this.r.B);
 	printf("\n\n");
 	
 	return 0;

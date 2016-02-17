@@ -27,17 +27,17 @@ Function returns:
   0 if B=A
  +1 if B>A
 */
-int b5500_sp_compare(word48 A, word48 B)
+int b5500_sp_compare(CPU *this)
 {
 	int	ea;	// signed exponent of A
 	int	eb;	// signed exponent of B
-	word49	ma;	// absolute mantissa of A (left justified in word)
-	word49	mb;	// absolute mantissa of B (left justified in word)
-	bit	sa;	// mantissa sign of A (0=positive)
-	bit	sb;	// mantissa sign of B (ditto)
+	WORD49	ma;	// absolute mantissa of A (left justified in word)
+	WORD49	mb;	// absolute mantissa of B (left justified in word)
+	BIT	sa;	// mantissa sign of A (0=positive)
+	BIT	sb;	// mantissa sign of B (ditto)
 
-	ma = (A & MASK_MANTISSA) << SHFT_MANTISSALJ; // extract the A mantissa and shift left
-	mb = (B & MASK_MANTISSA) << SHFT_MANTISSALJ; // extract the B mantissa and shift left
+	ma = (this->r.A & MASK_MANTISSA) << SHFT_MANTISSALJ; // extract the A mantissa and shift left
+	mb = (this->r.B & MASK_MANTISSA) << SHFT_MANTISSALJ; // extract the B mantissa and shift left
 
 	// Extract the exponents and signs.
 
@@ -45,24 +45,24 @@ int b5500_sp_compare(word48 A, word48 B)
 		ea = 0;
 		sa = 0; // consider A to be completely zero
 	} else {
-		ea = (A & MASK_EXPONENT) >> SHFT_EXPONENT;
-		sa = (A & MASK_SIGNMANT) >> SHFT_SIGNMANT;
-		if (A & MASK_SIGNEXPO)
-			ea = -((A & MASK_EXPONENT) >> SHFT_EXPONENT);
+		ea = (this->r.A & MASK_EXPONENT) >> SHFT_EXPONENT;
+		sa = (this->r.A & MASK_SIGNMANT) >> SHFT_SIGNMANT;
+		if (this->r.A & MASK_SIGNEXPO)
+			ea = -((this->r.A & MASK_EXPONENT) >> SHFT_EXPONENT);
 		else
-			ea = ((A & MASK_EXPONENT) >> SHFT_EXPONENT);
+			ea = ((this->r.A & MASK_EXPONENT) >> SHFT_EXPONENT);
 	}
 
 	if (mb == 0) { // if B mantissa is zero
 		eb = 0;
 		sb = 0; // consider B to be completely zero
 	} else {
-		eb = (B & MASK_EXPONENT) >> SHFT_EXPONENT;
-		sb = (B & MASK_SIGNMANT) >> SHFT_SIGNMANT;
-		if (B & MASK_SIGNEXPO)
-			eb = -((B & MASK_EXPONENT) >> SHFT_EXPONENT);
+		eb = (this->r.B & MASK_EXPONENT) >> SHFT_EXPONENT;
+		sb = (this->r.B & MASK_SIGNMANT) >> SHFT_SIGNMANT;
+		if (this->r.B & MASK_SIGNEXPO)
+			eb = -((this->r.B & MASK_EXPONENT) >> SHFT_EXPONENT);
 		else
-			eb = ((B & MASK_EXPONENT) >> SHFT_EXPONENT);
+			eb = ((this->r.B & MASK_EXPONENT) >> SHFT_EXPONENT);
 	}
 
 #if DEBUG
