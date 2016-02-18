@@ -19,8 +19,16 @@
 #define	DEBUG	1
 
 typedef unsigned char BIT;		// a single bit
+typedef unsigned char WORD2;		// 2 bits
+typedef unsigned char WORD3;		// 3 bits
+typedef unsigned char WORD4;		// 4 bits
+typedef unsigned char WORD6;		// 6 bits
 typedef unsigned char WORD8;		// 8 bits
+typedef unsigned short ADDR9;		// 9 bits higher part of memory address
+typedef unsigned short WORD12;		// 12 bits instruction register
 typedef unsigned short ADDR15;		// 15 bits memory address
+typedef unsigned long WORD21;		// 21 bits
+typedef unsigned long long WORD39;	// 39 bits mantissa extension
 typedef unsigned long long WORD48;	// 48 bits machine word
 
 typedef struct accessor {
@@ -35,14 +43,43 @@ typedef struct accessor {
 typedef struct cpuregs {
 	WORD48		A;	// A register
 	WORD48		B;	// B register
-	WORD8		I;	// I register (interrupts)
-	ADDR15		M;	// M register (memory address)
-	ADDR15		S;	// S register (stack pointer)
 	ADDR15		C;	// C register (program address)
+	WORD6		E;	// E Memory access control register
 	ADDR15		F;	// F register (frame address)
+	WORD3		G;	// Character index register for A
+	WORD3		H;	// Bit index register for G (in A)
+	WORD8		I;	// I register (interrupts)
+	WORD4		J;	// J state machine register
+	WORD3		K;	// Character index register for B
+	WORD2		L;	// Instruction syllable index in P
+	ADDR15		M;	// M register (memory address)
+	WORD4		N;	// Octal shift counter for B
+	WORD48		P;	// Current program instruction word register
+	WORD21		Q;	// Misc. FFs (bits 1-9 only: Q07F=hardware-induced interrupt, Q09F=enable parallel adder for R-relative addressing)
+	ADDR9		R;	// High-order 9 bits of PRT base address (TALLY in char mode)
+	ADDR15		S;	// S register (stack pointer)
+	WORD12		T;	// Current program syllable register
+	WORD3		V;	// Bit index register for K (in B)
+	WORD39		X;	// Mantissa extension for B (loop control in CM)
+	WORD6		Y;	// Serial character register for A
+	WORD6		Z;	// Serial character register for B
+
 	BIT		AROF;	// A register occupied flag
 	BIT		BROF;	// B register occupied flag
-	BIT		NCSF;	// not control state flag
+	BIT		CCCF;	// Clock-count control FF (maintenance only)
+	BIT		CWMF;	// Character/word mode FF (1=CM)
+	BIT		EIHF;	// E-register Inhibit Address FF
+	BIT		HLTF;	// Processor halt FF
+	BIT		MRAF;	// Memory read access FF
+	BIT		MROF;	// Memory read obtained FF
+	BIT		MSFF;	// Mark-stack FF (word mode: MSCW is pending RCW, physically also TFFF & Q12F)
+	BIT		MWOF;	// Memory write obtained FF
+	BIT		NCSF;	// Normal/Control State FF (1=normal)
+	BIT		PROF;	// P contents valid
+	BIT		SALF;	// Program/subroutine state FF (1=subroutine)
+	BIT		TM;	// Temporary maintenance storage register
+	BIT		TROF;	// T contents valid
+	BIT		VARF;	// Variant-mode FF (enables full PRT indexing)
 } CPUREGS;
 
 typedef struct cpu {
@@ -50,6 +87,18 @@ typedef struct cpu {
 	ACCESSOR	acc;	// memory accessor
 	const char	*id;	// pointer to name of CPU ("A" or "B")
 } CPU;
+
+/*
+ * shared memory resource names and pointers
+ */
+#define	SHM_MAIN	(('M'<<24)|('A'<<16)|('I'<<8)|'N')
+#define	SHM_CPUA	(('C'<<24)|('P'<<16)|('U'<<8)|'A')
+#define	SHM_CPUB	(('C'<<24)|('P'<<16)|('U'<<8)|'B')
+#define	MAXMEM		32768
+
+extern WORD48	*MAIN;
+extern CPU	*CPUA;
+extern CPU	*CPUB;
 
 /*
  * B5500 integer/real format:
