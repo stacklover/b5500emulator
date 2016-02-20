@@ -94,7 +94,8 @@ typedef struct cpu {
 #define	SHM_MAIN	(('M'<<24)|('A'<<16)|('I'<<8)|'N')
 #define	SHM_CPUA	(('C'<<24)|('P'<<16)|('U'<<8)|'A')
 #define	SHM_CPUB	(('C'<<24)|('P'<<16)|('U'<<8)|'B')
-#define	MAXMEM		32768
+#define	MAXMEM		0x8000
+#define	MASKMEM		0x7fff
 
 extern WORD48	*MAIN;
 extern CPU	*CPUA;
@@ -110,12 +111,22 @@ extern CPU	*CPUB;
 #define	MASK_SIGNEXPO	001000000000000000 // exponent sign bit
 #define	MASK_SIGNMANT	002000000000000000 // mantissa sign bit
 #define	MASK_NUMBER	003777777777777777 // the number
-#define	MASK_CONTROLW	004000000000000000 // the control bit
 #define	SHFT_MANTISSA	0
 #define	SHFT_EXPONENT	39
 #define	SHFT_SIGNEXPO	45
 #define	SHFT_SIGNMANT	46
+
+/*
+ * B5500 control word formats
+ */
+#define	MASK_CONTROLW	004000000000000000 // the control bit
+#define	MASK_PBIT	001000000000000000 // the presence bit
+#define	MASK_FIELD_F	000000007777700000 // the F field
+#define	MASK_FIELD_C	000000000000077777 // the C field
 #define	SHFT_CONTROLW	47
+#define	SHFT_PBIT	45
+#define	SHFT_FIELD_F	15
+#define	SHFT_FIELD_C	0
 
 /*
  * special use of host wordsize to aid in arithmetics
@@ -129,7 +140,10 @@ typedef unsigned long long WORD49;	// carry + 39 bits mantissa + 9 bit extension
 /* functions available */
 extern int b5500_sp_compare(CPU *this);
 extern void b5500_sp_addsub(CPU *this, BIT subtract);
+extern int b5500_sp_addsub2(CPU *this);
 
 extern void signalInterrupt(CPU *this);
+extern void b5500_pdp_text(CPU *this);
+extern void b5500_init_shares(void);
 
 #endif /* B5500_COMMON_H */

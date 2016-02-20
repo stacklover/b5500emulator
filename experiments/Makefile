@@ -13,8 +13,20 @@
 #   from thin air.
 #**********************************************************************/
 
-all:	b5500_test.exe
+SRCTEST =	b5500_test.c \
+		b5500_sp_compare.c \
+		b5500_sp_add.c \
+		b5500_pdp_text.c b5500_init_shares.c
 
-b5500_test.exe: b5500_test.c b5500_sp_compare.c b5500_sp_add.c b5500_common.h Makefile
-	gcc -Wall -o b5500_test.exe b5500_test.c b5500_sp_compare.c b5500_sp_add.c 
+SRCVIEW =	b5500_view.c b5500_pdp_text.c b5500_init_shares.c
+
+INC =		b5500_common.h
+
+all:	b5500_test.exe b5500_view.exe
+
+b5500_test.exe:  $(SRCTEST) $(INC) Makefile
+	gcc -Wall -o b5500_test.exe $(SRCTEST) 
+
+b5500_view.exe:  $(SRCVIEW) $(INC) Makefile
+	gcc -Wall -o b5500_view.exe $(SRCVIEW) 
 
