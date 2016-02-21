@@ -16,7 +16,11 @@
 SRCTEST =	b5500_test.c \
 		b5500_sp_compare.c \
 		b5500_sp_add.c \
-		b5500_pdp_text.c b5500_init_shares.c
+		b5500_pdp_text.c b5500_init_shares.c \
+		b5500_execute_wm.c \
+		b5500_stack.c b5500_memory.c b5500_jump_call.c \
+		b5500_irq_io.c b5500_single.c b5500_double.c \
+		b5500_misc_cpu.c b5500_bitfield.c b5500_stream.c
 
 SRCVIEW =	b5500_view.c b5500_pdp_text.c b5500_init_shares.c
 
