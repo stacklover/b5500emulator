@@ -194,7 +194,7 @@ void b5500_pdp_text(CPU *this)
 		printf("%u", (int)(this->r.P >> i) & 1);
 		if (i>=3) printf(" ");
 	}
-	printf("   ");
+	printf(" %u ", (this->r.L >> 1) & 1);
 	for (i=10; i>=0; i-=3) {
 		printf("%u", (this->r.T >> i) & 1);
 		if (i>=3) printf(" ");
@@ -211,7 +211,7 @@ void b5500_pdp_text(CPU *this)
 		printf("%u", (int)(this->r.P >> i) & 1);
 		if (i>=3) printf(" ");
 	}
-	printf("   ");
+	printf(" %u ", (this->r.L >> 0) & 1);
 	for (i=9; i>=0; i-=3) {
 		printf("%u", (this->r.T >> i) & 1);
 		if (i>=3) printf(" ");
