@@ -30,10 +30,10 @@ void b5500_pdp_text(CPU *this)
 		if (i>=3) printf(" ");
 	}
 	printf("'%u %u'", (this->r.J >> 3) & 1, (this->r.J >> 2) & 1);
-	for (i=20; i>=0; i-=3) {
-		printf("%u", (int)(this->r.Q >> i) & 1);
-		if (i>=3) printf(" ");
-	}
+	printf("%u %u %u %u %u %u %u",
+		this->r.CWMF, this->r.MWOF, this->r.MROF,
+		this->r.Q09F, this->r.Q06F, this->r.Q03F,
+		this->r.VARF);
 	printf("'");
 	for (i=8; i>=0; i-=3) {
 		printf("%u", (this->r.R >> i) & 1);
@@ -47,10 +47,10 @@ void b5500_pdp_text(CPU *this)
 		if (i>=3) printf(" ");
 	}
 	printf("   %u ", (this->r.J >> 1) & 1);
-	for (i=19; i>=0; i-=3) {
-		printf("%u", (int)(this->r.Q >> i) & 1);
-		if (i>=3) printf(" ");
-	}
+	printf("%u %u %u %u %u %u %u",
+		this->r.SALF, this->r.EIHF, this->r.MRAF,
+		this->r.Q08F, this->r.Q05F, this->r.Q02F,
+		this->r.CCCF);
 	printf(" ");
 	for (i=7; i>=0; i-=3) {
 		printf("%u", (this->r.R >> i) & 1);
@@ -64,10 +64,10 @@ void b5500_pdp_text(CPU *this)
 		if (i>=3) printf(" ");
 	}
 	printf("   %u ", (this->r.J >> 0) & 1);
-	for (i=18; i>=0; i-=3) {
-		printf("%u", (int)(this->r.Q >> i) & 1);
-		if (i>=3) printf(" ");
-	}
+	printf("%u %u %u %u %u %u %u",
+		this->r.NCSF, this->r.HLTF, this->r.Q12F,
+		this->r.Q07F, this->r.Q04F, this->r.Q01F,
+		this->r.zzzF);
 	printf(" ");
 	for (i=6; i>=0; i-=3) {
 		printf("%u", (this->r.R >> i) & 1);

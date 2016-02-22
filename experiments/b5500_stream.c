@@ -90,8 +90,8 @@ void compareSourceWithDest(CPU *this, unsigned count, BIT numeric)
 	WORD48		aw;	// current A register word
 	unsigned	bBit;	// B register bit nr
 	WORD48		bw;	// current B register word
-	BIT		Q03F = (this->r.Q >> 2) & 1; // local copy of Q03F: inequality detected
-	BIT		Q04F = (this->r.Q >> 3) & 1; // local copy of Q04F: B not dirty
+	BIT		Q03F = this->r.Q03F; // local copy of Q03F: inequality detected
+	BIT		Q04F = this->r.Q04F; // local copy of Q04F: B not dirty
 	unsigned	yc = 0;	// local Y register
 	unsigned	zc = 0;	// local Z register
 
@@ -115,7 +115,7 @@ void compareSourceWithDest(CPU *this, unsigned count, BIT numeric)
 
 		// setting Q06F and saving the count in H & V is only significant if this
 		// routine is executed as part of Field Add (FAD) or Field Subtract (FSU).
-		this->r.Q |= 0x20; // set Q06F
+		this->r.Q06F = 1; // set Q06F
 		this->r.H = count >> 3;
 		this->r.V = count & 7;
 
@@ -220,7 +220,8 @@ void compareSourceWithDest(CPU *this, unsigned count, BIT numeric)
 			}
 		} while (count);
 
-		this->r.Q |= (Q03F << 2) | (Q04F << 3);
+		this->r.Q03F = Q03F;
+		this->r.Q04F = Q04F;
 		this->r.Y = yc;		// for display only
 		this->r.Z = zc;		// for display only
 	}
@@ -250,10 +251,11 @@ void fieldArithmetic(CPU *this, unsigned count, BIT adding)
 
 	compareSourceWithDest(this, count, true);
 	this->cycleCount += 2;	// approximate the timing thus far
-	if (this->r.Q & 0x20) {	// Q06F => count > 0, so there's characters to add
-		this->r.Q &= ~(0x28); // reset Q06F and Q04F
+	if (this->r.Q06F) {	// Q06F => count > 0, so there's characters to add
+		this->r.Q06F = 0;
+		this->r.Q04F = 0; // reset Q06F and Q04F
 		TFFF = (this->r.MSFF != 0); // get TFFF as a Boolean
-		Q03F = ((this->r.Q & 4) != 0); // get Q03F as a Boolean
+		Q03F = this->r.Q03F; // get Q03F as a Boolean
 
 		// Back down the pointers to the last characters of their respective fields
 		if (this->r.K > 0) {
@@ -278,7 +280,7 @@ void fieldArithmetic(CPU *this, unsigned count, BIT adding)
 			loadAviaM(this); // A = [M]
 		}
 
-		this->r.Q |= 0x80; // set Q08F (for display only)
+		this->r.Q08F = 1; // set Q08F (for display only)
 		aBit = this->r.G*6; // A-bit number
 		aw = this->r.A;
 		bBit = this->r.K*6; // B-bit number
@@ -292,10 +294,11 @@ void fieldArithmetic(CPU *this, unsigned count, BIT adding)
 			(zd != 0 && compl && Q03F && TFFF) ||
 			(compl && !Q03F));
 		if (compl) {
-			this->r.Q |= 0x42; // set Q07F and Q02F (for display only)
+			this->r.Q07F = 1;
+			this->r.Q02F = 1; // set Q07F and Q02F (for display only)
 			carry = 1; // preset the carry/borrow bit (Q07F)
 			if (TFFF) {
-				this->r.Q |= 0x08; // set Q04F (for display only)
+				this->r.Q04F = 1; // set Q04F (for display only)
 				zcompl = true;
 			} else {
 				ycompl = true;
@@ -666,7 +669,7 @@ void streamBlankForNonNumeric(CPU *this, unsigned count)
 				// is numeric and non-zero: stop blanking
 				this->r.MSFF = 0;
 				// set Q03F (display only)
-				this->r.Q |= 0x04;
+				this->r.Q03F = 1;
 				// terminate, pointing at this char
 				break;
 			} else {

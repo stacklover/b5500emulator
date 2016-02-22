@@ -62,7 +62,7 @@ typedef struct cpuregs {
 	ADDR15		M;	// M register (memory address)
 	WORD4		N;	// Octal shift counter for B
 	WORD48		P;	// Current program instruction word register
-	WORD21		Q;	// Misc. FFs (bits 1-9 only: Q07F=hardware-induced interrupt, Q09F=enable parallel adder for R-relative addressing)
+	// Q register is handled as BITs, see below
 	ADDR9		R;	// High-order 9 bits of PRT base address (TALLY in char mode)
 	ADDR15		S;	// S register (stack pointer)
 	WORD12		T;	// Current program syllable register
@@ -71,6 +71,16 @@ typedef struct cpuregs {
 	WORD6		Y;	// Serial character register for A
 	WORD6		Z;	// Serial character register for B
 
+	BIT		Q01F;	// Q register Bit 01
+	BIT		Q02F;	// Q register Bit 02
+	BIT		Q03F;	// Q register Bit 03
+	BIT		Q04F;	// Q register Bit 04
+	BIT		Q05F;	// Q register Bit 05
+	BIT		Q06F;	// Q register Bit 06
+	BIT		Q07F;	// Q register Bit 07
+	BIT		Q08F;	// Q register Bit 08
+	BIT		Q09F;	// Q register Bit 09
+	BIT		Q12F;	// Q register Bit 12 ???
 	BIT		AROF;	// A register occupied flag
 	BIT		BROF;	// B register occupied flag
 	BIT		CCCF;	// Clock-count control FF (maintenance only)
@@ -87,7 +97,8 @@ typedef struct cpuregs {
 	BIT		TM;	// Temporary maintenance storage register
 	BIT		TROF;	// T contents valid
 	BIT		VARF;	// Variant-mode FF (enables full PRT indexing)
-	BIT		US14X;	// 
+	BIT		US14X;	//
+	BIT		zzzF;	// one lamp in display right of Q1 has no label 
 } CPUREGS;
 
 typedef struct cpu {

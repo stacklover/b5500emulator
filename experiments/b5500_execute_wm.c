@@ -25,7 +25,16 @@ void b5500_execute_wm(CPU *this)
 	WORD48 t1, t2;
 
 	// clear some vars 
-	this->r.Q = 0;
+	this->r.Q01F = 0;
+	this->r.Q02F = 0;
+	this->r.Q03F = 0;
+	this->r.Q04F = 0;
+	this->r.Q05F = 0;
+	this->r.Q06F = 0;
+	this->r.Q07F = 0;
+	this->r.Q08F = 0;
+	this->r.Q09F = 0;
+	this->r.Q12F = 0;
 	this->r.Y = 0;
 	this->r.Z = 0;
 	this->r.M = 0;
@@ -669,7 +678,7 @@ void b5500_execute_wm(CPU *this)
 			case 0x01: // 0135: BRT=branch return
 				adjustAEmpty(this);
 				if (!this->r.BROF) {
-					this->r.Q |= 0x04;
+					this->r.Q03F = 1;
 					// Q03F: not used, except for display purposes
 					adjustBFull(this);
 				}
@@ -703,7 +712,7 @@ void b5500_execute_wm(CPU *this)
 						operandCall(this);
 						break;
 					case 1:
-						this->r.Q |= 0x10;
+						this->r.Q05F = 1;
 						// set Q05F, for display only
 						this->r.X = 0;
 						descriptorCall(this);
@@ -738,7 +747,7 @@ void b5500_execute_wm(CPU *this)
 						operandCall(this);
 						break;
 					case 1:
-						this->r.Q |= 0x10;
+						this->r.Q05F = 1;
 						// set Q05F, for display only
 						this->r.X = 0;
 						descriptorCall(this);
