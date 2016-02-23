@@ -36,6 +36,7 @@ typedef unsigned long long WORD48;	// 48 bits machine word
 typedef struct central_control {
 	BIT		IAR;
 	BIT		HP2F;
+	BIT		P2BF;	// CPU #2 busy flag
 } CENTRAL_CONTROL;
 
 typedef struct accessor {
@@ -70,6 +71,7 @@ typedef struct cpuregs {
 	WORD39		X;	// Mantissa extension for B (loop control in CM)
 	WORD6		Y;	// Serial character register for A
 	WORD6		Z;	// Serial character register for B
+	WORD8		TM;	// Temporary maintenance storage register
 
 	BIT		Q01F;	// Q register Bit 01
 	BIT		Q02F;	// Q register Bit 02
@@ -94,11 +96,11 @@ typedef struct cpuregs {
 	BIT		NCSF;	// Normal/Control State FF (1=normal)
 	BIT		PROF;	// P contents valid
 	BIT		SALF;	// Program/subroutine state FF (1=subroutine)
-	BIT		TM;	// Temporary maintenance storage register
 	BIT		TROF;	// T contents valid
 	BIT		VARF;	// Variant-mode FF (enables full PRT indexing)
 	BIT		US14X;	//
 	BIT		zzzF;	// one lamp in display right of Q1 has no label 
+	BIT		isP1;	// we are CPU #1
 } CPUREGS;
 
 typedef struct cpu {
@@ -127,27 +129,174 @@ extern CPU	*CPUB;
  * 0 <sign mantissa> <sign exponent> <6 bits exponent> <39 bits mantissa>
  * octet numbers         FEDCBA9876543210
  */
-#define	MASK_MANTISSA	000007777777777777 // 13 octets unsigned mantissa
-#define	MASK_EXPONENT	000770000000000000 // 2 octets unsigned exponent
-#define	MASK_SIGNEXPO	001000000000000000 // exponent sign bit
-#define	MASK_SIGNMANT	002000000000000000 // mantissa sign bit
-#define	MASK_NUMBER	003777777777777777 // the number
+#define	MASK_MANTISSA	00007777777777777 // (007f'ffff'ffff) 13 octets unsigned mantissa
+#define	MASK_EXPONENT	00770000000000000 // (1f80'0000'0000) 2 octets unsigned exponent
+#define	MASK_SIGNEXPO	01000000000000000 // (2000'0000'0000) exponent sign bit
+#define	MASK_SIGNMANT	02000000000000000 // (4000'0000'0000) mantissa sign bit
+#define	MASK_NUMBER	03777777777777777 // (7fff'ffff'ffff) the number without control bit
 #define	SHFT_MANTISSA	0
 #define	SHFT_EXPONENT	39
 #define	SHFT_SIGNEXPO	45
 #define	SHFT_SIGNMANT	46
 
 /*
- * B5500 control word formats
+ * B5500 control word formats:
+ * 1 <code> <present> ...
+ * common for all control words
+ * octet numbers         FEDCBA9876543210
  */
-#define	MASK_CONTROLW	004000000000000000 // the control bit
-#define	MASK_PBIT	001000000000000000 // the presence bit
-#define	MASK_FIELD_F	000000007777700000 // the F field
-#define	MASK_FIELD_C_S	000000000000077777 // the C field
+#define	MASK_CONTROLW	04000000000000000 // (8000'0000'0000) the control bit
+#define	MASK_CODE	02000000000000000 // (4000'0000'0000) the code bit
+#define	MASK_PBIT	01000000000000000 // (2000'0000'0000) the presence bit
 #define	SHFT_CONTROLW	47
+#define	SHFT_CODE	46
 #define	SHFT_PBIT	45
-#define	SHFT_FIELD_F	15
-#define	SHFT_FIELD_C_S	0
+
+/*
+ * data descriptor:
+ * 1 0 <present> <5 unused> <10 word count> <1 unused>
+ *                           <integer> <continuity> <12 unused> <15 address>
+ * octet numbers         FEDCBA9876543210
+ */
+#define	INIT_DD		04000000000000000 // (8000'0000'0000) fixed bits that are set
+#define	MASK_DDWC	00017770000000000 // (00ff'c000'0000) word count
+#define	MASK_DDINT	00000002000000000 // (0000'1000'0000) integer bit
+#define	MASK_DDCONT	00000001000000000 // (0000'0800'0000) continuity bit
+#define	MASK_DDADDR	00000000000077777 // (0000'0000'7fff) core or disk address
+#define	MASK_DDUNUSED	00760004777700000 // (1f00'27ff'8000) usused bits
+#define	SHFT_DDWC	30
+#define	SHFT_DINT	28
+#define	SHFT_DDCONT	27
+#define	SHFT_DDADDR	0
+
+/*
+ * mark stack control word:
+ * 1 1 <1 unused> 1 <2 unused> <9 rR> <1 unused> <MSFF> <SAIF> <15 rF> <15 unused>
+ * octet numbers         FEDCBA9876543210
+ */
+#define	INIT_MSCW	06400000000000000 // (d000'0000'0000) fixed bits that are set
+#define	MASK_MSCWrR	00077700000000000 // (03fe'0000'0000) saved R register
+#define	MASK_MSCWMSFF	00000020000000000 // (0000'8000'0000) saved MSFF bit
+#define	MASK_MSCWSALF	00000010000000000 // (0000'4000'0000) saved SAIF bit
+#define	MASK_MSCWrF	00000007777700000 // (0000'3FFF'8000) saved F register
+#define	MASK_MSCWUNUSED	01300040000077777 // (2c01'0000'7fff) unused bits
+#define	SHFT_MSCWrR	33
+#define	SHFT_MSCWMSFF	31
+#define	SHFT_MSCWSALF	30
+#define	SHFT_MSCWrF	15
+
+/*
+ * program descriptor word:
+ * 1 1 <present> 1 <mode> <args> <12 unsued> <15 rF> <15 address>
+ * octet numbers         FEDCBA9876543210
+ */
+#define	INIT_PCW	06400000000000000 // (d000'0000'0000) fixed bits that are set
+#define	MASK_PCWMODE	00200000000000000 // (0800'0000'0000) word/char mode bit
+#define	MASK_PCWARGS	00100000000000000 // (0400'0000'0000) arguments required
+#define	MASK_PCWrF	00000007777700000 // (0000'3fff'8000) F register when ARGS=0
+#define	MASK_PCWADDR	00000000000077777 // (0000'0000'7fff) core or disk address
+#define	MASK_PCWUNUSED	00077770000000000 // (03ff'c000'0000) unused bits
+#define	SHFT_PCWMODE	43
+#define	SHFT_PCWARGS	42
+#define	SHFT_PCWrF	15
+#define	SHFT_PCWADDR	0
+
+/*
+ * return control word:
+ * 1 1 <type> 0 <3 rH> <3 rV> <2 rL> <3 rG> <3 rK> <15 rF> <15 rC>
+ * interrupt return control word:
+ * 1 1 <BROF> 0 <3 rH> <3 rV> <2 rL> <3 rG> <3 rK> <15 rF> <15 rC>
+ * octet numbers         FEDCBA9876543210
+ */
+#define	INIT_RCW	06000000000000000 // (c000'0000'0000) fixed bits that are set
+#define	MASK_RCWTYPE	01000000000000000 // (2000'0000'0000) type (OPDC/DESC) bit OR
+#define	MASK_RCWBROF	01000000000000000 // (2000'0000'0000) saved BROF bit
+#define MASK_RCWrH	00340000000000000 // (0e00'0000'0000) saved H register
+#define MASK_RCWrV	00034000000000000 // (01c0'0000'0000) saved V register
+#define MASK_RCWrL	00003000000000000 // (0030'0000'0000) saved L register
+#define MASK_RCWrG	00000700000000000 // (000e'0000'0000) saved G register
+#define MASK_RCWrK	00000070000000000 // (0001'c000'0000) saved L register
+#define	MASK_RCWrF	00000007777700000 // (0000'3fff'8000) saved F register
+#define	MASK_RCWrC	00000000000077777 // (0000'0000'7fff) saved C register
+#define	MASK_RCWUNUSED	00000000000000000 // (0000'0000'0000) unused bits
+#define	SHFT_RCWTYPE	45
+#define	SHFT_RCWBROF	45
+#define	SHFT_RCWrH	41
+#define	SHFT_RCWrV	38
+#define	SHFT_RCWrL	36
+#define	SHFT_RCWrG	33
+#define	SHFT_RCWrK	30
+#define	SHFT_RCWrF	15
+#define	SHFT_RCWrC	0
+
+/*
+ * interrupt control word:
+ * 1 1 <1 unused> 0 <2 unused> <9 rR> <1 unused> <MSFF> <SALF> <5 unused>
+ *		<VARF> <5 unused> <4 rN> <15 rM>
+ * octet numbers         FEDCBA9876543210
+ */
+#define	INIT_ICW	06000000000000000 // (c000'0000'0000) fixed bits that are set
+#define	MASK_ICWrR	00077700000000000 // (03fe'0000'0000) saved R register
+#define	MASK_ICWMSFF	00000020000000000 // (0000'8000'0000) saved MSFF bit
+#define	MASK_ICWSALF	00000010000000000 // (0000'4000'0000) saved SAIF bit
+#define	MASK_ICWVARF	00000000100000000 // (0000'0100'0000) saved SAIF bit
+#define	MASK_ICSrN	00000000001700000 // (0000'0007'8000) saved N register
+#define	MASK_ICWrM	00000000000077777 // (0000'0000'7fff) saved M register (0 in word mode)
+#define	MASK_ICWUNUSED	01300047676000000 // (2c01'3ef8'0000) unused bits
+#define	SHFT_ICWrR	33
+#define	SHFT_ICWMSFF	31
+#define	SHFT_ICWSALF	30
+#define	SHFT_ICWVARF	24
+#define	SHFT_ICWrN	15
+#define	SHFT_ICWrM	0
+
+/*
+ * interrupt loop control word:
+ * 1 1 <AROF> 0 <5 unused> <39 rX>
+ * octet numbers         FEDCBA9876543210
+ */
+#define	INIT_ILCW	06000000000000000 // (c000'0000'0000) fixed bits that are set
+#define	MASK_ILCWAROF	01000000000000000 // (2000'0000'0000) saved AROF bit
+#define	MASK_ILCWrX	00007777777777777 // (007f'ffff'ffff) saved X register (0 in word mode)
+#define	MASK_ILCWUNUSED	00370000000000000 // (0f80'0000'0000) unused bits
+#define	SHFT_ILCWAROF	45
+#define	SHFT_ILCWrX	0
+
+/*
+ * initiate control word:
+ * 1 1 <1 unused> 0 <1 unused> <9 rQ> <6 rY> <6 rZ> <1 unused> <5 TM bits> <MODE> <15 rS> 
+ * octet numbers         FEDCBA9876543210
+ */
+#define	INIT_INCW	06000000000000000 // (c000'0000'0000) fixed bits that are set
+#define	MASK_INCWQ09F	00100000000000000 // (0400'0000'0000) saved Q09F bit
+#define	MASK_INCWQ08F	00040000000000000 // (0200'0000'0000) saved Q08F bit
+#define	MASK_INCWQ07F	00020000000000000 // (0100'0000'0000) saved Q07F bit
+#define	MASK_INCWQ06F	00010000000000000 // (0080'0000'0000) saved Q06F bit
+#define	MASK_INCWQ05F	00004000000000000 // (0040'0000'0000) saved Q05F bit
+#define	MASK_INCWQ04F	00002000000000000 // (0020'0000'0000) saved Q04F bit
+#define	MASK_INCWQ03F	00001000000000000 // (0010'0000'0000) saved Q03F bit
+#define	MASK_INCWQ02F	00000400000000000 // (0008'0000'0000) saved Q02F bit
+#define	MASK_INCWQ01F	00000200000000000 // (0004'0000'0000) saved Q01F bit
+#define	MASK_INCWrY	00000176000000000 // (0003'f000'0000) saved Y register
+#define	MASK_INCWrZ	00000001760000000 // (0000'0fc0'0000) saved Z register
+#define	MASK_INCWrTM	00000000007600000 // (0000'001f'0000) saved TM bits 1-5
+#define	MASK_INCWMODE	00000000000100000 // (0000'0000'8000) word/char mode bit
+#define	MASK_INCWrS	00000000000077777 // (0000'0000'7fff) saved S register
+#define	MASK_INCWUNUSED	01200000017000000 // (2800'0020'0000) unused bits
+#define	SHFT_INCWQ09F	42
+#define	SHFT_INCWQ08F	41
+#define	SHFT_INCWQ07F	40
+#define	SHFT_INCWQ06F	39
+#define	SHFT_INCWQ05F	38
+#define	SHFT_INCWQ04F	37
+#define	SHFT_INCWQ03F	36
+#define	SHFT_INCWQ02F	35
+#define	SHFT_INCWQ01F	34
+#define	SHFT_INCWrY	28
+#define	SHFT_INCWrZ	22
+#define	SHFT_INCWrTM	16
+#define	SHFT_INCWMODE	15
+#define	SHFT_INCWrS	0
 
 /*
  * special use of host wordsize to aid in arithmetics
@@ -203,7 +352,7 @@ extern int exitSubroutine(CPU *, int how);
 extern int presenceTest(CPU *, WORD48 value);
 extern int interrogateUnitStatus(CPU *);
 extern int interrogateIOChannel(CPU *);
-extern void storeForInterrupt(CPU *, int, int);
+extern void storeForInterrupt(CPU *, BIT forced, BIT forTest);
 extern void clearInterrupt(CPU *);
 extern void initiateIO(CPU *);
 

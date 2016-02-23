@@ -395,8 +395,8 @@ void b5500_execute_wm(CPU *this)
 				break;
 			case 0x0C: // 1425: FTC=F field to core field
 				adjustABFull(this);
-				t1 = (this->r.A & MASK_FIELD_F) >> SHFT_FIELD_F;
-				this->r.B = (this->r.B & ~MASK_FIELD_C_S) | (t1 << SHFT_FIELD_C_S);
+				t1 = (this->r.A & MASK_RCWrF) >> SHFT_RCWrF;
+				this->r.B = (this->r.B & ~MASK_RCWrC) | (t1 << SHFT_RCWrC);
 				this->r.AROF = 0;
 				break;
 			case 0x10: // 2025: DUP=Duplicate TOS
@@ -412,8 +412,8 @@ void b5500_execute_wm(CPU *this)
 				break;
 			case 0x1C: // 3425: FTF=F field to F field
 				adjustABFull(this);
-				t1 = (this->r.A & MASK_FIELD_F) >> SHFT_FIELD_F;
-				this->r.B = (this->r.B & ~MASK_FIELD_F) | (t1 << SHFT_FIELD_F);
+				t1 = (this->r.A & MASK_RCWrF) >> SHFT_RCWrF;
+				this->r.B = (this->r.B & ~MASK_RCWrF) | (t1 << SHFT_RCWrF);
 				break;
 			case 0x21: // 4125: LEQ=compare B less or equal to A
 				this->r.B = (singlePrecisionCompare(this) <= 0) ? 1 : 0;
@@ -426,14 +426,14 @@ void b5500_execute_wm(CPU *this)
 				break;
 			case 0x2C: // 5425: CTC=core field to C field
 				adjustABFull(this);
-				t1 = (this->r.A & MASK_FIELD_C_S) >> SHFT_FIELD_C_S;
-				this->r.B = (this->r.B & ~MASK_FIELD_C_S) | (t1 << SHFT_FIELD_C_S);
+				t1 = (this->r.A & MASK_RCWrC) >> SHFT_RCWrC;
+				this->r.B = (this->r.B & ~MASK_RCWrC) | (t1 << SHFT_RCWrC);
 				this->r.AROF = 0;
 				break;
 			case 0x3C: // 7425: CTF=core field to F field
 				adjustABFull(this);
-				t1 = (this->r.A & MASK_FIELD_C_S) >> SHFT_FIELD_C_S;
-				this->r.B = (this->r.B & ~MASK_FIELD_F) | (t1 << SHFT_FIELD_F);
+				t1 = (this->r.A & MASK_RCWrC) >> SHFT_RCWrC;
+				this->r.B = (this->r.B & ~MASK_RCWrF) | (t1 << SHFT_RCWrF);
 				this->r.AROF = 0;
 				break;
 			}
@@ -800,18 +800,18 @@ void b5500_execute_wm(CPU *this)
 				adjustABFull(this);
 				switch (this->r.A & 3) {
 				case 0: // store F into B.[18:15]
-					this->r.B = (this->r.B & MASK_FIELD_F) | (this->r.F << SHFT_FIELD_F);
+					this->r.B = (this->r.B & MASK_RCWrF) | (this->r.F << SHFT_RCWrF);
 					break;
 				case 1: // store S into B.[33:15]
-					this->r.B = (this->r.B & ~MASK_FIELD_C_S) | (this->r.S << SHFT_FIELD_C_S);
+					this->r.B = (this->r.B & ~MASK_RCWrC) | (this->r.S << SHFT_RCWrC);
 					break;
 				case 2: // set   F from B.[18:15]
-					this->r.F = (this->r.B & MASK_FIELD_F) >> SHFT_FIELD_F;
+					this->r.F = (this->r.B & MASK_RCWrF) >> SHFT_RCWrF;
 					this->r.SALF = 1;
 					this->r.BROF = 0;
 					break;
 				case 3: // set   S from B.[33:15]
-					this->r.S = (this->r.B & MASK_FIELD_C_S) >> SHFT_FIELD_C_S;
+					this->r.S = (this->r.B & MASK_RCWrC) >> SHFT_RCWrC;
 					this->r.BROF = 0;
 					break;
 				}
