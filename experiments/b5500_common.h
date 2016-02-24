@@ -141,7 +141,7 @@ extern CPU	*CPUB;
 
 /*
  * B5500 control word formats:
- * 1 <code> <present> ...
+ * 1<code><present> ...
  * common for all control words
  * octet numbers         FEDCBA9876543210
  */
@@ -154,8 +154,7 @@ extern CPU	*CPUB;
 
 /*
  * data descriptor:
- * 1 0 <present> <5 unused> <10 word count> <1 unused>
- *                           <integer> <continuity> <12 unused> <15 address>
+ * 10P 000 00 <10 word count> 0<integer><continuity> 000 000 000 000 <15 address>
  * octet numbers         FEDCBA9876543210
  */
 #define	INIT_DD		04000000000000000 // (8000'0000'0000) fixed bits that are set
@@ -163,7 +162,6 @@ extern CPU	*CPUB;
 #define	MASK_DDINT	00000002000000000 // (0000'1000'0000) integer bit
 #define	MASK_DDCONT	00000001000000000 // (0000'0800'0000) continuity bit
 #define	MASK_DDADDR	00000000000077777 // (0000'0000'7fff) core or disk address
-#define	MASK_DDUNUSED	00760004777700000 // (1f00'27ff'8000) usused bits
 #define	SHFT_DDWC	30
 #define	SHFT_DINT	28
 #define	SHFT_DDCONT	27
@@ -171,15 +169,14 @@ extern CPU	*CPUB;
 
 /*
  * mark stack control word:
- * 1 1 <1 unused> 1 <2 unused> <9 rR> <1 unused> <MSFF> <SAIF> <15 rF> <15 unused>
+ * 110 000 <9 rR> 0<MSFF><SAIF> <15 rF> 000 000 000 000 000
  * octet numbers         FEDCBA9876543210
  */
-#define	INIT_MSCW	06400000000000000 // (d000'0000'0000) fixed bits that are set
+#define	INIT_MSCW	06000000000000000 // (c000'0000'0000) fixed bits that are set
 #define	MASK_MSCWrR	00077700000000000 // (03fe'0000'0000) saved R register
 #define	MASK_MSCWMSFF	00000020000000000 // (0000'8000'0000) saved MSFF bit
 #define	MASK_MSCWSALF	00000010000000000 // (0000'4000'0000) saved SAIF bit
 #define	MASK_MSCWrF	00000007777700000 // (0000'3FFF'8000) saved F register
-#define	MASK_MSCWUNUSED	01300040000077777 // (2c01'0000'7fff) unused bits
 #define	SHFT_MSCWrR	33
 #define	SHFT_MSCWMSFF	31
 #define	SHFT_MSCWSALF	30
@@ -187,7 +184,7 @@ extern CPU	*CPUB;
 
 /*
  * program descriptor word:
- * 1 1 <present> 1 <mode> <args> <12 unsued> <15 rF> <15 address>
+ * 11P 1<mode><args> 000 000 000 000 <15 rF> <15 address>
  * octet numbers         FEDCBA9876543210
  */
 #define	INIT_PCW	06400000000000000 // (d000'0000'0000) fixed bits that are set
@@ -195,7 +192,6 @@ extern CPU	*CPUB;
 #define	MASK_PCWARGS	00100000000000000 // (0400'0000'0000) arguments required
 #define	MASK_PCWrF	00000007777700000 // (0000'3fff'8000) F register when ARGS=0
 #define	MASK_PCWADDR	00000000000077777 // (0000'0000'7fff) core or disk address
-#define	MASK_PCWUNUSED	00077770000000000 // (03ff'c000'0000) unused bits
 #define	SHFT_PCWMODE	43
 #define	SHFT_PCWARGS	42
 #define	SHFT_PCWrF	15
@@ -203,9 +199,9 @@ extern CPU	*CPUB;
 
 /*
  * return control word:
- * 1 1 <type> 0 <3 rH> <3 rV> <2 rL> <3 rG> <3 rK> <15 rF> <15 rC>
+ * 11<type> 0 <3 rH> <3 rV> <2 rL> <3 rG> <3 rK> <15 rF> <15 rC>
  * interrupt return control word:
- * 1 1 <BROF> 0 <3 rH> <3 rV> <2 rL> <3 rG> <3 rK> <15 rF> <15 rC>
+ * 11<BROF> 0 <3 rH> <3 rV> <2 rL> <3 rG> <3 rK> <15 rF> <15 rC>
  * octet numbers         FEDCBA9876543210
  */
 #define	INIT_RCW	06000000000000000 // (c000'0000'0000) fixed bits that are set
@@ -218,7 +214,6 @@ extern CPU	*CPUB;
 #define MASK_RCWrK	00000070000000000 // (0001'c000'0000) saved L register
 #define	MASK_RCWrF	00000007777700000 // (0000'3fff'8000) saved F register
 #define	MASK_RCWrC	00000000000077777 // (0000'0000'7fff) saved C register
-#define	MASK_RCWUNUSED	00000000000000000 // (0000'0000'0000) unused bits
 #define	SHFT_RCWTYPE	45
 #define	SHFT_RCWBROF	45
 #define	SHFT_RCWrH	41
@@ -231,8 +226,7 @@ extern CPU	*CPUB;
 
 /*
  * interrupt control word:
- * 1 1 <1 unused> 0 <2 unused> <9 rR> <1 unused> <MSFF> <SALF> <5 unused>
- *		<VARF> <5 unused> <4 rN> <15 rM>
+ * 110 000 <9 rR> 0<MSFF><SALF> 000 00<VARF> 000 00<4 rN> <15 rM>
  * octet numbers         FEDCBA9876543210
  */
 #define	INIT_ICW	06000000000000000 // (c000'0000'0000) fixed bits that are set
@@ -242,7 +236,6 @@ extern CPU	*CPUB;
 #define	MASK_ICWVARF	00000000100000000 // (0000'0100'0000) saved SAIF bit
 #define	MASK_ICSrN	00000000001700000 // (0000'0007'8000) saved N register
 #define	MASK_ICWrM	00000000000077777 // (0000'0000'7fff) saved M register (0 in word mode)
-#define	MASK_ICWUNUSED	01300047676000000 // (2c01'3ef8'0000) unused bits
 #define	SHFT_ICWrR	33
 #define	SHFT_ICWMSFF	31
 #define	SHFT_ICWSALF	30
@@ -252,19 +245,20 @@ extern CPU	*CPUB;
 
 /*
  * interrupt loop control word:
- * 1 1 <AROF> 0 <5 unused> <39 rX>
+ * 11<AROF> 000 000 <39 rX>
  * octet numbers         FEDCBA9876543210
  */
 #define	INIT_ILCW	06000000000000000 // (c000'0000'0000) fixed bits that are set
 #define	MASK_ILCWAROF	01000000000000000 // (2000'0000'0000) saved AROF bit
 #define	MASK_ILCWrX	00007777777777777 // (007f'ffff'ffff) saved X register (0 in word mode)
-#define	MASK_ILCWUNUSED	00370000000000000 // (0f80'0000'0000) unused bits
+#define	MASK_ILCWrX_S	00000007777700000 // (0000'3fff'8000) saved S part in X
 #define	SHFT_ILCWAROF	45
 #define	SHFT_ILCWrX	0
+#define	SHFT_ILCWrX_S	15
 
 /*
  * initiate control word:
- * 1 1 <1 unused> 0 <1 unused> <9 rQ> <6 rY> <6 rZ> <1 unused> <5 TM bits> <MODE> <15 rS> 
+ * 110 00 <9 rQ> <6 rY> <6 rZ> 0 <5 TM bits><MODE> <15 rS> 
  * octet numbers         FEDCBA9876543210
  */
 #define	INIT_INCW	06000000000000000 // (c000'0000'0000) fixed bits that are set
@@ -303,9 +297,11 @@ extern CPU	*CPUB;
  */
 typedef unsigned long long WORD49;	// carry + 39 bits mantissa + 9 bit extension
 #define	MASK_MANTLJ	007777777777777000 // mantissa left aligned in 48 bit word
+#define	MASK_MANTROUND	000000000000000777 // right shifted rounding part
 #define	MASK_MANTHIGHLJ	007000000000000000 // highest octet of left justified mantissa
 #define	MASK_MANTCARRY	010000000000000000 // the carry/not borrow bit
 #define	SHFT_MANTISSALJ	9
+#define	VALU_ROUNDUP	0400	// value that causes rounding up
 
 /* functions available */
 extern int b5500_sp_compare(CPU *);
@@ -326,9 +322,10 @@ extern void adjustBEmpty(CPU *);
 extern void exchangeTOS(CPU *);
 
 /* memory accesses */
-extern void computeRelativeAddr(CPU *, int, int);
+extern void computeRelativeAddr(CPU *, unsigned offset, BIT cEnabled);
 extern void loadAviaM(CPU *);
 extern void loadBviaM(CPU *);
+extern void loadMviaM(CPU *);
 extern void loadAviaS(CPU *);
 extern void loadBviaS(CPU *);
 extern void loadPviaC(CPU *);
@@ -337,6 +334,7 @@ extern void storeBviaM(CPU *);
 extern void storeAviaS(CPU *);
 extern void storeBviaS(CPU *);
 extern void integerStore(CPU *, int conditional, int destructive);
+extern BIT indexDescriptor(CPU *this);
 
 /* jumps & calls */
 extern void jumpSyllables(CPU *, int count);
@@ -349,7 +347,7 @@ extern void descriptorCall(CPU *);
 extern int exitSubroutine(CPU *, int how);
 
 /* interrupts & IO */
-extern int presenceTest(CPU *, WORD48 value);
+extern BIT presenceTest(CPU *, WORD48 word);
 extern int interrogateUnitStatus(CPU *);
 extern int interrogateIOChannel(CPU *);
 extern void storeForInterrupt(CPU *, BIT forced, BIT forTest);
@@ -384,11 +382,13 @@ extern void streamOutputConvert(CPU *, unsigned count);
 
 /* misc & CPU control */
 extern void enterCharModeInline(CPU *);
-extern void initiate(CPU *, int);
+extern void initiate(CPU *, BIT forTest);
 extern void initiateP2(CPU *);
+extern void start(CPU *);
 extern void stop(CPU *);
 extern void haltP2(CPU *);
 extern WORD48 readTimer(CPU *);
+extern void preset(CPU *, ADDR15 runAddr);
 
 /*
  * bit and field manipulations

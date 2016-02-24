@@ -27,8 +27,140 @@ void accessError(CPU *this)
 {
 }
 
-void computeRelativeAddr(CPU *this, int x, int y)
+/*
+ * Computes an absolute memory address from the relative "offset" parameter
+ * and leaves it in the M register. See Table 6-1 in the B5500 Reference
+ * Manual. "cEnable" determines whether C-relative addressing is permitted.
+ * This offset must be in (0..1023)
+ */
+void computeRelativeAddr(CPU *this, unsigned offset, BIT cEnabled)
 {
+	this->cycleCount += 2; // approximate the timing
+	if (!this->r.SALF) {
+		this->r.M = (this->r.R<<6) + (offset & 1023);
+	} else {
+		switch ((offset & 1023) >> 7) {
+		case 0:
+		case 1:
+		case 2:
+		case 3:
+			this->r.M = (this->r.R<<6) + (offset & 511);
+			break;
+		case 4:
+		case 5:
+			if (this->r.MSFF) {
+				this->r.M = (this->r.R<<6) + 7;
+				loadMviaM(this); // M = [M].[18:15]
+				this->r.M += (offset & 255);
+			} else {
+				this->r.M = this->r.F + (offset & 255);
+			}
+			break;
+		case 6:
+			if (cEnabled) {
+				this->r.M = (this->r.L ? this->r.C : this->r.C-1)
+					+ (offset & 127); // adjust C for fetch
+			} else {
+				this->r.M = (this->r.R<<6) + (offset & 127);
+			}
+			break;
+		case 7:
+			if (this->r.MSFF) {
+				this->r.M = (this->r.R<<6) + 7;
+				loadMviaM(this); // M = [M].[18:15]
+				this->r.M -= (offset & 127);
+			} else {
+				this->r.M = this->r.F - (offset & 127);
+			}
+			break;
+		} // switch
+	}
+
+	// Reset variant-mode R-relative addressing, if enabled
+	if (this->r.VARF) {
+		this->r.SALF = 1;
+		this->r.VARF = 0;
+	}
+}
+
+/*
+ * Indexes a descriptor and, if successful leaves the indexed value in
+ * the A register. Returns 1 if an interrupt is set and the syllable is
+ * to be exited
+ */
+BIT indexDescriptor(CPU *this)
+{
+	WORD48		aw;	// local copy of A reg
+	WORD48		bw;	// local copy of B reg
+	BIT		interrupted = 0;	// fatal error, interrupt set
+	int		xe;	// index exponent
+	WORD49		xm;	// index mantissa
+	BIT		xs;	// index mantissa sign
+	BIT		xt;	// index exponent sign
+
+	adjustABFull(this);
+	aw = this->r.A;
+	bw = this->r.B;
+	xm = (bw & MASK_MANTISSA) << SHFT_MANTISSALJ;
+	xe = (bw & MASK_EXPONENT) >> SHFT_EXPONENT;
+	xs = (bw & MASK_SIGNMANT) >> SHFT_SIGNMANT;
+	xt = (bw & MASK_SIGNEXPO) >> SHFT_SIGNEXPO;
+	if (xt)
+		xe = -xe;
+
+	// Normalize the index, if necessary
+	if (xe < 0) { // index exponent is negative
+		do {
+			++this->cycleCount;
+			xm >>= 3;
+			++xe;
+		} while (xe < 0);
+		xm += VALU_ROUNDUP; // round up the index
+	} else if (xe > 0) { // index exponent is positive
+		do {
+			++this->cycleCount;
+			if (!(xm & MASK_MANTHIGHLJ)) {
+				xm <<= 3;
+			} else { // oops... integer overflow normalizing the index
+				xe = 0; // kill the loop
+				interrupted = 1;
+				if (this->r.NCSF) {
+					this->r.I = (this->r.I & 0x0F) | 0xC0; // set I07/8: integer overflow
+					signalInterrupt(this);
+				}
+			}
+		} while (--xe > 0);
+	}
+	// right align mantissa in word
+	xm >>= SHFT_MANTISSALJ;
+
+	// look only at lowest 10 bits
+	xm &= 1023;
+
+	// Now we have an integerized index value in xm
+	if (!interrupted) {
+		if (xs && xm) {
+			// Oops... index is negative
+			interrupted = 1;
+			if (this->r.NCSF) {
+				this->r.I = (this->r.I & 0x0F) | 0x90; // set I05/8: invalid-index
+				signalInterrupt(this);
+			}
+		} else if (xm < ((aw & MASK_DDWC) >> SHFT_DDWC)) {
+			// We finally have a valid index
+			xm = (aw + xm) & MASK_DDADDR;
+			this->r.A = (aw & ~MASK_DDADDR) | xm;
+			this->r.BROF = 0;
+		} else {
+			// Oops... index not less than size
+			interrupted = 1;
+			if (this->r.NCSF) {
+				this->r.I = (this->r.I & 0x0F) | 0x90; // set I05/8: invalid-index
+				signalInterrupt(this);
+			}
+		}
+	}
+	return interrupted;
 }
 
 void loadAviaS(CPU *this)

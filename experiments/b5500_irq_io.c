@@ -15,9 +15,21 @@
 
 #include "b5500_common.h"
 
-int presenceTest(CPU *this, WORD48 value)
+/*
+ * Tests and returns the presence bit [2:1] of the "word" parameter,
+ * which it assumes is a control word. If [2:1] is 0, the p-bit interrupt
+ * is set; otherwise no further action
+ */
+BIT presenceTest(CPU *this, WORD48 word)
 {
-	return 0;
+	if (word & MASK_PBIT)
+		return true;
+
+	if (this->r.NCSF) {
+		this->r.I = (this->r.I & 0x0F) | 0x70; // set I05/6/7: p-bit
+		signalInterrupt(this);
+	}
+	return false;
 }
 
 int interrogateUnitStatus(CPU *this)
@@ -118,12 +130,12 @@ void storeForInterrupt(CPU *this, BIT forced, BIT forTest)
 		temp = this->r.F;
 		this->r.F = this->r.S;
 		this->r.S = temp;
+
 		loadBviaS(this); // B = [S]: get last RCW
-
 		this->r.S = (this->r.B & MASK_RCWrF) >> SHFT_RCWrF;
-		loadBviaS(this); // B = [S]: get last MSCW
 
-		this->r.R = (this->r.B >> 33) & 0x1ff; // B.[6:9]
+		loadBviaS(this); // B = [S]: get last MSCW
+		this->r.R = (this->r.B & MASK_MSCWrR) >> SHFT_MSCWrR;
 		this->r.S = this->r.F;
 	}
 
