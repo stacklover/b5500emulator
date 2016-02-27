@@ -13,24 +13,26 @@
 #   from thin air.
 #**********************************************************************/
 
-SRCTEST =	b5500_test.c \
-		b5500_sp_compare.c \
-		b5500_sp_add.c \
-		b5500_pdp_text.c b5500_init_shares.c \
-		b5500_execute_wm.c \
-		b5500_stack.c b5500_memory.c b5500_jump_call.c \
-		b5500_irq_io.c b5500_single.c b5500_double.c \
-		b5500_misc_cpu.c b5500_bitfield.c b5500_stream.c
+OBJTEST =	b5500_test.o \
+		b5500_sp_compare.o \
+		b5500_sp_add.o \
+		b5500_pdp_text.o b5500_init_shares.o \
+		b5500_execute_wm.o \
+		b5500_stack.o b5500_memory.o b5500_jump_call.o \
+		b5500_irq_io.o b5500_single.o b5500_double.o \
+		b5500_misc_cpu.o b5500_bitfield.o b5500_stream.o
 
-SRCVIEW =	b5500_view.c b5500_pdp_text.c b5500_init_shares.c
+OBJVIEW =	b5500_view.o b5500_pdp_text.o b5500_init_shares.o
 
 INC =		b5500_common.h
 
 all:	b5500_test.exe b5500_view.exe
 
-b5500_test.exe:  $(SRCTEST) $(INC) Makefile
-	gcc -Wall -o b5500_test.exe $(SRCTEST) 
+b5500_test.exe:  $(OBJTEST) Makefile
+	gcc -Wall -o b5500_test.exe $(OBJTEST) 
 
-b5500_view.exe:  $(SRCVIEW) $(INC) Makefile
-	gcc -Wall -o b5500_view.exe $(SRCVIEW) 
+b5500_view.exe:  $(OBJVIEW) Makefile
+	gcc -Wall -o b5500_view.exe $(OBJVIEW) 
 
+%.o: %.c $(INC) Makefile
+	gcc -Wall -c -o $@ $<

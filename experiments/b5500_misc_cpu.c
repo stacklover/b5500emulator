@@ -15,8 +15,44 @@
 
 #include "b5500_common.h"
 
+/*
+ * Implements the 4441=CMN syllable
+ */
 void enterCharModeInline(CPU *this)
 {
+	WORD48		bw;	// local copy of B reg
+
+	adjustAEmpty(this);	// flush TOS registers, but tank TOS value in A
+	if (this->r.BROF) {
+		this->r.A = this->r.B;	// tank the DI address in A
+		adjustBEmpty(this);
+	} else {
+		loadAviaS(this);	// A = [S]: load the DI address
+		this->r.AROF = false;
+	}
+	this->r.B = buildRCW(this, false);
+	this->r.BROF = true;
+	adjustBEmpty(this);
+	this->r.MSFF = false;
+	this->r.SALF = true;
+	this->r.F = this->r.S;
+	this->r.R = 0;
+	this->r.CWMF = true;
+	this->r.X = (WORD39)this->r.S << 15; // inserting S into X.[18:15], but X is zero at this point
+	this->r.V = 0;
+	this->r.B = bw = this->r.A;
+
+	// execute the portion of CM XX04=RDA operator starting at J=2
+	this->r.S = bw & MASKMEM;
+	if (!(bw & MASK_CONTROLW)) {
+		// if it's an operand
+		this->r.K = (bw >> 15) & 7; // set K from [30:3]
+	} else {
+		// otherwise, force K to zero and
+		this->r.K = 0;
+		// just take the side effect of any p-bit interrupt
+		presenceTest(this, bw);
+	}
 }
 
 /*

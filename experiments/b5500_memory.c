@@ -308,7 +308,88 @@ void storeBviaM(CPU *this)
 	}
 }
 
-void integerStore(CPU *this, int conditional, int destructive)
+/*
+ * Store the value in the B register at the address in the A register (relative
+ * or descriptor) and marks the A register empty. "conditional" indicates that
+ * integerization is conditional on the type of word in A, and if a descriptor,
+ * whether it has the integer bit set
+ */
+void integerStore(CPU *this, BIT conditional, BIT destructive)
 {
-}
+	WORD48		aw;	// local copy of A reg
+	WORD48		bw;	// local copy of B reg
+	int		be;	// B exponent
+	WORD49		bm;	// B mantissa
+	BIT		bs;	// B mantissa sign
+	BIT		bt;	// B exponent sign
+	BIT		doStore = 1;	// okay to store
+	BIT		normalize = 1;	// okay to integerize
 
+	adjustABFull(this);
+	aw = this->r.A;
+	if (!(aw & MASK_CONTROLW)) {
+		// it's an operand
+		computeRelativeAddr(this, aw, 0);
+	} else {
+		// it's a descriptor
+		if (presenceTest(this, aw)) {
+			this->r.M = aw & MASKMEM;
+			if (conditional) {
+				if (!(aw & MASK_DDINT)) { // [19:1] is the integer bit
+					normalize = false;
+				}
+			}
+		} else {
+			doStore = normalize = false;
+		}
+	}
+
+	if (normalize) {
+		bw = this->r.B;
+		bm = (bw & MASK_MANTISSA) << SHFT_MANTISSALJ;
+		be = (bw & MASK_EXPONENT) >> SHFT_EXPONENT;
+		bs = (bw & MASK_SIGNMANT) >> SHFT_SIGNMANT;
+		bt = (bw & MASK_SIGNEXPO) >> SHFT_SIGNEXPO;
+		if (bt)
+			be = -be;
+
+		if (be != 0) { // is B non-integer?
+			if (be < 0) { // B exponent is negative
+				do {
+					++this->cycleCount;
+					bm >>= 3;
+				} while (++be < 0);
+				bm += VALU_ROUNDUP; // round up
+			} else { // B exponent is positive and not zero
+				do {
+					++this->cycleCount;
+					if (!(bm & MASK_MANTHIGHLJ)) {
+						bm <<= 3;
+					} else {
+						// oops... integer overflow normalizing the mantisa
+						doStore = false;
+						if (this->r.NCSF) {
+							this->r.I = (this->r.I & 0x0F) | 0xC0; // set I07/8: integer overflow
+							signalInterrupt(this);
+						}
+						break; // kill the loop
+					}
+				} while (--be > 0);
+			}
+			// right align mantissa in word
+			bm >>= SHFT_MANTISSALJ;
+
+			if (doStore) {
+				this->r.B = ((WORD48)bs << SHFT_SIGNMANT) + bm;
+			}
+		}
+	}
+
+	if (doStore) {
+		storeBviaM(this);
+		this->r.AROF = 0;
+		if (destructive) {
+			this->r.BROF = 0;
+		}
+	}
+}

@@ -148,9 +148,13 @@ extern CPU	*CPUB;
 #define	MASK_CONTROLW	04000000000000000 // (8000'0000'0000) the control bit
 #define	MASK_CODE	02000000000000000 // (4000'0000'0000) the code bit
 #define	MASK_PBIT	01000000000000000 // (2000'0000'0000) the presence bit
+#define	MASK_XBIT	00400000000000000 // (1000'0000'0000) the extra bit
+#define	MASK_TYPE	03400000000000000 // (7000'0000'0000) the type bits
 #define	SHFT_CONTROLW	47
 #define	SHFT_CODE	46
 #define	SHFT_PBIT	45
+#define	SHFT_XBIT	44
+#define	SHFT_TYPE	44
 
 /*
  * data descriptor:
@@ -333,7 +337,7 @@ extern void storeAviaM(CPU *);
 extern void storeBviaM(CPU *);
 extern void storeAviaS(CPU *);
 extern void storeBviaS(CPU *);
-extern void integerStore(CPU *, int conditional, int destructive);
+extern void integerStore(CPU *this, BIT conditional, BIT destructive);
 extern BIT indexDescriptor(CPU *this);
 
 /* jumps & calls */
@@ -342,8 +346,11 @@ extern void jumpWords(CPU *, int count);
 extern void jumpOutOfLoop(CPU *, int count);
 extern WORD48 buildMSCW(CPU *);
 extern void applyMSCW(CPU *, WORD48 mscw);
+extern WORD48 buildRCW(CPU *this, BIT descriptorCall);
+extern BIT applyRCW(CPU *this, WORD48 word, BIT in_line);
 extern void operandCall(CPU *);
 extern void descriptorCall(CPU *);
+extern void enterSubroutine(CPU *, BIT descriptorCall);
 extern int exitSubroutine(CPU *, int how);
 
 /* interrupts & IO */
