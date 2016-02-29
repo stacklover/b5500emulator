@@ -134,11 +134,11 @@ void adjustAEmpty(CPU *this)
 				++this->r.S;
 				storeBviaS(this); // [S] = B
 			}
-			this->r.BROF = 1;
 		}
 		// B is now empty, move A to B
 		this->r.B = this->r.A;
 		this->r.AROF = 0;
+		this->r.BROF = 1;
 	}
 	// else we're done -- A is already empty
 }

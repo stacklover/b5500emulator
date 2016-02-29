@@ -83,7 +83,7 @@ void initiate(CPU *this, BIT forTest)
 #if 0
 		// TODO: what is happening here??
 		// use bits 4-7 of TM to store 4 flags??
-		// WHY notset them right here??? 
+		// WHY not set them right here??? 
 		(bw % 0x200000 - bw % 0x100000)/0x100000 * 16 + // NCSF
 		(bw % 0x400000 - bw % 0x200000)/0x200000 * 32 + // CCCF
 		(bw % 0x100000000000 - bw % 0x80000000000)/0x80000000000 * 64 + // MWOF
@@ -198,34 +198,24 @@ void initiateP2(CPU *this)
 	start(this);
 }
 
+/*
+ * Initiates the processor
+ */
 void start(CPU *this)
 {
-/* Initiates the processor by scheduling it on the Javascript thread */
-//var stamp = performance.now();
-//this->r.busy = 1;
-//this->r.procStart = stamp;
-//this->r.procTime -= stamp;
-//this->r.delayLastStamp = stamp;
-//this->r.delayRequested = 0;
-//this->r.scheduler = setCallback(this->r.mnemonic, this, 0, this->r.schedule);
+	this->busy = true;
 }
 
+/*
+ * Stops running the processor
+ */
 void stop(CPU *this)
 {
-/* Stops running the processor on the Javascript thread */
-//var stamp = performance.now();
-//this->r.T = 0;
-//this->r.TROF = 0;              // idle the processor
-//this->r.PROF = 0;
-//this->r.busy = 0;
-//this->r.cycleLimit = 0;        // exit this->r.run()
-//if (this->r.scheduler) {
-//	clearCallback(this->r.scheduler);
-//	this->r.scheduler = 0;
-//}
-//while (this->r.procTime < 0) {
-//	this->r.procTime += stamp;
-//}
+	this->r.T = 0;
+	this->r.TROF = 0;	// idle the processor
+	this->r.PROF = 0;
+	this->busy = 0;
+	this->cycleLimit = 0;	// exit this->r.run()
 }
 
 void haltP2(CPU *this)
@@ -245,8 +235,87 @@ void preset(CPU *this, ADDR15 runAddr)
 	this->r.C = runAddr;	// starting execution address
 	this->r.L = 1;		// preset L to point to the second syllable
 	loadPviaC(this);	// load the program word to P
-	this->r.T = fieldIsolate(this->r.P, 0, 12);
+	this->r.T = (this->r.P >> 36) & 0xfff;
 	this->r.TROF = 1;
 	this->r.R = 0;
 	this->r.S = 0;
+}
+
+/*
+ * Instruction execution driver for the B5500 processor. This function is
+ * an artifact of the emulator design and does not represent any physical
+ * process or state of the processor. This routine assumes the registers are
+ * set up -- in particular there must be a syllable in T with TROF set, the
+ * current program word must be in P with PROF set, and the C & L registers
+ * must point to the next syllable to be executed.
+ * This routine will continue to run while this->r.runCycles < this->r.cycleLimit
+ */
+void run(CPU *this)
+{
+	this->runCycles = 0;	// initialze the cycle counter for this time slice
+	do {
+		this->cycleCount = 1;	// general syllable execution overhead
+
+		if (this->r.CWMF) {
+			b5500_execute_cm(this);
+		} else {
+			b5500_execute_wm(this);
+		}
+
+/***************************************************************
+*   SECL: Syllable Execution Complete Level                    *
+***************************************************************/
+
+		// is there an interrupt
+		if ((this->isP1 ?
+			this->cc->IAR :
+			(this->r.I || this->cc->HP2F))
+				&& this->r.NCSF) {
+			// there's an interrupt and we're in Normal State
+			// reset Q09F (R-relative adder mode) and
+			// set Q07F (hardware-induced SFI) (for display only)
+			this->r.Q09F = false;
+			this->r.Q07F = true;
+			this->r.T = 0x0609; // inject 3011=SFI into T
+			// call directly to avoid resetting registers at top
+			// of loop
+			storeForInterrupt(this, true, false);
+		} else {
+			// otherwise, fetch the next instruction
+			if (!this->r.PROF) {
+				loadPviaC(this);
+			}
+			switch (this->r.L) {
+			case 0:
+				this->r.T = (this->r.P >> 36) & 0xfff;
+				this->r.L = 1;
+				break;
+			case 1:
+				this->r.T = (this->r.P >> 24) & 0xfff;
+				this->r.L = 2;
+				break;
+			case 2:
+				this->r.T = (this->r.P >> 12) & 0xfff;
+				this->r.L = 3;
+				break;
+			case 3:
+				this->r.T = this->r.P & 0xfff;
+				this->r.L = 0;
+				// assume no Inhibit Fetch for now and bump C
+				++this->r.C;
+				// invalidate current program word
+				this->r.PROF = 0;
+				break;
+			}
+		}
+
+	// Accumulate Normal and Control State cycles for use by Console in
+	// making the pretty lights blink. If the processor is no longer busy,
+	// accumulate the cycles as Normal State, as we probably just did SFI.
+		if (this->r.NCSF || !this->busy) {
+			this->normalCycles += this->cycleCount;
+		} else {
+			this->controlCycles += this->cycleCount;
+		}
+	} while ((this->runCycles += this->cycleCount) < this->cycleLimit);
 }

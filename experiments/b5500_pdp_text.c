@@ -255,4 +255,8 @@ void b5500_pdp_text(CPU *this)
 		if (i>=3) printf(" ");
 	}
 	printf("\n");
+	printf("Cyc%06u/%06u N%06u C%06u c%06u T%09u",
+		this->runCycles, this->cycleLimit,
+		this->normalCycles, this->controlCycles,
+		this->cycleCount, this->totalCycles);
 }

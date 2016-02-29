@@ -185,8 +185,56 @@ void operandCall(CPU *this)
 	}
 }
 
+/*
+ * DESC, the moral equivalent of "load address" on lesser machines.
+ * Assumes the syllable has already loaded a word into A, and that the
+ * address of that word is in M.
+ * See Figures 6-2, 6-3, and 6-4 in the B5500 Reference Manual
+ */
 void descriptorCall(CPU *this)
 {
+	WORD48	aw = this->r.A;		// local copy of A reg value
+	BIT	interrupted = 0;	// interrupt occurred
+
+	if (!(aw & MASK_CONTROLW)) {
+		// It's a simple operand
+		this->r.A = this->r.M | (MASK_CONTROLW | MASK_PBIT);
+	} else {
+		// It's not a simple operand
+		switch ((aw & MASK_TYPE) >> SHFT_TYPE) { // aw.[1:3]
+		case 2:	// CODE=0, PBIT=1, XBIT=0
+		case 3: // CODE=0, PBIT=1, XBIT=1
+			// Present data descriptor: see if it must be indexed
+			if (aw & MASK_DDWC) { // aw.[8:10]
+				interrupted = indexDescriptor(this);
+				// else descriptor is already indexed (word count 0)
+				if (!interrupted) {
+					// set word count to zero
+					this->r.A &= ~MASK_DDWC;
+				}
+				// else descriptor is already indexed (word count 0)
+			}
+			break;
+		case 7:	//  CODE=1, PBIT=1, XBIT=1
+			// Present program descriptor
+			enterSubroutine(this, true);
+			break;
+		case 0:	// CODE=0, PBIT=0, XBIT=0
+		case 1:	// CODE=0, PBIT=0, XBIT=1
+		case 5:	// CODE=1, PBIT=0, XBIT=1
+			// Absent data or program descriptor
+			if (this->r.NCSF) {
+				this->r.I = (this->r.I & 0x0F) | 0x70; // set I05/6/7: p-bit
+				signalInterrupt(this);
+				// else if Control State, we're done
+			}
+			break;
+		default: // cases 4, 6	// CODE=1, PBIT=0/1, XBIT=0
+			// Miscellaneous control word
+			this->r.A = this->r.M | (MASK_CONTROLW | MASK_PBIT);
+			break;
+		}
+	}
 }
 
 /*

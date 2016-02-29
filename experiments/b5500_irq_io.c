@@ -177,7 +177,7 @@ void storeForInterrupt(CPU *this, BIT forced, BIT forTest)
 		this->r.CWMF = 0;
 	}
 
-	if (!this->r.isP1) {
+	if (!this->isP1) {
 		// if it's P2
 		stop(this); // idle the P2 processor
 		this->cc->P2BF = 0; // tell CC and P1 we've stopped

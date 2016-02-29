@@ -83,6 +83,10 @@ typedef struct cpuregs {
 	BIT		Q08F;	// Q register Bit 08
 	BIT		Q09F;	// Q register Bit 09
 	BIT		Q12F;	// Q register Bit 12 ???
+// Q12F: MSFF (word mode: MSCW is pending RCW)
+// Q12F: TFFF (char mode: True-False Flip-Flop)
+#define	MSFF	Q12F
+#define	TFFF	Q12F
 	BIT		AROF;	// A register occupied flag
 	BIT		BROF;	// B register occupied flag
 	BIT		CCCF;	// Clock-count control FF (maintenance only)
@@ -91,16 +95,14 @@ typedef struct cpuregs {
 	BIT		HLTF;	// Processor halt FF
 	BIT		MRAF;	// Memory read access FF
 	BIT		MROF;	// Memory read obtained FF
-	BIT		MSFF;	// Mark-stack FF (word mode: MSCW is pending RCW, physically also TFFF & Q12F)
 	BIT		MWOF;	// Memory write obtained FF
 	BIT		NCSF;	// Normal/Control State FF (1=normal)
 	BIT		PROF;	// P contents valid
 	BIT		SALF;	// Program/subroutine state FF (1=subroutine)
 	BIT		TROF;	// T contents valid
 	BIT		VARF;	// Variant-mode FF (enables full PRT indexing)
-	BIT		US14X;	//
+	BIT		US14X;	// Operator Halt Switch
 	BIT		zzzF;	// one lamp in display right of Q1 has no label 
-	BIT		isP1;	// we are CPU #1
 } CPUREGS;
 
 typedef struct cpu {
@@ -109,6 +111,13 @@ typedef struct cpu {
 	CENTRAL_CONTROL	*cc;	// central control
 	const char	*id;	// pointer to name of CPU ("A" or "B")
 	unsigned	cycleCount;	// approx of CPU cycles needed
+	unsigned	cycleLimit;	// Cycle limit for this.run()
+	unsigned	normalCycles;	// Current normal-state cycle count (for UI display)
+	unsigned	controlCycles;	// Current control-state cycle count (for UI display)
+	unsigned	runCycles;	// Current cycle cound for this.run()
+	unsigned	totalCycles;	// Total cycles executed on this processor
+	BIT		isP1;	// we are CPU #1
+	BIT		busy;	// CPU is busy
 } CPU;
 
 /*
@@ -396,6 +405,9 @@ extern void stop(CPU *);
 extern void haltP2(CPU *);
 extern WORD48 readTimer(CPU *);
 extern void preset(CPU *, ADDR15 runAddr);
+extern void b5500_execute_cm(CPU *);
+extern void b5500_execute_wm(CPU *);
+extern void run(CPU *);
 
 /*
  * bit and field manipulations
@@ -427,5 +439,33 @@ extern void bitSet(
 extern void bitReset(
 	WORD48 *dest,
 	unsigned bit);
+
+/*
+ * for assembler/disassembler
+ */
+typedef enum optype {
+	OP_NONE=0,	// no operand
+// parsing
+	OP_EXPR,	// operand is expression
+	OP_RELA,	// operand is relative address
+	OP_BRAS,	// optional operand for branch syllables
+	OP_BRAW,	// optional operand for branch words
+// output
+	OP_ORG,		// set address
+	OP_RUN,		// run program
+	OP_END,		// end
+	OP_ASIS,	// emit code "as is"
+	OP_TOP4,	// emit code | (operand << 8)
+	OP_TOP6,	// emit code | (operand << 6)
+	OP_TOP10,	// emit code | (operand << 2)
+} OPTYPE;
+
+typedef struct instruction {
+	const char *name;	// symbolical name
+	WORD12	code;		// coding
+	OPTYPE	intype;		// operand combination in input
+	OPTYPE	outtype;	// operand combination in output
+} INSTRUCTION;
+
 
 #endif /* B5500_COMMON_H */

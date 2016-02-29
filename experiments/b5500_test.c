@@ -54,75 +54,27 @@ void signalInterrupt(CPU *this)
 	printf("\nIRQ=$%02x\n", this->r.I);
 }
 
+CENTRAL_CONTROL cc;
+CPU *this;
+
 int main(int argc, char *argv[])
 {
-	WORD48	testa, testb;
 	int	i;
 	int	sub = 0;
-	CPU	*this;
-
-	if (argc < 3) {
-		printf("needs 2 octal B5500 numbers\n");
-		exit(2);
-	}
 
 	b5500_init_shares();
 
-	testa = strtoull(argv[1], NULL, 8);
-	testb = strtoull(argv[2], NULL, 8);
-	if (argc > 3)
-		sub = atoi(argv[3]);
-
-	printf("testa=");
-	b5500_sp_print(testa);
-	printf("\n");
-	printf("testb=");
-	b5500_sp_print(testb);
-	printf("\n");
-
 	this = CPUA;
-
-	this->r.NCSF = 1;
-	this->r.I = 0;
-
-	this->r.A = testa;
-	this->r.B = testb;
-	this->r.AROF = this->r.BROF = 1;
-	i = b5500_sp_compare(this);
-	printf("sp_compare='%d'\n\n", i);
-
-#if 1
-	this->r.A = testa;
-	this->r.B = testb;
-	this->r.AROF = this->r.BROF = 1;
-	b5500_sp_addsub(this, sub);
-#else
-	memset(&(this->r), 0, sizeof(CPUREGS));
-	this->r.S = 2;
-	while (!b5500_sp_addsub2(this)) {
-		sleep(1);
-		// fill register request?
-		this->r.MROF = 0;
-		switch (this->r.E) {
-		case 2:
-			this->r.A = testa;
-			sleep(10);
-			this->r.E = 63;
-			this->r.MROF = 1;
-			break;
-		case 3:
-			this->r.B = testb;
-			sleep(10);
-			this->r.E = 63;
-			this->r.MROF = 1;
-			break;
-		}
+	memset(this, 0, sizeof(CPU));
+	this->cc = &cc;
+	this->id = "CPUA";
+	start(this);
+	preset(this, 020);
+	this->r.US14X = true;
+	while (this->busy) {
+		this->cycleLimit = 1;
+		run(this);
+		sleep(10);
 	}
-#endif
-
-	printf("\nsp_add=");
-	b5500_sp_print(this->r.B);
-	printf("\n\n");
-	
 	return 0;
 }

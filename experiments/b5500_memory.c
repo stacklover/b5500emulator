@@ -15,12 +15,40 @@
 
 #include "b5500_common.h"
 
+/*
+ * Called by a requestor module passing accessor object "acc" to fetch a
+ * word from memory.
+ */
 void fetch(ACCESSOR *acc)
 {
+	// For now, we assume memory parity can never happen
+	if (acc->MAIL) {
+		acc->MPED = false;	// no memory parity error
+		acc->MAED = true;	// memory address error
+		// no .word value is returned in this case
+	} else {
+		acc->MPED = false;	// no parity error
+		acc->MAED = false;	// no address error
+		acc->word = MAIN[acc->addr & MASKMEM];
+	}
 }
 
+/*
+ * Called by requestor module passing accessor object "acc" to store a
+ * word into memory.
+ */
 void store(ACCESSOR *acc)
 {
+	// For now, we assume memory parity can never happen
+	if (acc->MAIL) {
+		acc->MPED = false;	// no memory parity error
+		acc->MAED = true;	// memory address error
+		// no .word value is returned in this case
+	} else {
+		acc->MPED = false;	// no parity error
+		acc->MAED = false;	// no address error
+		MAIN[acc->addr & MASKMEM] = acc->word;
+	}
 }
 
 void accessError(CPU *this)
