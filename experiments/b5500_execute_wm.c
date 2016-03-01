@@ -40,7 +40,7 @@ void b5500_execute_wm(CPU *this)
 	this->r.M = 0;
 	this->r.N = 0;
 	this->r.X = 0;
-printf("OP=%04o\n", opcode);
+
 	// last 2 bits of opcode
 	switch (opcode & 3) {
 	case 0:	// LITC: Literal Call

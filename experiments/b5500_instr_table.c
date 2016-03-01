@@ -18,8 +18,10 @@ const INSTRUCTION instr[] = {
 // pseudo instructions
 //
 	{".ORG", 00000, OP_EXPR, OP_ORG},
-	{".RUN", 00000, OP_EXPR, OP_RUN},
+	{".RUN", 00000, OP_NONE, OP_RUN},
 	{".END", 00000, OP_NONE, OP_END},
+	{".SET", 00000, OP_REGVAL, OP_SET},
+	{".VFY", 00000, OP_REGVAL, OP_VFY},
 //
 // WORD mode instructions
 //
@@ -112,16 +114,16 @@ const INSTRUCTION instr[] = {
 // ISO=Variable Field Isolate op
 	{"ISO",  00045, OP_EXPR, OP_TOP6},
 // delete & conditional branch ops
-	{"DEL",  00051, OP_NONE, OP_NONE},
+	{"DEL",  00051, OP_NONE, OP_ASIS},
 	{"CFN",  00051, OP_EXPR, OP_TOP4},
 	{"CBN",  00151, OP_EXPR, OP_TOP4},
 	{"CFD",  00251, OP_EXPR, OP_TOP4},
 	{"CBD",  00351, OP_EXPR, OP_TOP4},
 // NOP & DIA=Dial A ops
-	{"NOP",  00055, OP_NONE, OP_NONE},
+	{"NOP",  00055, OP_NONE, OP_ASIS},
 	{"DIA",  00055, OP_EXPR, OP_TOP6},
 // XRT & DIB=Dial B ops
-	{"XRT",  00061, OP_NONE, OP_NONE},
+	{"XRT",  00061, OP_NONE, OP_ASIS},
 	{"DIB",  00061, OP_EXPR, OP_TOP6},
 // TRB=Transfer Bits
 	{"TRB",  00065, OP_EXPR, OP_TOP6},
@@ -133,8 +135,8 @@ const INSTRUCTION instr[] = {
 // CHAR mode instructions
 //
 // CMX, EXC: Exit character mode
-	{"EXC",  00000, OP_NONE, OP_NONE},
-	{"CMX",  00100, OP_NONE, OP_NONE},
+	{"EXC",  00000, OP_NONE, OP_ASIS},
+	{"CMX",  00100, OP_NONE, OP_ASIS},
 // BSD=Skip bit destination
 	{"BSD",  00002, OP_EXPR, OP_TOP6},
 // BSS=Skip bit source
@@ -146,11 +148,11 @@ const INSTRUCTION instr[] = {
 // SED=Set destination address
 	{"SED",  00006, OP_EXPR, OP_TOP6},
 // TDA=Transfer destination address
-	{"TDA",  00007, OP_NONE, OP_NONE},
+	{"TDA",  00007, OP_NONE, OP_ASIS},
 // Control State ops
-	{"ZPI",  02411, OP_NONE, OP_NONE},
-   	{"SFI",  03011, OP_NONE, OP_NONE},
-	{"SFT",  03411, OP_NONE, OP_NONE},
+	{"ZPI",  02411, OP_NONE, OP_ASIS},
+   	{"SFI",  03011, OP_NONE, OP_ASIS},
+	{"SFT",  03411, OP_NONE, OP_ASIS},
 // TBN=Transfer blanks for non-numeric
 	{"TBN",  00012, OP_EXPR, OP_TOP6},
 // SDA=Store destination address

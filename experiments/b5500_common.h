@@ -126,12 +126,29 @@ typedef struct cpu {
 #define	SHM_MAIN	(('M'<<24)|('A'<<16)|('I'<<8)|'N')
 #define	SHM_CPUA	(('C'<<24)|('P'<<16)|('U'<<8)|'A')
 #define	SHM_CPUB	(('C'<<24)|('P'<<16)|('U'<<8)|'B')
+#define	SHM_CC		(('C'<<24)|('C'<<16)|('_'<<8)|'_')
+#define	MSG_CPUA	(('C'<<24)|('P'<<16)|('U'<<8)|'A')
+#define	MSG_CPUB	(('C'<<24)|('P'<<16)|('U'<<8)|'B')
+#define	MSG_CC		(('C'<<24)|('C'<<16)|('_'<<8)|'_')
 #define	MAXMEM		0x8000
 #define	MASKMEM		0x7fff
 
-extern WORD48	*MAIN;
-extern CPU	*CPUA;
-extern CPU	*CPUB;
+/*
+ * Message types
+ */
+#define	MSG_SIGINT	1	// CPU to CC: signalInterrupt()
+
+#define	MSG_CLEAR	100	// CC to CPU: clear()
+#define	MSG_INIT_AS_P2	101	// CC to CPU: initiateAsP2()
+#define	MSG_START	102	// CC to CPU: start()
+#define	MSG_STOP	103	// CC to CPU: stop()
+#define	MSG_PRESET	104	// CC to CPU: preset()
+
+
+extern WORD48		*MAIN;
+extern CPU		*CPUA;
+extern CPU		*CPUB;
+extern CENTRAL_CONTROL	*CC;
 
 /*
  * B5500 integer/real format:
@@ -450,10 +467,13 @@ typedef enum optype {
 	OP_RELA,	// operand is relative address
 	OP_BRAS,	// optional operand for branch syllables
 	OP_BRAW,	// optional operand for branch words
+	OP_REGVAL,	// register and value
 // output
 	OP_ORG,		// set address
-	OP_RUN,		// run program
+	OP_RUN,		// run program from address and wait for halt
 	OP_END,		// end
+	OP_SET,		// set a register
+	OP_VFY,		// verify a register
 	OP_ASIS,	// emit code "as is"
 	OP_TOP4,	// emit code | (operand << 8)
 	OP_TOP6,	// emit code | (operand << 6)

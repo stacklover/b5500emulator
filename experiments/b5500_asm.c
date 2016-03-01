@@ -28,6 +28,7 @@ extern const INSTRUCTION instr[];
 /* debug flags: turn these on for various dumps and traces */
 int dodmpins	 = false;	/* dump instructions after assembly */
 int dolistsource = false;	/* list source line */
+int dotrcins	 = false;	/* trace instruction execution */
 
 typedef enum labelst {entered=0, defined} LABELST;
 typedef struct labelrec {
@@ -43,12 +44,21 @@ char	*linep;
 int	eof;
 int	level;
 char	opname[20];
+char	regname[20];
 unsigned wc;
 unsigned sc;
 
 /* variables of code generator */
 int	pass2;
 LABELREC labeltab[MAXLABEL];
+
+CENTRAL_CONTROL cc;
+CPU *this;
+
+void signalInterrupt(CPU *this)
+{
+	printf("\nIRQ=$%02x\n", this->r.I);
+}
 
 void init(void)
 {
@@ -159,14 +169,14 @@ void getlin(void) /* get next line */
 	}
 }
 
-int parseint(void)
+WORD48 parseint(void)
 {
 	while(isspace((int)*linep))
 		linep++;
 	if (isdigit((int)*linep) || (*linep == '-'))
-		return strtol(linep, &linep, 0);
+		return strtoll(linep, &linep, 0);
 	errorl("expected integer");
-	return -1;
+	return -1LL;
 }
 
 int parselabel(void)
@@ -179,8 +189,9 @@ int parselabel(void)
 	return -1;
 }
 
-void printinstr(unsigned wc, unsigned sc)
+void printinstr(ADDR15 wc, WORD2 sc, BIT symbolic)
 {
+	const INSTRUCTION *ip;
 	WORD12 code;
 
 	switch (sc) {
@@ -190,6 +201,86 @@ void printinstr(unsigned wc, unsigned sc)
 	case 3:	code = (MAIN[wc] >> 0) & 0xfff; break;
 	}
 	printf("%04o", code);
+	if (symbolic) {
+		// search instruction table
+		ip = instr;
+		while (ip->name != 0) {
+			switch (ip->outtype) {
+			case OP_ASIS:
+				if (ip->code == code) {
+					printf (" %s", ip->name);
+					return;
+				}
+				break;
+			case OP_TOP4:
+				if (ip->code == (code & 0x0ff)) {
+					printf (" %s %u", ip->name, code >> 8);
+					return;
+				}
+				break;
+			case OP_TOP6:
+				if (ip->code == (code & 0x03f)) {
+					printf (" %s 0%02o", ip->name, code >> 6);
+					return;
+				}
+				break;
+			case OP_TOP10:
+				if (ip->code == (code & 0x003)) {
+					printf (" %s 0%04o", ip->name, code >> 2);
+					return;
+				}
+				break;
+			default:
+				;
+			}
+			ip++;
+		}
+		printf(" unknown instruction!");
+	}
+}
+
+int verifyreg(char *regname, long long c)
+{
+	if (strcmp(regname, "AROF") == 0) {
+		if (this->r.AROF == c)
+			return true;
+	} else
+	if (strcmp(regname, "BROF") == 0) {
+		if (this->r.BROF == c)
+			return true;
+	} else
+	if (strcmp(regname, "A") == 0) {
+		if (this->r.A == c)
+			return true;
+	} else
+	if (strcmp(regname, "B") == 0) {
+		if (this->r.B == c)
+			return true;
+	} else
+	if (strcmp(regname, "S") == 0) {
+		if (this->r.S == c)
+			return true;
+	}
+	return false;
+}
+
+void setreg(char *regname, long long c)
+{
+	if (strcmp(regname, "AROF") == 0) {
+		this->r.AROF = c;
+	} else
+	if (strcmp(regname, "BROF") == 0) {
+		this->r.BROF = c;
+	} else
+	if (strcmp(regname, "A") == 0) {
+		this->r.A = c;
+	} else
+	if (strcmp(regname, "B") == 0) {
+		this->r.B = c;
+	} else
+	if (strcmp(regname, "S") == 0) {
+		this->r.S = c;
+	}
 }
 
 void assemble(void);
@@ -210,8 +301,8 @@ void generate(void)	/* generate segment of code */
 		linep = linebuf+1;
 		switch (linebuf[0]) {
 		case '#': /* comment */
-			while(isspace((int)*linep))
-				linep++;
+			if (pass2 && dolistsource)
+				fputs(linebuf, stdout);
 			break;
 		case 'l':
 		case 'L': /* label definition */
@@ -223,6 +314,8 @@ void generate(void)	/* generate segment of code */
 			else
 				labelvalue = wc;
 			setlabel(x, labelvalue);
+			if (pass2 && dolistsource)
+				fputs(linebuf, stdout);
 			break;
 		case ' ':
 		case '\t': /* instruction */
@@ -238,7 +331,7 @@ void assemble(void)
 {
 	const INSTRUCTION *ip;
 	WORD12 op = 0;
-	long c;
+	long long c;
 	unsigned oldwc;
 	unsigned oldsc;
 
@@ -266,21 +359,113 @@ void assemble(void)
 	case OP_BRAW:
 		c = parseint();
 		break;
+	case OP_REGVAL:
+		while(isspace((int)*linep))
+			linep++;
+		getname(regname, sizeof regname);
+		while(isspace((int)*linep))
+			linep++;
+		c = parseint();
+		break;
 	default:
 		errorl("unexpected intype");
 	}
 
-	/* generate code */
+	/* generate code or handle pseudo instructions */
 	switch (ip->outtype) {
 	case OP_ORG:
 		oldwc = wc = c;
 		oldsc = sc = 0;
-		break;
+		if (pass2 && dolistsource)
+			fputs(linebuf, stdout);
+		return;
 	case OP_RUN:
-		break;
+		if (pass2) {
+			if (dolistsource)
+				fputs(linebuf, stdout);
+			this->r.C = wc;
+			this->r.L = sc;
+			loadPviaC(this);	// load the program word to P
+			switch (this->r.L) {
+			case 0:
+				this->r.T = (this->r.P >> 36) & 0xfff;
+				this->r.L = 1;
+				break;
+			case 1:
+				this->r.T = (this->r.P >> 24) & 0xfff;
+				this->r.L = 2;
+				break;
+			case 2:
+				this->r.T = (this->r.P >> 12) & 0xfff;
+				this->r.L = 3;
+				break;
+			case 3:
+				this->r.T = (this->r.P >> 0) & 0xfff;
+				this->r.L = 0;
+				this->r.C++;
+				this->r.PROF = false;
+				break;
+			}
+			this->r.TROF = true;
+
+			this->r.US14X = true;
+			start(this);
+			while (this->busy) {
+				if (dotrcins) {
+					ADDR15 c;
+					WORD2 l;
+					c = this->r.C;
+					l = this->r.L;
+					if (l == 0) {
+						l = 3;
+						c--;
+					} else {
+						l--;
+					}
+					printf("%05o:%o ", c, l);
+					printinstr(c, l, true);
+					printf("\n");
+				}
+				this->cycleLimit = 1;
+				run(this);
+				if (dotrcins) {
+					printf("A=%016llo(%u) B=%016llo(%u) S=%05o\n",
+						this->r.A, this->r.AROF,
+						this->r.B, this->r.BROF,
+						this->r.S);
+				}
+				//sleep(1);
+			}
+			wc = this->r.C;
+			sc = this->r.L;
+			if (sc == 0) {
+				sc = 3;
+				wc--;
+			} else {
+				sc--;
+			}
+		}
+		return;
 	case OP_END:
 		again = 0;
-		break;
+		if (pass2 && dolistsource)
+			fputs(linebuf, stdout);
+		return;
+	case OP_SET:
+		if (pass2 && dolistsource)
+			fputs(linebuf, stdout);
+		if (pass2)
+			setreg(regname, c);
+		return;
+	case OP_VFY:
+		if (pass2 && dolistsource)
+			fputs(linebuf, stdout);
+		if (pass2 && !verifyreg(regname, c)) {
+			printf("*** %s value not as expected\n",
+				regname);
+		}
+		return;
+
 	case OP_ASIS:
 		storesyllable(op);
 		break;
@@ -302,7 +487,7 @@ void assemble(void)
 		if (dodmpins) {
 			printf("%05o:%o ", oldwc, oldsc);
 			if ((oldwc!=wc) || (oldsc!=sc))
-				printinstr(oldwc, oldsc);
+				printinstr(oldwc, oldsc, false);
 			else
 				printf("    ");
 		}
@@ -325,13 +510,16 @@ int main(int argc, char *argv[])
 
 	printf("B5500 Assembler\n");
 
-	while ((opt = getopt(argc, argv, "bs")) != -1) {
+	while ((opt = getopt(argc, argv, "bst")) != -1) {
 		switch (opt) {
 		case 'b':
 			dodmpins = true; /* dump instructions after assembly */
 			break;
 		case 's':
 			dolistsource = true; /* list source */
+			break;
+		case 't':
+			dotrcins = true; /* trace execution */
 			break;
 		default: /* '?' */
 			fprintf(stderr,
@@ -351,6 +539,12 @@ int main(int argc, char *argv[])
 	}
 
 	b5500_init_shares();
+
+	this = CPUA;
+	memset(this, 0, sizeof(CPU));
+	this->cc = &cc;
+	this->id = "CPUA";
+	start(this);
 
 	printf("Pass 1\n");
 	pass2 = false;

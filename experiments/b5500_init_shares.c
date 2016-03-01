@@ -11,6 +11,8 @@
 ************************************************************************
 * 2016-02-19  R.Meyer
 *   from thin air.
+* 2016-03-01  R.Meyer
+*   added Central Control and message queues
 ***********************************************************************/
 
 #include <stdio.h>
@@ -19,6 +21,7 @@
 #include <errno.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
+#include <sys/msg.h>
 #include "b5500_common.h"
 
 /*
@@ -28,44 +31,76 @@
  * to get storage
  */
 static
-int	id_main,
-	id_cpua,
-	id_cpub;
+int	shm_main,
+	shm_cpua,
+	shm_cpub,
+	shm_cc,
+	msg_cpua,
+	msg_cpub,
+	msg_cc;
 
-WORD48	*MAIN;
-CPU	*CPUA;
-CPU	*CPUB;
+WORD48		*MAIN;
+CPU		*CPUA;
+CPU		*CPUB;
+CENTRAL_CONTROL	*CC;
 
 void b5500_init_shares(void)
 {
-	id_main = shmget(SHM_MAIN, MAXMEM*sizeof(WORD48), IPC_CREAT|0644);
-	if (id_main < 0) {
+	shm_main = shmget(SHM_MAIN, MAXMEM*sizeof(WORD48), IPC_CREAT|0644);
+	if (shm_main < 0) {
 		perror("shmget MAIN");
 		exit(2);
 	}
-	id_cpua = shmget(SHM_CPUA, sizeof(CPU), IPC_CREAT|0644);
-	if (id_cpua < 0) {
+	shm_cpua = shmget(SHM_CPUA, sizeof(CPU), IPC_CREAT|0644);
+	if (shm_cpua < 0) {
 		perror("shmget CPUA");
 		exit(2);
 	}
-	id_cpub = shmget(SHM_CPUB, sizeof(CPU), IPC_CREAT|0644);
-	if (id_cpub < 0) {
+	shm_cpub = shmget(SHM_CPUB, sizeof(CPU), IPC_CREAT|0644);
+	if (shm_cpub < 0) {
 		perror("shmget CPUB");
 		exit(2);
 	}
-	MAIN = shmat(id_main, NULL, 0);
+	shm_cc = shmget(SHM_CC, sizeof(CENTRAL_CONTROL), IPC_CREAT|0644);
+	if (shm_cc < 0) {
+		perror("shmget CENTRAL_CONTROL");
+		exit(2);
+	}
+
+	msg_cpua = msgget(MSG_CPUA, IPC_CREAT|0644);
+	if (msg_cpua < 0) {
+		perror("msgget CPUA");
+		exit(2);
+	}
+	msg_cpub = msgget(MSG_CPUB, IPC_CREAT|0644);
+	if (msg_cpub < 0) {
+		perror("msgget CPUB");
+		exit(2);
+	}
+	msg_cc = msgget(MSG_CC, IPC_CREAT|0644);
+	if (msg_cc < 0) {
+		perror("msgget CC");
+		exit(2);
+	}
+
+	MAIN = shmat(shm_main, NULL, 0);
 	if ((int)MAIN == -1) {
 		perror("shmat MAIN");
 		exit(2);
 	}
-	CPUA = shmat(id_cpua, NULL, 0);
+	CPUA = shmat(shm_cpua, NULL, 0);
 	if ((int)CPUA == -1) {
 		perror("shmat CPUA");
 		exit(2);
 	}
-	CPUB = shmat(id_cpub, NULL, 0);
+	CPUB = shmat(shm_cpub, NULL, 0);
 	if ((int)CPUB == -1) {
 		perror("shmat CPUB");
+		exit(2);
+	}
+	CC = shmat(shm_cc, NULL, 0);
+	if ((int)CC == -1) {
+		perror("shmat CC");
 		exit(2);
 	}
 }
