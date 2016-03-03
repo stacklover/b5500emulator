@@ -22,6 +22,7 @@ const INSTRUCTION instr[] = {
 	{".END", 00000, OP_NONE, OP_END},
 	{".SET", 00000, OP_REGVAL, OP_SET},
 	{".VFY", 00000, OP_REGVAL, OP_VFY},
+	{".WORD", 00000, OP_EXPR, OP_WORD},
 //
 // WORD mode instructions
 //
@@ -144,7 +145,7 @@ const INSTRUCTION instr[] = {
 // RDA=Recall destination address
 	{"RDA",  00004, OP_EXPR, OP_TOP6},
 // TRW=Transfer words
-	{"TRW",  00005, OP_EXPR, OP_TOP6},
+	{"TRW",  00005, OP_NONE, OP_TOP6},
 // SED=Set destination address
 	{"SED",  00006, OP_EXPR, OP_TOP6},
 // TDA=Transfer destination address

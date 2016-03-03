@@ -478,6 +478,7 @@ typedef enum optype {
 	OP_TOP4,	// emit code | (operand << 8)
 	OP_TOP6,	// emit code | (operand << 6)
 	OP_TOP10,	// emit code | (operand << 2)
+	OP_WORD,	// emit one word
 } OPTYPE;
 
 typedef struct instruction {

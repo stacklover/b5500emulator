@@ -80,6 +80,7 @@ void init(void)
 
 void errorl(char *msg)
 {
+	fputs(linebuf, stdout);
 	printf("\n*** Program load error: [%d] %s\n", iline, msg);
 	fclose(prd);
 	exit(2);
@@ -207,6 +208,8 @@ void printinstr(ADDR15 wc, WORD2 sc, BIT symbolic)
 		while (ip->name != 0) {
 			switch (ip->outtype) {
 			case OP_ASIS:
+			case OP_BRAS:
+			case OP_BRAW:
 				if (ip->code == code) {
 					printf (" %s", ip->name);
 					return;
@@ -355,9 +358,10 @@ void assemble(void)
 		break;
 	case OP_EXPR:
 	case OP_RELA:
+		c = parseint();
+		break;
 	case OP_BRAS:
 	case OP_BRAW:
-		c = parseint();
 		break;
 	case OP_REGVAL:
 		while(isspace((int)*linep))
@@ -429,10 +433,15 @@ void assemble(void)
 				this->cycleLimit = 1;
 				run(this);
 				if (dotrcins) {
-					printf("A=%016llo(%u) B=%016llo(%u) S=%05o\n",
+					printf("A=%016llo(%u) GH=%o%o Y=%02o M=%05o\n",
 						this->r.A, this->r.AROF,
+						this->r.G, this->r.H,
+						this->r.Y, this->r.M);
+					printf("B=%016llo(%u) KV=%o%o Z=%02o S=%05o N=%d\n",
 						this->r.B, this->r.BROF,
-						this->r.S);
+						this->r.K, this->r.V,
+						this->r.Z, this->r.S,
+						this->r.N);
 				}
 				//sleep(1);
 			}
@@ -466,6 +475,8 @@ void assemble(void)
 		}
 		return;
 
+	case OP_BRAS:
+	case OP_BRAW:
 	case OP_ASIS:
 		storesyllable(op);
 		break;
@@ -478,23 +489,33 @@ void assemble(void)
 	case OP_TOP10:
 		storesyllable(op|c<<2);
 		break;
+	case OP_WORD:
+		storeword(c);
+		break;
 	default:
 		printf("{%d}", op);
 		;
 	}
 
 	if (pass2) {
-		if (dodmpins) {
-			printf("%05o:%o ", oldwc, oldsc);
-			if ((oldwc!=wc) || (oldsc!=sc))
-				printinstr(oldwc, oldsc, false);
+		if (ip->outtype == OP_WORD) {
+			if (dolistsource)
+				fputs(linebuf, stdout);
+			if (dodmpins)
+				printf("%05o   %016llo\n", wc-1, MAIN[wc-1]);
+		} else {
+			if (dodmpins) {
+				printf("%05o:%o ", oldwc, oldsc);
+				if ((oldwc!=wc) || (oldsc!=sc))
+					printinstr(oldwc, oldsc, false);
+				else
+					printf("    ");
+			}
+			if (dolistsource)
+				fputs(linebuf, stdout);
 			else
-				printf("    ");
+				printf("\n");
 		}
-		if (dolistsource)
-			fputs(linebuf, stdout);
-		else
-			printf("\n");
 	}
 }
 
