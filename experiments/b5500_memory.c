@@ -13,6 +13,7 @@
 *   Converted Paul's work from Javascript to C
 ***********************************************************************/
 
+#include <stdio.h>
 #include "b5500_common.h"
 
 /*
@@ -31,6 +32,8 @@ void fetch(ACCESSOR *acc)
 		acc->MAED = false;	// no address error
 		acc->word = MAIN[acc->addr & MASKMEM];
 	}
+//printf("fetch: addr=%05o word=%016llo MPED=%u MAED=%u\n",
+//		acc->addr, acc->word, acc->MPED, acc->MAED);
 }
 
 /*
@@ -49,6 +52,8 @@ void store(ACCESSOR *acc)
 		acc->MAED = false;	// no address error
 		MAIN[acc->addr & MASKMEM] = acc->word;
 	}
+//printf("store: addr=%05o word=%016llo MPED=%u MAED=%u\n",
+//		acc->addr, acc->word, acc->MPED, acc->MAED);
 }
 
 void accessError(CPU *this)
@@ -267,6 +272,7 @@ void loadMviaM(CPU *this)
 
 void loadPviaC(CPU *this)
 {
+//printf("loadPviaC\n");
 	this->r.E = 48;		// Just to show the world what's happening
 	this->acc.addr = this->r.C;
 	this->acc.MAIL = (this->r.C < 0x0200) && this->r.NCSF;
@@ -287,7 +293,6 @@ void storeAviaS(CPU *this)
 	this->acc.MAIL = (this->r.S < 0x0200) && this->r.NCSF;
 	this->acc.word = this->r.A;
 	store(&this->acc);
-	this->r.PROF = 1;
 	//this->cycleCount += B5500CentralControl.memReadCycles;
 	if (this->acc.MAED || this->acc.MPED) {
 		accessError(this);
@@ -301,7 +306,6 @@ void storeBviaS(CPU *this)
 	this->acc.MAIL = (this->r.S < 0x0200) && this->r.NCSF;
 	this->acc.word = this->r.B;
 	store(&this->acc);
-	this->r.PROF = 1;
 	//this->cycleCount += B5500CentralControl.memReadCycles;
 	if (this->acc.MAED || this->acc.MPED) {
 		accessError(this);
@@ -315,7 +319,6 @@ void storeAviaM(CPU *this)
 	this->acc.MAIL = (this->r.M < 0x0200) && this->r.NCSF;
 	this->acc.word = this->r.A;
 	store(&this->acc);
-	this->r.PROF = 1;
 	//this->cycleCount += B5500CentralControl.memReadCycles;
 	if (this->acc.MAED || this->acc.MPED) {
 		accessError(this);
@@ -329,7 +332,6 @@ void storeBviaM(CPU *this)
 	this->acc.MAIL = (this->r.M < 0x0200) && this->r.NCSF;
 	this->acc.word = this->r.B;
 	store(&this->acc);
-	this->r.PROF = 1;
 	//this->cycleCount += B5500CentralControl.memReadCycles;
 	if (this->acc.MAED || this->acc.MPED) {
 		accessError(this);

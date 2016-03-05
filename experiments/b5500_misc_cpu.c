@@ -13,6 +13,7 @@
 *   Converted Paul's work from Javascript to C
 ***********************************************************************/
 
+#include <stdio.h>
 #include "b5500_common.h"
 
 /*
@@ -307,6 +308,10 @@ void run(CPU *this)
 				this->r.PROF = 0;
 				break;
 			}
+//printf("SECL: C=%05o L=%o T=%04o TROF=%u P=%016llo PROF=%u\n",
+//	this->r.C, this->r.L, this->r.T, this->r.TROF,
+//	this->r.P, this->r.PROF);
+
 		}
 
 	// Accumulate Normal and Control State cycles for use by Console in

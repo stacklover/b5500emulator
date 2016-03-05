@@ -180,6 +180,40 @@ WORD48 parseint(void)
 	return -1LL;
 }
 
+WORD48 parserel(void)
+{
+	char ch;
+	long long ll;
+	while(isspace((int)*linep))
+		linep++;
+	ch = *linep;
+	if (ch == 'R') {
+		linep++;
+	} else if (ch == 'F') {
+		linep++;
+	} else if (ch == 'C') {
+		linep++;
+	}
+	if (isdigit((int)*linep) || (*linep == '-') || (*linep == '+')) {
+		ll = strtoll(linep, &linep, 0);
+		switch (ch) {
+		case 'R':
+			return ll;
+		case 'F':
+			if (ll < 0)
+				return -ll | 01600;
+			else
+				return ll | 01000;
+		case 'C':
+			return ll | 01400;
+		default:
+			return ll;
+		}
+	}
+	errorl("expected integer");
+	return -1LL;
+}
+
 int parselabel(void)
 {
 	while(isspace((int)*linep))
@@ -260,6 +294,10 @@ int verifyreg(char *regname, long long c)
 		if (this->r.B == c)
 			return true;
 	} else
+	if (strcmp(regname, "F") == 0) {
+		if (this->r.F == c)
+			return true;
+	} else
 	if (strcmp(regname, "S") == 0) {
 		if (this->r.S == c)
 			return true;
@@ -280,6 +318,9 @@ void setreg(char *regname, long long c)
 	} else
 	if (strcmp(regname, "B") == 0) {
 		this->r.B = c;
+	} else
+	if (strcmp(regname, "F") == 0) {
+		this->r.F = c;
 	} else
 	if (strcmp(regname, "S") == 0) {
 		this->r.S = c;
@@ -357,9 +398,10 @@ void assemble(void)
 	case OP_NONE:
 		break;
 	case OP_EXPR:
-	case OP_RELA:
 		c = parseint();
 		break;
+	case OP_RELA:
+		c = parserel();
 	case OP_BRAS:
 	case OP_BRAW:
 		break;
@@ -414,6 +456,7 @@ void assemble(void)
 
 			this->r.US14X = true;
 			start(this);
+//printf("runn: C=%05o L=%o T=%04o\n", this->r.C, this->r.L, this->r.T);
 			while (this->busy) {
 				if (dotrcins) {
 					ADDR15 c;
@@ -433,15 +476,16 @@ void assemble(void)
 				this->cycleLimit = 1;
 				run(this);
 				if (dotrcins) {
-					printf("A=%016llo(%u) GH=%o%o Y=%02o M=%05o\n",
+					printf("A=%016llo(%u) GH=%o%o Y=%02o M=%05o F=%05o\n",
 						this->r.A, this->r.AROF,
 						this->r.G, this->r.H,
-						this->r.Y, this->r.M);
-					printf("B=%016llo(%u) KV=%o%o Z=%02o S=%05o N=%d\n",
+						this->r.Y, this->r.M,
+						this->r.F);
+					printf("B=%016llo(%u) KV=%o%o Z=%02o S=%05o N=%d MSFF=%u SALF=%u\n",
 						this->r.B, this->r.BROF,
 						this->r.K, this->r.V,
 						this->r.Z, this->r.S,
-						this->r.N);
+						this->r.N, this->r.MSFF, this->r.SALF);
 				}
 				//sleep(1);
 			}
@@ -513,7 +557,7 @@ void assemble(void)
 			}
 			if (dolistsource)
 				fputs(linebuf, stdout);
-			else
+			if (dodmpins || dolistsource)
 				printf("\n");
 		}
 	}

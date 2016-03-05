@@ -306,7 +306,6 @@ extern CENTRAL_CONTROL	*CC;
 #define	MASK_INCWrTM	00000000007600000 // (0000'001f'0000) saved TM bits 1-5
 #define	MASK_INCWMODE	00000000000100000 // (0000'0000'8000) word/char mode bit
 #define	MASK_INCWrS	00000000000077777 // (0000'0000'7fff) saved S register
-#define	MASK_INCWUNUSED	01200000017000000 // (2800'0020'0000) unused bits
 #define	SHFT_INCWQ09F	42
 #define	SHFT_INCWQ08F	41
 #define	SHFT_INCWQ07F	40
@@ -321,6 +320,31 @@ extern CENTRAL_CONTROL	*CC;
 #define	SHFT_INCWrTM	16
 #define	SHFT_INCWMODE	15
 #define	SHFT_INCWrS	0
+
+/*
+ * I/O descriptor or IO-Unit "D" register:
+ * xxx <5 unit> <10 word count> <memory inhibit> xx <binary/alpha>
+ * <tape direction> <word/char> <in/out> x <7 result> <15 memory address>
+ * octet numbers         FEDCBA9876543210
+ */
+#define	MASK_IODUNIT	00760000000000000 // (1f00'0000'0000) unit designation
+#define	MASK_IODWC	00017770000000000 // (00ff'c000'0000) word/character count
+#define	MASK_IODMI	00000004000000000 // (0000'2000'0000) memory inhibit
+#define	MASK_IODBINARY	00000000800000000 // (0000'0400'0000) binary mode (0=alpha)
+#define	MASK_IODTAPEDIR	00000000400000000 // (0000'0200'0000) tape direction (1=reverse)
+#define	MASK_IODWORD	00000000200000000 // (0000'0100'0000) word mode (0=char)
+#define	MASK_IODINPUT	00000000100000000 // (0000'0040'0000) input mode (0=output)
+#define	MASK_IODRESULT	00000000017700000 // (0000'003f'8000) result
+#define	MASK_IODADDR	00000000000077777 // (0000'0000'7fff) memory address
+#define	SHFT_IODUNIT	40
+#define	SHFT_IODWC	30
+#define	SHFT_IODMI	29
+#define	SHFT_IODBINARY	26
+#define	SHFT_IODTAPEDIR	25
+#define	SHFT_IODWORD	24
+#define	SHFT_IODINPUT	23
+#define	SHFT_IODRESULT	15
+#define	SHFT_IODADDR	0
 
 /*
  * special use of host wordsize to aid in arithmetics

@@ -34,7 +34,6 @@ void b5500_execute_wm(CPU *this)
 	this->r.Q07F = 0;
 	this->r.Q08F = 0;
 	this->r.Q09F = 0;
-	this->r.Q12F = 0;
 	this->r.Y = 0;
 	this->r.Z = 0;
 	this->r.M = 0;
@@ -220,7 +219,7 @@ void b5500_execute_wm(CPU *this)
 				}
 				break;
 			case 0x14: // 2411: ZPI=Conditional Halt
-				if (this->r.US14X) {
+				if (true || this->r.US14X) {
 					// STOP OPERATOR switch on
 					stop(this);
 				}

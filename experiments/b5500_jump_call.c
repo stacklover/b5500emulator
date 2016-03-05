@@ -13,6 +13,7 @@
 *   Converted Paul's work from Javascript to C
 ***********************************************************************/
 
+#include <stdio.h>
 #include "b5500_common.h"
 
 /*
@@ -195,15 +196,17 @@ void descriptorCall(CPU *this)
 {
 	WORD48	aw = this->r.A;		// local copy of A reg value
 	BIT	interrupted = 0;	// interrupt occurred
-
+//printf("descriptorCall: A=%016llo->", this->r.A);
 	if (!(aw & MASK_CONTROLW)) {
 		// It's a simple operand
+//printf("operand");
 		this->r.A = this->r.M | (MASK_CONTROLW | MASK_PBIT);
 	} else {
 		// It's not a simple operand
 		switch ((aw & MASK_TYPE) >> SHFT_TYPE) { // aw.[1:3]
 		case 2:	// CODE=0, PBIT=1, XBIT=0
 		case 3: // CODE=0, PBIT=1, XBIT=1
+//printf("present data");
 			// Present data descriptor: see if it must be indexed
 			if (aw & MASK_DDWC) { // aw.[8:10]
 				interrupted = indexDescriptor(this);
@@ -216,12 +219,14 @@ void descriptorCall(CPU *this)
 			}
 			break;
 		case 7:	//  CODE=1, PBIT=1, XBIT=1
+//printf("present program");
 			// Present program descriptor
 			enterSubroutine(this, true);
 			break;
 		case 0:	// CODE=0, PBIT=0, XBIT=0
 		case 1:	// CODE=0, PBIT=0, XBIT=1
 		case 5:	// CODE=1, PBIT=0, XBIT=1
+//printf("absent program/data");
 			// Absent data or program descriptor
 			if (this->r.NCSF) {
 				this->r.I = (this->r.I & 0x0F) | 0x70; // set I05/6/7: p-bit
@@ -230,11 +235,13 @@ void descriptorCall(CPU *this)
 			}
 			break;
 		default: // cases 4, 6	// CODE=1, PBIT=0/1, XBIT=0
+//printf("misc");
 			// Miscellaneous control word
 			this->r.A = this->r.M | (MASK_CONTROLW | MASK_PBIT);
 			break;
 		}
 	}
+//printf("\n");
 }
 
 /*
@@ -246,7 +253,7 @@ void enterSubroutine(CPU *this, BIT descriptorCall)
 	WORD48	aw = this->r.A;	// local copy of word in A reg
 	BIT	arg = (aw & MASK_PCWARGS) >> SHFT_PCWARGS;
 	BIT	mode = (aw & MASK_PCWMODE) >> SHFT_PCWMODE;
-
+//printf("enterSubroutine: MSFF=%u\n", this->r.MSFF);
 	if (arg && !this->r.MSFF) {
 		// just leave the Program Descriptor on TOS
 	} else if (mode && !arg) {
@@ -338,5 +345,6 @@ int exitSubroutine(CPU *this, int in_line)
 		this->r.S = ((this->r.X & MASK_MSCWrF) >> SHFT_MSCWrF) - 1;
 		this->r.BROF = false;
 	}
+//printf("exitSubroutine: %d\n", result);
 	return result;
 }
