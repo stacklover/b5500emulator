@@ -1,0 +1,18 @@
+# Test operators - field transfer
+
+	.ORG	020
+	NOP
+	DIA	041
+	DIB	021
+	TRB	48
+	ZPI
+
+
+# now lets go
+	.SET	A	01122334455667734
+	.SET	B	07777777777777777
+	.SET	AROF	1
+	.SET	BROF	1
+	.ORG	020
+	.RUN
+	.END

@@ -25,15 +25,15 @@ void b5500_execute_wm(CPU *this)
 	WORD48 t1, t2;
 
 	// clear some vars 
-	this->r.Q01F = 0;
-	this->r.Q02F = 0;
-	this->r.Q03F = 0;
-	this->r.Q04F = 0;
-	this->r.Q05F = 0;
-	this->r.Q06F = 0;
-	this->r.Q07F = 0;
-	this->r.Q08F = 0;
-	this->r.Q09F = 0;
+	this->r.Q01F = false;
+	this->r.Q02F = false;
+	this->r.Q03F = false;
+	this->r.Q04F = false;
+	this->r.Q05F = false;
+	this->r.Q06F = false;
+	this->r.Q07F = false;
+	this->r.Q08F = false;
+	this->r.Q09F = false;
 	this->r.Y = 0;
 	this->r.Z = 0;
 	this->r.M = 0;
@@ -119,14 +119,14 @@ void b5500_execute_wm(CPU *this)
 				if (!(t1 & MASK_FLAG)) {
 					// it's an operand
 					computeRelativeAddr(this, t1, false);
-					t2 = 1;
+					t2 = true;
 				} else if (presenceTest(this, t1)) {
 					// present descriptor
 					this->r.M = t1 & MASKMEM;
-					t2 = 1;
+					t2 = true;
 				} else {
 					// absent descriptor
-					t2 = 0;
+					t2 = false;
 				}
 				if (t2) {
 					// fetch IO Descriptor
@@ -152,7 +152,7 @@ void b5500_execute_wm(CPU *this)
 						this->r.A &= ~MASK_PBIT;
 						storeAviaM(this);
 					}
-					this->r.AROF = 0;
+					this->r.AROF = false;
 				}
 				break;
 			case 0x02: // 0211: ITI=Interrogate Interrupt
@@ -163,7 +163,7 @@ void b5500_execute_wm(CPU *this)
 					this->r.S = 0x40;
 					// stack address @100
 					clearInterrupt(this);
-					this->r.PROF = 0;
+					this->r.PROF = false;
 					// require fetch at SECL
 				}
 				break;
@@ -172,7 +172,7 @@ void b5500_execute_wm(CPU *this)
 					// control-state only
 					adjustAEmpty(this);
 					this->r.A = readTimer(this);
-					this->r.AROF = 1;
+					this->r.AROF = true;
 				}
 				break;
 			case 0x08: // 1011: COM=Communicate
@@ -183,16 +183,16 @@ void b5500_execute_wm(CPU *this)
 					if (this->r.AROF) {
 						storeAviaM(this);
 						// [M] = A
-						this->r.AROF = 0;
+						this->r.AROF = false;
 					} else if (this->r.BROF) {
 						storeBviaM(this);
 						// [M] = B
-						this->r.BROF = 0;
+						this->r.BROF = false;
 					} else {
 						adjustBFull(this);
 						storeBviaM(this);
 						// [M] = B
-						this->r.BROF = 0;
+						this->r.BROF = false;
 					}
 					this->r.I = (this->r.I & 0x0F) | 0x40;
 					// set I07: communicate
@@ -207,20 +207,20 @@ void b5500_execute_wm(CPU *this)
 					if (!(t1 & MASK_FLAG)) {
 						// it's an operand
 						computeRelativeAddr(this, t1, 0);
-						t2 = 1;
+						t2 = true;
 					} else if (t1 & MASK_PBIT) {
-						this->r.M = t1 % MASKMEM;
+						this->r.M = t1 & MASKMEM;
 						// present descriptor
-						t2 = 1;
+						t2 = true;
 					} else {
 						// for an absent descriptor, just leave it on the stack
-						t2 = 0;
+						t2 = false;
 					}
 					if (t2) {
 						loadAviaM(this);
-						bitSet(&this->r.A, 2);
+						this->r.A |= MASK_PBIT;
 						storeAviaM(this);
-						this->r.AROF = 0;
+						this->r.AROF = false;
 					}
 				}
 				break;
@@ -237,15 +237,15 @@ void b5500_execute_wm(CPU *this)
 				}
 				break;
 			case 0x18: // 3011: SFI=Store for Interrupt
-				storeForInterrupt(this, 0, 0);
+				storeForInterrupt(this, false, false);
 				break;
 			case 0x1C: // 3411: SFT=Store for Test
-				storeForInterrupt(this, 0, 1);
+				storeForInterrupt(this, false, true);
 				break;
 			case 0x21: // 4111: IP1=Initiate Processor 1
 				if (!this->r.NCSF) {
 					// control-state only
-					initiate(this, 0);
+					initiate(this, false);
 				}
 				break;
 			case 0x22: // 4211: IP2=Initiate Processor 2
@@ -256,16 +256,16 @@ void b5500_execute_wm(CPU *this)
 					if (this->r.AROF) {
 						storeAviaM(this);
 						// [M] = A
-						this->r.AROF = 0;
+						this->r.AROF = false;
 					} else if (this->r.BROF) {
 						storeBviaM(this);
 						// [M] = B
-						this->r.BROF = 0;
+						this->r.BROF = false;
 					} else {
 						adjustAFull(this);
 						storeAviaM(this);
 						// [M] = A
-						this->r.AROF = 0;
+						this->r.AROF = false;
 					}
 					initiateP2(this);
 				}
@@ -277,15 +277,15 @@ void b5500_execute_wm(CPU *this)
 					if (this->r.AROF) {
 						storeAviaM(this);
 						// [M] = A
-						this->r.AROF = 0;
+						this->r.AROF = false;
 					} else if (this->r.BROF) {
 						storeBviaM(this);              // [M] = B
-						this->r.BROF = 0;
+						this->r.BROF = false;
 					} else {
 						adjustAFull(this);
 						storeAviaM(this);
 						// [M] = A
-						this->r.AROF = 0;
+						this->r.AROF = false;
 					}
 					// let CentralControl choose the I/O Unit
 					initiateIO(this);
@@ -308,17 +308,17 @@ void b5500_execute_wm(CPU *this)
 			case 0x02: // 0215: LOR=logical OR
 				adjustABFull(this);
 				this->r.A = (this->r.A & MASK_NUMBER) | this->r.B;
-				this->r.BROF = 0;
+				this->r.BROF = false;
 				break;
 			case 0x04: // 0415: LND=logical AND
 				adjustABFull(this);
 				this->r.A = (this->r.A | MASK_FLAG) & this->r.B;
-				this->r.BROF = 0;
+				this->r.BROF = false;
 				break;
 			case 0x08: // 1015: LQV=logical EQV
 				adjustABFull(this);
 				this->r.B ^= (~this->r.A) & MASK_NUMBER;
-				this->r.AROF = 0;
+				this->r.AROF = false;
 				break;
 			case 0x10: // 2015: MOP=reset flag bit (make operand)
 				adjustAFull(this);
@@ -333,48 +333,48 @@ void b5500_execute_wm(CPU *this)
 		case 0x11: // XX21: load & store ops
 			switch (variant) {
 			case 0x01: // 0121: CID=Conditional integer store destructive
-				integerStore(this, 1, 1);
+				integerStore(this, true, true);
 				break;
 			case 0x02: // 0221: CIN=Conditional integer store nondestructive
-				integerStore(this, 1, 0);
+				integerStore(this, true, false);
 				break;
 			case 0x04: // 0421: STD=Store destructive
 				adjustABFull(this);
 				if (!(this->r.A & MASK_FLAG)) {
 					// it's an operand
-					computeRelativeAddr(this, this->r.A, 0);
+					computeRelativeAddr(this, this->r.A, false);
 					storeBviaM(this);
-					this->r.AROF = this->r.BROF = 0;
+					this->r.AROF = this->r.BROF = false;
 				} else {
 					// it's a descriptor
 					if (presenceTest(this, this->r.A)) {
 						this->r.M = this->r.A & MASKMEM;
 						storeBviaM(this);
-						this->r.AROF = this->r.BROF = 0;
+						this->r.AROF = this->r.BROF = false;
 					}
 				}
 				break;
 			case 0x08: // 1021: SND=Store nondestructive
 				adjustABFull(this);
-				if (!(this->r.A & MASKMEM)) {
+				if (!(this->r.A & MASK_FLAG)) {
 					// it's an operand
-					computeRelativeAddr(this, this->r.A, 0);
+					computeRelativeAddr(this, this->r.A, false);
 					storeBviaM(this);
-					this->r.AROF = 0;
+					this->r.AROF = false;
 				} else {
 					// it's a descriptor
 					if (presenceTest(this, this->r.A)) {
 						this->r.M = this->r.A & MASKMEM;
 						storeBviaM(this);
-						this->r.AROF = 0;
+						this->r.AROF = false;
 					}
 				}
 				break;
 			case 0x10: // 2021: LOD=Load operand
 				adjustAFull(this);
-				if (!(this->r.A & MASKMEM)) {
+				if (!(this->r.A & MASK_FLAG)) {
 					// simple operand
-					computeRelativeAddr(this, this->r.A, 1);
+					computeRelativeAddr(this, this->r.A, true);
 					loadAviaM(this);
 				} else if (presenceTest(this, this->r.A)) {
 					// present descriptor
@@ -383,23 +383,23 @@ void b5500_execute_wm(CPU *this)
 				}
 				break;
 			case 0x21: // 4121: ISD=Integer store destructive
-				integerStore(this, 0, 1);
+				integerStore(this, false, true);
 				break;
 			case 0x22: // 4221: ISN=Integer store nondestructive
-				integerStore(this, 0, 0);
+				integerStore(this, false, false);
 				break;
 			}
 			break;
 		case 0x15: // XX25: comparison & misc. stack ops
 			switch (variant) {
 			case 0x01: // 0125: GEQ=compare B greater or equal to A
-				this->r.B = (singlePrecisionCompare(this) >= 0) ? 1 : 0;
+				this->r.B = (singlePrecisionCompare(this) >= 0) ? true : false;
 				break;
 			case 0x02: // 0225: GTR=compare B greater to A
-				this->r.B = (singlePrecisionCompare(this) > 0) ? 1 : 0;
+				this->r.B = (singlePrecisionCompare(this) > 0) ? true : false;
 				break;
 			case 0x04: // 0425: NEQ=compare B not equal to A
-				this->r.B = (singlePrecisionCompare(this) != 0) ? 1 : 0;
+				this->r.B = (singlePrecisionCompare(this) != 0) ? true : false;
 				break;
 			case 0x08: // 1025: XCH=exchange TOS words
 				exchangeTOS(this);
@@ -408,17 +408,17 @@ void b5500_execute_wm(CPU *this)
 				adjustABFull(this);
 				t1 = (this->r.A & MASK_RCWrF) >> SHFT_RCWrF;
 				this->r.B = (this->r.B & ~MASK_RCWrC) | (t1 << SHFT_RCWrC);
-				this->r.AROF = 0;
+				this->r.AROF = false;
 				break;
 			case 0x10: // 2025: DUP=Duplicate TOS
 				if (this->r.AROF) {
 					adjustBEmpty(this);
 					this->r.B = this->r.A;
-					this->r.BROF = 1;
+					this->r.BROF = true;
 				} else {
 					adjustBFull(this);
 					this->r.A = this->r.B;
-					this->r.AROF = 1;
+					this->r.AROF = true;
 				}
 				break;
 			case 0x1C: // 3425: FTF=F field to F field
@@ -427,25 +427,25 @@ void b5500_execute_wm(CPU *this)
 				this->r.B = (this->r.B & ~MASK_RCWrF) | (t1 << SHFT_RCWrF);
 				break;
 			case 0x21: // 4125: LEQ=compare B less or equal to A
-				this->r.B = (singlePrecisionCompare(this) <= 0) ? 1 : 0;
+				this->r.B = (singlePrecisionCompare(this) <= 0) ? true : false;
 				break;
 			case 0x22: // 4225: LSS=compare B less to A
-				this->r.B = (singlePrecisionCompare(this) < 0) ? 1 : 0;
+				this->r.B = (singlePrecisionCompare(this) < 0) ? true : false;
 				break;
 			case 0x24: // 4425: EQL=compare B equal to A
-				this->r.B = (singlePrecisionCompare(this) == 0) ? 1 : 0;
+				this->r.B = (singlePrecisionCompare(this) == 0) ? true : false;
 				break;
 			case 0x2C: // 5425: CTC=core field to C field
 				adjustABFull(this);
 				t1 = (this->r.A & MASK_RCWrC) >> SHFT_RCWrC;
 				this->r.B = (this->r.B & ~MASK_RCWrC) | (t1 << SHFT_RCWrC);
-				this->r.AROF = 0;
+				this->r.AROF = false;
 				break;
 			case 0x3C: // 7425: CTF=core field to F field
 				adjustABFull(this);
 				t1 = (this->r.A & MASK_RCWrC) >> SHFT_RCWrC;
 				this->r.B = (this->r.B & ~MASK_RCWrF) | (t1 << SHFT_RCWrF);
-				this->r.AROF = 0;
+				this->r.AROF = false;
 				break;
 			}
 			break;
@@ -455,13 +455,13 @@ void b5500_execute_wm(CPU *this)
 				adjustABFull(this);
 				if (this->r.B & 1) {
 					// true => no branch
-					this->r.AROF = this->r.BROF = 0;
+					this->r.AROF = this->r.BROF = false;
 				} else {
-					this->r.BROF = 0;
+					this->r.BROF = false;
 					if (!(this->r.A & MASK_FLAG)) {
 						// simple operand
 						jumpSyllables(this, -(this->r.A & 0x0fff));
-						this->r.AROF = 0;
+						this->r.AROF = false;
 					} else {
 						// descriptor
 						if (this->r.L == 0) {
@@ -471,8 +471,8 @@ void b5500_execute_wm(CPU *this)
 						if (presenceTest(this, this->r.A)) {
 							this->r.C = this->r.A & MASKMEM;
 							this->r.L = 0;
-							this->r.PROF = 0; // require fetch at SECL
-							this->r.AROF = 0;
+							this->r.PROF = false; // require fetch at SECL
+							this->r.AROF = false;
 						}
 					}
 				}
@@ -481,13 +481,13 @@ void b5500_execute_wm(CPU *this)
 				adjustABFull(this);
 				if (this->r.B & 1) {
 					// true => no branch
-					this->r.AROF = this->r.BROF = 0;
+					this->r.AROF = this->r.BROF = false;
 				} else {
-					this->r.BROF = 0;
+					this->r.BROF = false;
 					if (!(this->r.A & MASK_FLAG)) {
 						// simple operand
 						jumpSyllables(this, this->r.A & 0x0fff);
-						this->r.AROF = 0;
+						this->r.AROF = false;
 					} else {
 						// descriptor
 						if (this->r.L == 0) {
@@ -497,8 +497,8 @@ void b5500_execute_wm(CPU *this)
 						if (presenceTest(this, this->r.A)) {
 							this->r.C = this->r.A & 0x0fff;
 							this->r.L = 0;
-							this->r.PROF = 0; // require fetch at SECL
-							this->r.AROF = 0;
+							this->r.PROF = false; // require fetch at SECL
+							this->r.AROF = false;
 						}
 					}
 				}
@@ -514,16 +514,16 @@ void b5500_execute_wm(CPU *this)
 			case 0x10: // 2031: TOP=test flag bit (test for operand)
 				adjustAEmpty(this);
 				adjustBFull(this);
-				this->r.A = this->r.B & MASK_FLAG ? 1 : 0;
-				this->r.AROF = 1;
+				this->r.A = this->r.B & MASK_FLAG ? true : false;
+				this->r.AROF = true;
 				break;
 			case 0x11: // 2131: LBC=branch backward word conditional
 				adjustABFull(this);
 				if (this->r.B & 1) {
 					// true => no branch
-					this->r.AROF = this->r.BROF = 0;
+					this->r.AROF = this->r.BROF = false;
 				} else {
-					this->r.BROF = 0;
+					this->r.BROF = false;
 					if (this->r.L == 0) {
 						--this->r.C;
 						// adjust for Inhibit Fetch
@@ -531,14 +531,14 @@ void b5500_execute_wm(CPU *this)
 					if (!(this->r.A & MASK_FLAG)) {
 						// simple operand
 						jumpWords(this, -(this->r.A & 0x03ff));
-						this->r.AROF = 0;
+						this->r.AROF = false;
 					} else {
 						// descriptor
 						if (presenceTest(this, this->r.A)) {
 							this->r.C = this->r.A & MASKMEM;
 							this->r.L = 0;
-							this->r.PROF = 0; // require fetch at SECL
-							this->r.AROF = 0;
+							this->r.PROF = false; // require fetch at SECL
+							this->r.AROF = false;
 						}
 					}
 				}
@@ -547,9 +547,9 @@ void b5500_execute_wm(CPU *this)
 				adjustABFull(this);
 				if (this->r.B & 1) {
 					// true => no branch
-					this->r.AROF = this->r.BROF = 0;
+					this->r.AROF = this->r.BROF = false;
 				} else {
-					this->r.BROF = 0;
+					this->r.BROF = false;
 					if (this->r.L == 0) {
 						--this->r.C;
 						// adjust for Inhibit Fetch
@@ -557,15 +557,15 @@ void b5500_execute_wm(CPU *this)
 					if (!(this->r.A & MASK_FLAG)) {
 						// simple operand
 						jumpWords(this, this->r.A & 0x03ff);
-						this->r.AROF = 0;
+						this->r.AROF = false;
 					} else {
 						// descriptor
 						if (presenceTest(this, this->r.A)) {
 							this->r.C = this->r.A & MASKMEM;
 							this->r.L = 0;
-							this->r.PROF = 0;
+							this->r.PROF = false;
 							// require fetch at SECL
-							this->r.AROF = 0;
+							this->r.AROF = false;
 						}
 					}
 				}
@@ -573,14 +573,14 @@ void b5500_execute_wm(CPU *this)
 			case 0x14: // 2431: TUS=interrogate peripheral status
 				adjustAEmpty(this);
 				this->r.A = interrogateUnitStatus(this);
-				this->r.AROF = 1;
+				this->r.AROF = true;
 				break;
 			case 0x21: // 4131: BBW=branch backward unconditional
 				adjustAFull(this);
 				if (!(this->r.A & MASK_FLAG)) {
 					// simple operand
 					jumpSyllables(this, -(this->r.A & 0x0fff));
-					this->r.AROF = 0;
+					this->r.AROF = false;
 				} else {
 					// descriptor
 					if (this->r.L == 0) {
@@ -590,9 +590,9 @@ void b5500_execute_wm(CPU *this)
 					if (presenceTest(this, this->r.A)) {
 						this->r.C = this->r.A & MASKMEM;
 						this->r.L = 0;
-						this->r.PROF = 0;
+						this->r.PROF = false;
 						// require fetch at SECL
-						this->r.AROF = 0;
+						this->r.AROF = false;
 					}
 				}
 				break;
@@ -601,7 +601,7 @@ void b5500_execute_wm(CPU *this)
 				if (!(this->r.A & MASK_FLAG)) {
 					// simple operand
 					jumpSyllables(this, this->r.A & 0x0fff);
-					this->r.AROF = 0;
+					this->r.AROF = false;
 				} else {
 					// descriptor
 					if (this->r.L == 0) {
@@ -611,9 +611,9 @@ void b5500_execute_wm(CPU *this)
 					if (presenceTest(this, this->r.A)) {
 						this->r.C = this->r.A & MASKMEM;
 						this->r.L = 0;
-						this->r.PROF = 0;
+						this->r.PROF = false;
 						// require fetch at SECL
-						this->r.AROF = 0;
+						this->r.AROF = false;
 					}
 				}
 				break;
@@ -630,15 +630,15 @@ void b5500_execute_wm(CPU *this)
 				if (!(this->r.A & MASK_FLAG)) {
 					// simple operand
 					jumpWords(this, -(this->r.A & 0x03ff));
-					this->r.AROF = 0;
+					this->r.AROF = false;
 				} else {
 					// descriptor
 					if (presenceTest(this, this->r.A)) {
 						this->r.C = this->r.A & MASKMEM;
 						this->r.L = 0;
-						this->r.PROF = 0;
+						this->r.PROF = false;
 						// require fetch at SECL
-						this->r.AROF = 0;
+						this->r.AROF = false;
 					}
 				}
 				break;
@@ -651,22 +651,22 @@ void b5500_execute_wm(CPU *this)
 				if (!(this->r.A & MASK_FLAG)) {
 					// simple operand
 					jumpWords(this, this->r.A % 0x0400);
-					this->r.AROF = 0;
+					this->r.AROF = false;
 				} else {
 					// descriptor
 					if (presenceTest(this, this->r.A)) {
 						this->r.C = this->r.A & MASKMEM;
 						this->r.L = 0;
-						this->r.PROF = 0;
+						this->r.PROF = false;
 						// require fetch at SECL
-						this->r.AROF = 0;
+						this->r.AROF = false;
 					}
 				}
 				break;
 			case 0x34: // 6431: TIO=interrogate I/O channel
 				adjustAEmpty(this);
 				this->r.A = interrogateIOChannel(this);
-				this->r.AROF = 1;
+				this->r.AROF = true;
 				break;
 			case 0x38: // 7031: FBS=stack search for flag
 				adjustAFull(this);
@@ -689,7 +689,7 @@ void b5500_execute_wm(CPU *this)
 			case 0x01: // 0135: BRT=branch return
 				adjustAEmpty(this);
 				if (!this->r.BROF) {
-					this->r.Q03F = 1;
+					this->r.Q03F = true;
 					// Q03F: not used, except for display purposes
 					adjustBFull(this);
 				}
@@ -697,13 +697,13 @@ void b5500_execute_wm(CPU *this)
 					this->r.S = (this->r.B >> 15) & MASKMEM;
 					this->r.C = this->r.B & MASKMEM;
 					this->r.L = 0;
-					this->r.PROF = 0;
+					this->r.PROF = false;
 					// require fetch at SECL
 					loadBviaS(this);
 					// B = [S], fetch MSCW
 					--this->r.S;
 					applyMSCW(this, this->r.B);
-					this->r.BROF = 0;
+					this->r.BROF = false;
 				}
 				break;
 			case 0x02: // 0235: RTN=return normal
@@ -717,13 +717,13 @@ void b5500_execute_wm(CPU *this)
 					this->r.S = this->r.F;
 					loadBviaS(this);
 					// B = [S], fetch the RCW
-					switch (exitSubroutine(this, 0)) {
+					switch (exitSubroutine(this, false)) {
 					case 0:
 						this->r.X = 0;
 						operandCall(this);
 						break;
 					case 1:
-						this->r.Q05F = 1;
+						this->r.Q05F = true;
 						// set Q05F, for display only
 						this->r.X = 0;
 						descriptorCall(this);
@@ -734,7 +734,7 @@ void b5500_execute_wm(CPU *this)
 				}
 				break;
 			case 0x04: // 0435: XIT=exit procedure
-				this->r.AROF = 0;
+				this->r.AROF = false;
 				this->r.S = this->r.F;
 				loadBviaS(this);
 				// B = [S], fetch the RCW
@@ -752,13 +752,13 @@ void b5500_execute_wm(CPU *this)
 					// is pointed to by S, not F
 					loadBviaS(this);
 					// B = [S], fetch the RCW
-					switch (exitSubroutine(this, 0)) {
+					switch (exitSubroutine(this, false)) {
 					case 0:
 						this->r.X = 0;
 						operandCall(this);
 						break;
 					case 1:
-						this->r.Q05F = 1;
+						this->r.Q05F = true;
 						// set Q05F, for display only
 						this->r.X = 0;
 						descriptorCall(this);
@@ -776,7 +776,7 @@ void b5500_execute_wm(CPU *this)
 				adjustABFull(this);
 				this->r.M = (this->r.A + this->r.B) & MASKMEM;
 				this->r.A = (this->r.A & ~MASKMEM) | this->r.M;
-				this->r.BROF = 0;
+				this->r.BROF = false;
 				break;
 
 			case 0x02: // 0241: COC=construct operand call
@@ -788,7 +788,7 @@ void b5500_execute_wm(CPU *this)
 			case 0x04: // 0441: MKS=mark stack
 				adjustABEmpty(this);
 				this->r.B = buildMSCW(this);
-				this->r.BROF = 1;
+				this->r.BROF = true;
 				adjustBEmpty(this);
 				this->r.F = this->r.S;
 				if (!this->r.MSFF) {
@@ -798,7 +798,7 @@ void b5500_execute_wm(CPU *this)
 						storeBviaM(this);
 						// [M] = B
 					}
-					this->r.MSFF = 1;
+					this->r.MSFF = true;
 				}
 				break;
 			case 0x0A: // 1241: CDC=construct descriptor call
@@ -818,15 +818,15 @@ void b5500_execute_wm(CPU *this)
 					break;
 				case 2: // set   F from B.[18:15]
 					this->r.F = (this->r.B & MASK_RCWrF) >> SHFT_RCWrF;
-					this->r.SALF = 1;
-					this->r.BROF = 0;
+					this->r.SALF = true;
+					this->r.BROF = false;
 					break;
 				case 3: // set   S from B.[33:15]
 					this->r.S = (this->r.B & MASK_RCWrC) >> SHFT_RCWrC;
-					this->r.BROF = 0;
+					this->r.BROF = false;
 					break;
 				}
-				this->r.AROF = 0;
+				this->r.AROF = false;
 				break;
 			case 0x15: // 2541: LLL=link list look-up
 				adjustABFull(this);
@@ -878,9 +878,9 @@ void b5500_execute_wm(CPU *this)
 			if (variant < 4) {
 				// 0051=DEL: delete TOS (or field branch with zero-length field)
 				if (this->r.AROF) {
-					this->r.AROF = 0;
+					this->r.AROF = false;
 				} else if (this->r.BROF) {
-					this->r.BROF = 0;
+					this->r.BROF = false;
 				} else {
 					--this->r.S;
 				}
@@ -891,11 +891,11 @@ void b5500_execute_wm(CPU *this)
 				t1 = fieldIsolate(this->r.B, this->r.G*6+this->r.H, t2);
 				this->cycleCount += this->r.G + this->r.H + (t2 >> 1);
 				// approximate the shift counts
-				this->r.AROF = 0;
+				this->r.AROF = false;
 				// A is unconditionally empty at end
 				switch (variant & 0x03) {
 				case 0x02: // X251/X651: CFD=non-zero field branch forward destructive
-					this->r.BROF = 0;
+					this->r.BROF = false;
 					// no break: fall through
 				case 0x00: // X051/X451: CFN=non-zero field branch forward nondestructive
 					if (t1) {
@@ -911,14 +911,14 @@ void b5500_execute_wm(CPU *this)
 							if (presenceTest(this, this->r.A)) {
 								this->r.C = this->r.A % 0x8000;
 								this->r.L = 0;
-								this->r.PROF = 0;
+								this->r.PROF = false;
 								// require fetch at SEQL
 							}
 						}
 					}
 					break;
 				case 0x03: // X351/X751: CBD=non-zero field branch backward destructive
-					this->r.BROF = 0;
+					this->r.BROF = false;
 					// no break: fall through
 				case 0x01: // X151/X551: CBN=non-zero field branch backward nondestructive
 					if (t1) {
@@ -934,7 +934,7 @@ void b5500_execute_wm(CPU *this)
 							if (presenceTest(this, this->r.A)) {
 								this->r.C = this->r.A % 0x8000;
 								this->r.L = 0;
-								this->r.PROF = 0;
+								this->r.PROF = false;
 								// require fetch at SEQL
 							}
 						}
@@ -956,7 +956,7 @@ void b5500_execute_wm(CPU *this)
 				this->r.V = variant & 7;
 			} else { // 0061=XRT: temporarily set full PRT addressing mode
 				this->r.VARF = this->r.SALF;
-				this->r.SALF = 0;
+				this->r.SALF = false;
 			}
 			break;
 		case 0x35: // XX65: TRB=Transfer Bits
@@ -972,7 +972,7 @@ void b5500_execute_wm(CPU *this)
 				}
 				fieldTransfer(&this->r.B, t2, variant, this->r.A, t1);
 			}
-			this->r.AROF = 0;
+			this->r.AROF = false;
 			this->cycleCount += variant + this->r.G + this->r.K;       // approximate the shift counts
 			break;
 		case 0x39: // XX71: FCL=Compare Field Low
@@ -986,11 +986,11 @@ void b5500_execute_wm(CPU *this)
 				variant = 48-t2;
 			}
 			if (variant == 0) {
-				this->r.A = 1;
+				this->r.A = true;
 			} else if (fieldIsolate(this->r.B, t2, variant) < fieldIsolate(this->r.A, t1, variant)) {
-				this->r.A = 1;
+				this->r.A = true;
 			} else {
-				this->r.A = 0;
+				this->r.A = false;
 			}
 			this->cycleCount += variant + this->r.G + this->r.K;       // approximate the shift counts
 			break;
@@ -1005,11 +1005,11 @@ void b5500_execute_wm(CPU *this)
 				variant = 48-t2;
 			}
 			if (variant == 0) {
-				this->r.A = 1;
+				this->r.A = true;
 			} else if (fieldIsolate(this->r.B, t2, variant) == fieldIsolate(this->r.A, t1, variant)) {
-				this->r.A = 1;
+				this->r.A = true;
 			} else {
-				this->r.A = 0;
+				this->r.A = false;
 			}
 			this->cycleCount += variant + this->r.G + this->r.K;       // approximate the shift counts
 			break;

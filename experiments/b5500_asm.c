@@ -279,53 +279,61 @@ void printinstr(ADDR15 wc, WORD2 sc, BIT symbolic)
 
 int verifyreg(char *regname, long long c)
 {
-	if (strcmp(regname, "AROF") == 0) {
-		if (this->r.AROF == c)
-			return true;
-	} else
-	if (strcmp(regname, "BROF") == 0) {
-		if (this->r.BROF == c)
-			return true;
-	} else
-	if (strcmp(regname, "A") == 0) {
-		if (this->r.A == c)
-			return true;
-	} else
-	if (strcmp(regname, "B") == 0) {
-		if (this->r.B == c)
-			return true;
-	} else
-	if (strcmp(regname, "F") == 0) {
-		if (this->r.F == c)
-			return true;
-	} else
-	if (strcmp(regname, "S") == 0) {
-		if (this->r.S == c)
-			return true;
-	}
+	if (strcmp(regname, "AROF") == 0) { if (this->r.AROF == c) return true;	} else
+	if (strcmp(regname, "BROF") == 0) { if (this->r.BROF == c) return true;	} else
+	if (strcmp(regname, "PROF") == 0) { if (this->r.PROF == c) return true;	} else
+	if (strcmp(regname, "TROF") == 0) { if (this->r.TROF == c) return true;	} else
+	if (strcmp(regname, "A") == 0) { if (this->r.A == c) return true; } else
+	if (strcmp(regname, "B") == 0) { if (this->r.B == c) return true; } else
+	if (strcmp(regname, "C") == 0) { if (this->r.C == c) return true; } else
+	if (strcmp(regname, "E") == 0) { if (this->r.E == c) return true; } else
+	if (strcmp(regname, "F") == 0) { if (this->r.F == c) return true; } else
+	if (strcmp(regname, "G") == 0) { if (this->r.G == c) return true; } else
+	if (strcmp(regname, "H") == 0) { if (this->r.H == c) return true; } else
+	if (strcmp(regname, "I") == 0) { if (this->r.I == c) return true; } else
+	if (strcmp(regname, "J") == 0) { if (this->r.J == c) return true; } else
+	if (strcmp(regname, "K") == 0) { if (this->r.K == c) return true; } else
+	if (strcmp(regname, "L") == 0) { if (this->r.L == c) return true; } else
+	if (strcmp(regname, "M") == 0) { if (this->r.M == c) return true; } else
+	if (strcmp(regname, "N") == 0) { if (this->r.N == c) return true; } else
+	if (strcmp(regname, "P") == 0) { if (this->r.P == c) return true; } else
+	if (strcmp(regname, "R") == 0) { if (this->r.R == c) return true; } else
+	if (strcmp(regname, "S") == 0) { if (this->r.S == c) return true; } else
+	if (strcmp(regname, "T") == 0) { if (this->r.T == c) return true; } else
+	if (strcmp(regname, "V") == 0) { if (this->r.V == c) return true; } else
+	if (strcmp(regname, "X") == 0) { if (this->r.X == c) return true; } else
+	if (strcmp(regname, "Y") == 0) { if (this->r.Y == c) return true; } else
+	if (strcmp(regname, "Z") == 0) { if (this->r.Z == c) return true; }
 	return false;
 }
 
 void setreg(char *regname, long long c)
 {
-	if (strcmp(regname, "AROF") == 0) {
-		this->r.AROF = c;
-	} else
-	if (strcmp(regname, "BROF") == 0) {
-		this->r.BROF = c;
-	} else
-	if (strcmp(regname, "A") == 0) {
-		this->r.A = c;
-	} else
-	if (strcmp(regname, "B") == 0) {
-		this->r.B = c;
-	} else
-	if (strcmp(regname, "F") == 0) {
-		this->r.F = c;
-	} else
-	if (strcmp(regname, "S") == 0) {
-		this->r.S = c;
-	}
+	if (strcmp(regname, "AROF") == 0) { this->r.AROF = c; } else
+	if (strcmp(regname, "BROF") == 0) { this->r.BROF = c; } else
+	if (strcmp(regname, "PROF") == 0) { this->r.PROF = c; } else
+	if (strcmp(regname, "TROF") == 0) { this->r.TROF = c; } else
+	if (strcmp(regname, "A") == 0) { this->r.A = c;	} else
+	if (strcmp(regname, "B") == 0) { this->r.B = c;	} else
+	if (strcmp(regname, "C") == 0) { this->r.C = c;	} else
+	if (strcmp(regname, "E") == 0) { this->r.E = c;	} else
+	if (strcmp(regname, "F") == 0) { this->r.F = c;	} else
+	if (strcmp(regname, "G") == 0) { this->r.G = c;	} else
+	if (strcmp(regname, "H") == 0) { this->r.H = c;	} else
+	if (strcmp(regname, "I") == 0) { this->r.I = c;	} else
+	if (strcmp(regname, "J") == 0) { this->r.J = c;	} else
+	if (strcmp(regname, "K") == 0) { this->r.K = c;	} else
+	if (strcmp(regname, "L") == 0) { this->r.L = c;	} else
+	if (strcmp(regname, "M") == 0) { this->r.M = c;	} else
+	if (strcmp(regname, "N") == 0) { this->r.N = c;	} else
+	if (strcmp(regname, "P") == 0) { this->r.P = c;	} else
+	if (strcmp(regname, "R") == 0) { this->r.R = c;	} else
+	if (strcmp(regname, "S") == 0) { this->r.S = c;	} else
+	if (strcmp(regname, "T") == 0) { this->r.T = c;	} else
+	if (strcmp(regname, "V") == 0) { this->r.V = c;	} else
+	if (strcmp(regname, "X") == 0) { this->r.X = c;	} else
+	if (strcmp(regname, "Y") == 0) { this->r.Y = c;	} else
+	if (strcmp(regname, "Z") == 0) { this->r.Z = c;	}
 }
 
 void assemble(void);
@@ -558,7 +566,7 @@ void assemble(void)
 			}
 			if (dolistsource)
 				fputs(linebuf, stdout);
-			if (dodmpins || dolistsource)
+			if (dodmpins && !dolistsource)
 				printf("\n");
 		}
 	}
