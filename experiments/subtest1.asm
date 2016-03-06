@@ -1,4 +1,4 @@
-# Test operators
+# Test operators - regular function calls
 
 # assemble a small program
 	.ORG	020
@@ -6,11 +6,11 @@
 	LITC	0
 # mark stack
 	MKS
-# push some parameters
+# push three parameters
 	LITC	0222
 	LITC	0444
 	LITC	0456
-# call the subroutine
+# call the function
 	DESC	040
 # get result into A
 	LNG
@@ -24,9 +24,16 @@
 
 # function itself
 	.ORG	050
+# allocate some local storage
+	LITC	0
+	LITC	0
+	LITC	0
+	LITC	0
+	LITC	0
+	LITC	0
 # load address for result
 	DESC	F-5
-# load parameters
+# load the three parameters
 	OPDC	F-3
 	OPDC	F-2
 	OPDC	F-1

@@ -180,7 +180,7 @@ void storeForInterrupt(CPU *this, BIT forced, BIT forTest)
 	if (!this->isP1) {
 		// if it's P2
 		stop(this); // idle the P2 processor
-		this->cc->P2BF = 0; // tell CC and P1 we've stopped
+		CC->P2BF = 0; // tell CC and P1 we've stopped
 	} else {
 		// otherwise, if it's P1
 		if (!forTest) {

@@ -27,8 +27,8 @@ void b5500_sp_addsub(CPU *this, BIT subtract)
 {
 	int	ea;	// signed exponent of A
 	int	eb;	// signed exponent of B
-	WORD49	ma;	// absolute mantissa of A (left justified in word) + 9 bits of extension
-	WORD49	mb;	// absolute mantissa of B (left justified in word) + 9 bits of extension
+	WORD64	ma;	// absolute mantissa of A (left justified in word) + 9 bits of extension
+	WORD64	mb;	// absolute mantissa of B (left justified in word) + 9 bits of extension
 	BIT	sa;	// mantissa sign of A (0=positive)
 	BIT	sb;	// mantissa sign of B (ditto)
 
@@ -88,6 +88,7 @@ void b5500_sp_addsub(CPU *this, BIT subtract)
 			mb >>= 3;	// shift right
 			++eb;
 		}
+		this->r.X = mb << SHFT_EXTTOXREG;
 	} else if (ea < eb) {
 		// Normalize B for 39 bits (13 octades)
 		while (!(mb & MASK_MANTHIGHLJ) && (eb != ea)) {
@@ -99,6 +100,7 @@ void b5500_sp_addsub(CPU *this, BIT subtract)
 			ma >>= 3;	// shift right
 			++ea;
 		}
+		this->r.X = ma << SHFT_EXTTOXREG;
 	}
 
 	// At this point, the exponents are aligned,
@@ -117,6 +119,7 @@ void b5500_sp_addsub(CPU *this, BIT subtract)
 		if (mb & MASK_MANTCARRY) {
 			mb >>= 3;
 			++eb;
+			this->r.X = mb << SHFT_EXTTOXREG;
 		}
 	} else {
 		// we must subtract and will do it unsigned, so:

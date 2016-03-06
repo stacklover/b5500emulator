@@ -108,7 +108,6 @@ typedef struct cpuregs {
 typedef struct cpu {
 	CPUREGS		r;	// CPU register set
 	ACCESSOR	acc;	// memory accessor
-	CENTRAL_CONTROL	*cc;	// central control
 	const char	*id;	// pointer to name of CPU ("A" or "B")
 	unsigned	cycleCount;	// approx of CPU cycles needed
 	unsigned	cycleLimit;	// Cycle limit for this.run()
@@ -171,12 +170,12 @@ extern CENTRAL_CONTROL	*CC;
  * common for all control words
  * octet numbers         FEDCBA9876543210
  */
-#define	MASK_CONTROLW	04000000000000000 // (8000'0000'0000) the control bit
+#define	MASK_FLAG	04000000000000000 // (8000'0000'0000) the control bit
 #define	MASK_CODE	02000000000000000 // (4000'0000'0000) the code bit
 #define	MASK_PBIT	01000000000000000 // (2000'0000'0000) the presence bit
 #define	MASK_XBIT	00400000000000000 // (1000'0000'0000) the extra bit
 #define	MASK_TYPE	03400000000000000 // (7000'0000'0000) the type bits
-#define	SHFT_CONTROLW	47
+#define	SHFT_FLAG	47
 #define	SHFT_CODE	46
 #define	SHFT_PBIT	45
 #define	SHFT_XBIT	44
@@ -349,13 +348,14 @@ extern CENTRAL_CONTROL	*CC;
 /*
  * special use of host wordsize to aid in arithmetics
  */
-typedef unsigned long long WORD49;	// carry + 39 bits mantissa + 9 bit extension
-#define	MASK_MANTLJ	007777777777777000 // mantissa left aligned in 48 bit word
-#define	MASK_MANTROUND	000000000000000777 // right shifted rounding part
-#define	MASK_MANTHIGHLJ	007000000000000000 // highest octet of left justified mantissa
-#define	MASK_MANTCARRY	010000000000000000 // the carry/not borrow bit
-#define	SHFT_MANTISSALJ	9
-#define	VALU_ROUNDUP	0400	// value that causes rounding up
+typedef unsigned long long WORD64;		// carry + 39 bits mantissa + 24 bit extension
+#define	MASK_MANTLJ	00777777777777700000000	// mantissa left aligned in 64 bit word
+#define	MASK_MANTROUND	00000000000000077777777	// right shifted rounding part
+#define	MASK_MANTHIGHLJ	00700000000000000000000	// highest octet of left justified mantissa
+#define	MASK_MANTCARRY	01000000000000000000000	// the carry/not borrow bit
+#define	SHFT_MANTISSALJ	24
+#define	SHFT_EXTTOXREG	(39-24)
+#define	VALU_ROUNDUP	00000000000000040000000	// value that causes rounding up
 
 /* functions available */
 extern int b5500_sp_compare(CPU *);
@@ -511,6 +511,8 @@ typedef struct instruction {
 	OPTYPE	intype;		// operand combination in input
 	OPTYPE	outtype;	// operand combination in output
 } INSTRUCTION;
+
+extern int dotrcmem;		// trace memory accesses
 
 
 #endif /* B5500_COMMON_H */

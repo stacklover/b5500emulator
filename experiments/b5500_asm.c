@@ -27,6 +27,7 @@ extern const INSTRUCTION instr[];
 
 /* debug flags: turn these on for various dumps and traces */
 int dodmpins	 = false;	/* dump instructions after assembly */
+int dotrcmem	 = false;	/* trace memory accesses */
 int dolistsource = false;	/* list source line */
 int dotrcins	 = false;	/* trace instruction execution */
 
@@ -476,12 +477,12 @@ void assemble(void)
 				this->cycleLimit = 1;
 				run(this);
 				if (dotrcins) {
-					printf("A=%016llo(%u) GH=%o%o Y=%02o M=%05o F=%05o\n",
+					printf("  A=%016llo(%u) GH=%o%o Y=%02o M=%05o F=%05o\n",
 						this->r.A, this->r.AROF,
 						this->r.G, this->r.H,
 						this->r.Y, this->r.M,
 						this->r.F);
-					printf("B=%016llo(%u) KV=%o%o Z=%02o S=%05o N=%d MSFF=%u SALF=%u\n",
+					printf("  B=%016llo(%u) KV=%o%o Z=%02o S=%05o N=%d MSFF/TFFF=%u SALF=%u\n",
 						this->r.B, this->r.BROF,
 						this->r.K, this->r.V,
 						this->r.Z, this->r.S,
@@ -575,10 +576,13 @@ int main(int argc, char *argv[])
 
 	printf("B5500 Assembler\n");
 
-	while ((opt = getopt(argc, argv, "bst")) != -1) {
+	while ((opt = getopt(argc, argv, "bmst")) != -1) {
 		switch (opt) {
 		case 'b':
 			dodmpins = true; /* dump instructions after assembly */
+			break;
+		case 'm':
+			dotrcmem = true; /* trace memory accesses */
 			break;
 		case 's':
 			dolistsource = true; /* list source */
@@ -588,7 +592,7 @@ int main(int argc, char *argv[])
 			break;
 		default: /* '?' */
 			fprintf(stderr,
-				"Usage: %s [-b] [-s] input\n",
+				"Usage: %s [-b] [-m] [-s] [-t] input\n",
 				argv[0]);
 			exit(2);
 		}
@@ -607,7 +611,6 @@ int main(int argc, char *argv[])
 
 	this = CPUA;
 	memset(this, 0, sizeof(CPU));
-	this->cc = &cc;
 	this->id = "CPUA";
 	start(this);
 

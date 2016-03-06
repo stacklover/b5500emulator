@@ -35,7 +35,7 @@ void b5500_sp_print(WORD48 A)
 	e = (A & MASK_EXPONENT) >> SHFT_EXPONENT;
 	sm = (A & MASK_SIGNMANT) >> SHFT_SIGNMANT;
 	se = (A & MASK_SIGNEXPO) >> SHFT_SIGNEXPO;
-	cw = (A & MASK_CONTROLW) >> SHFT_CONTROLW;
+	cw = (A & MASK_FLAG) >> SHFT_FLAG;
 
 	d = (sm ? -1.0 : 1.0) * (double)m * pow(8.0, (se ? -1.0 : 1.0) * (double)e);
 
@@ -54,8 +54,8 @@ void signalInterrupt(CPU *this)
 	printf("\nIRQ=$%02x\n", this->r.I);
 }
 
-CENTRAL_CONTROL cc;
 CPU *this;
+int dotrcmem = 0;
 
 int main(int argc, char *argv[])
 {
@@ -66,7 +66,6 @@ int main(int argc, char *argv[])
 
 	this = CPUA;
 	memset(this, 0, sizeof(CPU));
-	this->cc = &cc;
 	this->id = "CPUA";
 	start(this);
 	preset(this, 020);

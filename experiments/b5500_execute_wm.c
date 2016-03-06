@@ -45,14 +45,15 @@ void b5500_execute_wm(CPU *this)
 	case 0:	// LITC: Literal Call
 		adjustAEmpty(this);
 		this->r.A = opcode >> 2;
-		this->r.AROF = 1;
+		this->r.AROF = true;
 		break;
+
 	case 2:	// OPDC: Operand Call
 		adjustAEmpty(this);
-		computeRelativeAddr(this, opcode >> 2, 1);
+		computeRelativeAddr(this, opcode >> 2, true);
 		loadAviaM(this);
-		if (this->r.A & MASK_CONTROLW) {
-			// optimization: if it's a control word, evaluate it
+		if (this->r.A & MASK_FLAG) {
+			// if it's a control word, evaluate it
 			operandCall(this);
 		}
 		// otherwise, just leave it in A
@@ -60,60 +61,64 @@ void b5500_execute_wm(CPU *this)
 
 	case 3: // DESC: Descriptor (name) Call
 		adjustAEmpty(this);
-		computeRelativeAddr(this, opcode >> 2, 1);
+		computeRelativeAddr(this, opcode >> 2, true);
 		loadAviaM(this);
 		descriptorCall(this);
 		break;
 
 	case 1:	// all other word-mode operators
 		variant = opcode >> 6;
-		switch (opcode & 0x3F) {
-		case 0x01: // XX01: single-precision numerics
+		switch (opcode & 077) {
+		case 001: // XX01: single-precision numerics
 			switch (variant) {
-			case 0x01: // 0101: ADD=single-precision add
+			case 001: // 0101: ADD=single-precision add
 				singlePrecisionAdd(this, true);
 				break;
-			case 0x03: // 0301: SUB=single-precision subtract
+			case 003: // 0301: SUB=single-precision subtract
 				singlePrecisionAdd(this, false);
 				break;
-			case 0x04: // 0401: MUL=single-precision multiply
+			case 004: // 0401: MUL=single-precision multiply
 				singlePrecisionMultiply(this);
 				break;
-			case 0x08: // 1001: DIV=single-precision floating divide
+			case 010: // 1001: DIV=single-precision floating divide
 				singlePrecisionDivide(this);
 				break;
-			case 0x18: // 3001: IDV=integer divide
+			case 030: // 3001: IDV=integer divide
 				integerDivide(this);
 				break;
-			case 0x38: // 7001: RDV=remainder divide
+			case 070: // 7001: RDV=remainder divide
 				remainderDivide(this);
 				break;
 			}
 			break;
-		case 0x05: // XX05: double-precision numerics
+		case 005: // XX05: double-precision numerics
 			switch (variant) {
-			case 0x01: // 0105: DLA=double-precision add
+			case 001: // 0105: DLA=double-precision add
 				doublePrecisionAdd(this, true);
 				break;
-			case 0x03: // 0305: DLS=double-precision subtract
+			case 003: // 0305: DLS=double-precision subtract
 				doublePrecisionAdd(this, false);
 				break;
-			case 0x04: // 0405: DLM=double-precision multiply
+			case 004: // 0405: DLM=double-precision multiply
 				doublePrecisionMultiply(this);
 				break;
-			case 0x08: // 1005: DLD=double-precision floating divide
+			case 010: // 1005: DLD=double-precision floating divide
 				doublePrecisionDivide(this);
 				break;
 			}
 			break;
-		case 0x09: // XX11: Control State and communication ops
+		case 011: // XX11: Control State and communication ops
 			switch (variant) {
-			case 0x01: // 0111: PRL=Program Release
+			case 001: // 0111: PRL=Program Release
+				// TOS should be operand or descriptor 
+				// t1 = copy of A
+				// t2 = presence bit or value valid
+				// get it into A and copy into t1
 				adjustAFull(this);
 				t1 = this->r.A;
-				if (!(t1 & MASK_CONTROLW)) {
+				if (!(t1 & MASK_FLAG)) {
 					// it's an operand
-					computeRelativeAddr(this, t1, 0);
+					computeRelativeAddr(this, t1, false);
 					t2 = 1;
 				} else if (presenceTest(this, t1)) {
 					// present descriptor
@@ -124,29 +129,36 @@ void b5500_execute_wm(CPU *this)
 					t2 = 0;
 				}
 				if (t2) {
-					loadAviaM(this); // fetch IOD
+					// fetch IO Descriptor
+					loadAviaM(this);
 					if (this->r.NCSF) {
+						// not in control state
 						// test continuity bit, [20:1]
-						if (!(this->r.A & 0x8000000)) {
-							this->r.I = (this->r.I & 0x0F) | 0x50; // set I07/5: program release
+						if (this->r.A & MASK_DDCONT) {
+							// set I07/6: continuity bit
+							this->r.I = (this->r.I & 0x0F) | 0x60;
 						} else {
-							this->r.I = (this->r.I & 0x0F) | 0x60; // set I07/6: continuity bit
+							// set I07/5: program release
+							this->r.I = (this->r.I & 0x0F) | 0x50;
 						}
 						signalInterrupt(this);
 						this->r.A = this->r.M;
-						this->r.M = this->r.R*64 + 9; // store IOD address in PRT[9]
+						// store IOD address in PRT[9]
+						this->r.M = (this->r.R<<6) + 9;
 						storeAviaM(this);
 					} else {
-						bitReset(&this->r.A, 2);
+						// in control state
+						// clear presence bit
+						this->r.A &= ~MASK_PBIT;
 						storeAviaM(this);
 					}
 					this->r.AROF = 0;
 				}
 				break;
 			case 0x02: // 0211: ITI=Interrogate Interrupt
-				if (this->cc->IAR && !this->r.NCSF) {
+				if (CC->IAR && !this->r.NCSF) {
 					// control-state only
-					this->r.C = this->cc->IAR;
+					this->r.C = CC->IAR;
 					this->r.L = 0;
 					this->r.S = 0x40;
 					// stack address @100
@@ -192,7 +204,7 @@ void b5500_execute_wm(CPU *this)
 					// no-op in Normal State
 					adjustAFull(this);
 					t1 = this->r.A;
-					if (!(t1 & MASK_CONTROLW)) {
+					if (!(t1 & MASK_FLAG)) {
 						// it's an operand
 						computeRelativeAddr(this, t1, 0);
 						t2 = 1;
@@ -213,13 +225,13 @@ void b5500_execute_wm(CPU *this)
 				}
 				break;
 			case 0x12: // 2211: HP2=Halt Processor 2
-				if (!(this->r.NCSF || this->cc->HP2F)) {
+				if (!(this->r.NCSF || CC->HP2F)) {
 					// control-state only
 					haltP2(this);
 				}
 				break;
 			case 0x14: // 2411: ZPI=Conditional Halt
-				if (true || this->r.US14X) {
+				if (this->r.US14X) {
 					// STOP OPERATOR switch on
 					stop(this);
 				}
@@ -300,7 +312,7 @@ void b5500_execute_wm(CPU *this)
 				break;
 			case 0x04: // 0415: LND=logical AND
 				adjustABFull(this);
-				this->r.A = (this->r.A | MASK_CONTROLW) & this->r.B;
+				this->r.A = (this->r.A | MASK_FLAG) & this->r.B;
 				this->r.BROF = 0;
 				break;
 			case 0x08: // 1015: LQV=logical EQV
@@ -314,7 +326,7 @@ void b5500_execute_wm(CPU *this)
 				break;
 			case 0x20: // 4015: MDS=set flag bit (make descriptor)
 				adjustAFull(this);
-				this->r.A |= MASK_CONTROLW; // set [0:1]
+				this->r.A |= MASK_FLAG; // set [0:1]
 				break;
 			}
 			break;
@@ -328,7 +340,7 @@ void b5500_execute_wm(CPU *this)
 				break;
 			case 0x04: // 0421: STD=Store destructive
 				adjustABFull(this);
-				if (!(this->r.A & MASK_CONTROLW)) {
+				if (!(this->r.A & MASK_FLAG)) {
 					// it's an operand
 					computeRelativeAddr(this, this->r.A, 0);
 					storeBviaM(this);
@@ -446,7 +458,7 @@ void b5500_execute_wm(CPU *this)
 					this->r.AROF = this->r.BROF = 0;
 				} else {
 					this->r.BROF = 0;
-					if (!(this->r.A & MASK_CONTROLW)) {
+					if (!(this->r.A & MASK_FLAG)) {
 						// simple operand
 						jumpSyllables(this, -(this->r.A & 0x0fff));
 						this->r.AROF = 0;
@@ -472,7 +484,7 @@ void b5500_execute_wm(CPU *this)
 					this->r.AROF = this->r.BROF = 0;
 				} else {
 					this->r.BROF = 0;
-					if (!(this->r.A & MASK_CONTROLW)) {
+					if (!(this->r.A & MASK_FLAG)) {
 						// simple operand
 						jumpSyllables(this, this->r.A & 0x0fff);
 						this->r.AROF = 0;
@@ -502,7 +514,7 @@ void b5500_execute_wm(CPU *this)
 			case 0x10: // 2031: TOP=test flag bit (test for operand)
 				adjustAEmpty(this);
 				adjustBFull(this);
-				this->r.A = this->r.B & MASK_CONTROLW ? 1 : 0;
+				this->r.A = this->r.B & MASK_FLAG ? 1 : 0;
 				this->r.AROF = 1;
 				break;
 			case 0x11: // 2131: LBC=branch backward word conditional
@@ -516,7 +528,7 @@ void b5500_execute_wm(CPU *this)
 						--this->r.C;
 						// adjust for Inhibit Fetch
 					}
-					if (!(this->r.A & MASK_CONTROLW)) {
+					if (!(this->r.A & MASK_FLAG)) {
 						// simple operand
 						jumpWords(this, -(this->r.A & 0x03ff));
 						this->r.AROF = 0;
@@ -542,7 +554,7 @@ void b5500_execute_wm(CPU *this)
 						--this->r.C;
 						// adjust for Inhibit Fetch
 					}
-					if (!(this->r.A & MASK_CONTROLW)) {
+					if (!(this->r.A & MASK_FLAG)) {
 						// simple operand
 						jumpWords(this, this->r.A & 0x03ff);
 						this->r.AROF = 0;
@@ -565,7 +577,7 @@ void b5500_execute_wm(CPU *this)
 				break;
 			case 0x21: // 4131: BBW=branch backward unconditional
 				adjustAFull(this);
-				if (!(this->r.A & MASK_CONTROLW)) {
+				if (!(this->r.A & MASK_FLAG)) {
 					// simple operand
 					jumpSyllables(this, -(this->r.A & 0x0fff));
 					this->r.AROF = 0;
@@ -586,7 +598,7 @@ void b5500_execute_wm(CPU *this)
 				break;
 			case 0x22: // 4231: BFW=branch forward unconditional
 				adjustAFull(this);
-				if (!(this->r.A & MASK_CONTROLW)) {
+				if (!(this->r.A & MASK_FLAG)) {
 					// simple operand
 					jumpSyllables(this, this->r.A & 0x0fff);
 					this->r.AROF = 0;
@@ -615,7 +627,7 @@ void b5500_execute_wm(CPU *this)
 					--this->r.C;
 					// adjust for Inhibit Fetch
 				}
-				if (!(this->r.A & MASK_CONTROLW)) {
+				if (!(this->r.A & MASK_FLAG)) {
 					// simple operand
 					jumpWords(this, -(this->r.A & 0x03ff));
 					this->r.AROF = 0;
@@ -636,7 +648,7 @@ void b5500_execute_wm(CPU *this)
 					--this->r.C;
 					// adjust for Inhibit Fetch
 				}
-				if (!(this->r.A & MASK_CONTROLW)) {
+				if (!(this->r.A & MASK_FLAG)) {
 					// simple operand
 					jumpWords(this, this->r.A % 0x0400);
 					this->r.AROF = 0;
@@ -661,10 +673,10 @@ void b5500_execute_wm(CPU *this)
 				this->r.M = this->r.A & MASKMEM;
 				do {
 					loadAviaM(this);
-					if (!(this->r.A & MASK_CONTROLW)) {
+					if (!(this->r.A & MASK_FLAG)) {
 						this->r.M = (this->r.M+1) & MASKMEM;
 					} else {
-						this->r.A = this->r.M | (MASK_CONTROLW | MASK_PBIT);
+						this->r.A = this->r.M | (MASK_FLAG | MASK_PBIT);
 						break;
 						// flag bit found: stop the search
 					}
@@ -700,7 +712,7 @@ void b5500_execute_wm(CPU *this)
 				// proceed with the return,
 				// otherwise throw a p-bit interrupt
 				// (this isn't well-documented)
-				if (!(this->r.A & MASK_CONTROLW) ||
+				if (!(this->r.A & MASK_FLAG) ||
 					presenceTest(this, this->r.A)) {
 					this->r.S = this->r.F;
 					loadBviaS(this);
@@ -734,7 +746,7 @@ void b5500_execute_wm(CPU *this)
 				// proceed with the return,
 				// otherwise throw a p-bit interrupt
 				// (this isn't well-documented)
-				if (!(this->r.A & MASK_CONTROLW) ||
+				if (!(this->r.A & MASK_FLAG) ||
 					presenceTest(this, this->r.A)) {
 					// Note that RTS assumes the RCW
 					// is pointed to by S, not F
@@ -769,7 +781,7 @@ void b5500_execute_wm(CPU *this)
 
 			case 0x02: // 0241: COC=construct operand call
 				exchangeTOS(this);
-				this->r.A |= MASK_CONTROLW;
+				this->r.A |= MASK_FLAG;
 				// set [0:1]
 				operandCall(this);
 				break;
@@ -791,7 +803,7 @@ void b5500_execute_wm(CPU *this)
 				break;
 			case 0x0A: // 1241: CDC=construct descriptor call
 				exchangeTOS(this);
-				this->r.A |= MASK_CONTROLW;
+				this->r.A |= MASK_FLAG;
 				// set [0:1]
 				descriptorCall(this);
 				break;

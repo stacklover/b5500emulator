@@ -145,7 +145,7 @@ void operandCall(CPU *this)
 	BIT	interrupted = 0;	// interrupt occurred
 
 	// If A contains a simple operand, just leave it there, otherwise...
-	if (aw & MASK_CONTROLW) {
+	if (aw & MASK_FLAG) {
 		// It's not a simple operand
 		switch ((aw & MASK_TYPE) >> SHFT_TYPE) { // aw.[1:3]
 		case 2:	// CODE=0, PBIT=1, XBIT=0
@@ -158,7 +158,7 @@ void operandCall(CPU *this)
 			if (!interrupted) {
 				this->r.M = this->r.A & MASKMEM;
 				loadAviaM(this); // A = [M]
-				if ((this->r.A & MASK_CONTROLW) && this->r.NCSF) { // Flag bit is set
+				if ((this->r.A & MASK_FLAG) && this->r.NCSF) { // Flag bit is set
 					this->r.I = (this->r.I & 0x0F) | 0x80; // set I08: flag-bit interrupt
 					signalInterrupt(this);
 					// B5500DumpState("Flag Bit: OPDC"); // <<< DEBUG >>>
@@ -197,10 +197,10 @@ void descriptorCall(CPU *this)
 	WORD48	aw = this->r.A;		// local copy of A reg value
 	BIT	interrupted = 0;	// interrupt occurred
 //printf("descriptorCall: A=%016llo->", this->r.A);
-	if (!(aw & MASK_CONTROLW)) {
+	if (!(aw & MASK_FLAG)) {
 		// It's a simple operand
 //printf("operand");
-		this->r.A = this->r.M | (MASK_CONTROLW | MASK_PBIT);
+		this->r.A = this->r.M | (MASK_FLAG | MASK_PBIT);
 	} else {
 		// It's not a simple operand
 		switch ((aw & MASK_TYPE) >> SHFT_TYPE) { // aw.[1:3]
@@ -237,7 +237,7 @@ void descriptorCall(CPU *this)
 		default: // cases 4, 6	// CODE=1, PBIT=0/1, XBIT=0
 //printf("misc");
 			// Miscellaneous control word
-			this->r.A = this->r.M | (MASK_CONTROLW | MASK_PBIT);
+			this->r.A = this->r.M | (MASK_FLAG | MASK_PBIT);
 			break;
 		}
 	}
@@ -317,7 +317,7 @@ int exitSubroutine(CPU *this, int in_line)
 {
 	int	result;
 
-	if (!(this->r.B & MASK_CONTROLW)) {
+	if (!(this->r.B & MASK_FLAG)) {
 		// flag bit not set
 		result = 2;
 		if (this->r.NCSF) {

@@ -31,8 +31,8 @@ int b5500_sp_compare(CPU *this)
 {
 	int	ea;	// signed exponent of A
 	int	eb;	// signed exponent of B
-	WORD49	ma;	// absolute mantissa of A (left justified in word)
-	WORD49	mb;	// absolute mantissa of B (left justified in word)
+	WORD64	ma;	// absolute mantissa of A (left justified in word)
+	WORD64	mb;	// absolute mantissa of B (left justified in word)
 	BIT	sa;	// mantissa sign of A (0=positive)
 	BIT	sb;	// mantissa sign of B (ditto)
 
@@ -83,6 +83,7 @@ int b5500_sp_compare(CPU *this)
 			mb >>= 3;	// shift right
 			++eb;
 		}
+		this->r.X = mb << SHFT_EXTTOXREG;
 	} else if (ea < eb) {
 		// Normalize B for 39 bits (13 octades)
 		while (!(mb & MASK_MANTHIGHLJ) && (eb != ea)) {
@@ -94,6 +95,7 @@ int b5500_sp_compare(CPU *this)
 			ma >>= 3;	// shift right
 			++ea;
 		}
+		this->r.X = ma << SHFT_EXTTOXREG;
 	}
 
 	// detect zero mantissa

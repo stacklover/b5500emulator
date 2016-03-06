@@ -45,7 +45,7 @@ void enterCharModeInline(CPU *this)
 
 	// execute the portion of CM XX04=RDA operator starting at J=2
 	this->r.S = bw & MASKMEM;
-	if (!(bw & MASK_CONTROLW)) {
+	if (!(bw & MASK_FLAG)) {
 		// if it's an operand
 		this->r.K = (bw >> 15) & 7; // set K from [30:3]
 	} else {
@@ -269,8 +269,7 @@ void run(CPU *this)
 
 		// is there an interrupt
 		if ((this->isP1 ?
-			this->cc->IAR :
-			(this->r.I || this->cc->HP2F))
+			CC->IAR : (this->r.I || CC->HP2F))
 				&& this->r.NCSF) {
 			// there's an interrupt and we're in Normal State
 			// reset Q09F (R-relative adder mode) and
