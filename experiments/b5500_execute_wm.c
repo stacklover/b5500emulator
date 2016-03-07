@@ -155,7 +155,7 @@ void b5500_execute_wm(CPU *this)
 					this->r.AROF = false;
 				}
 				break;
-			case 0x02: // 0211: ITI=Interrogate Interrupt
+			case 002: // 0211: ITI=Interrogate Interrupt
 				if (CC->IAR && !this->r.NCSF) {
 					// control-state only
 					this->r.C = CC->IAR;
@@ -167,7 +167,7 @@ void b5500_execute_wm(CPU *this)
 					// require fetch at SECL
 				}
 				break;
-			case 0x04: // 0411: RTR=Read Timer
+			case 004: // 0411: RTR=Read Timer
 				if (!this->r.NCSF) {
 					// control-state only
 					adjustAEmpty(this);
@@ -175,7 +175,7 @@ void b5500_execute_wm(CPU *this)
 					this->r.AROF = true;
 				}
 				break;
-			case 0x08: // 1011: COM=Communicate
+			case 010: // 1011: COM=Communicate
 				if (this->r.NCSF) {
 					// no-op in Control State
 					this->r.M = this->r.R*64 + 9;
@@ -199,7 +199,7 @@ void b5500_execute_wm(CPU *this)
 					signalInterrupt(this);
 				}
 				break;
-			case 0x11: // 2111: IOR=I/O Release
+			case 021: // 2111: IOR=I/O Release
 				if (!this->r.NCSF) {
 					// no-op in Normal State
 					adjustAFull(this);
@@ -224,31 +224,31 @@ void b5500_execute_wm(CPU *this)
 					}
 				}
 				break;
-			case 0x12: // 2211: HP2=Halt Processor 2
+			case 022: // 2211: HP2=Halt Processor 2
 				if (!(this->r.NCSF || CC->HP2F)) {
 					// control-state only
 					haltP2(this);
 				}
 				break;
-			case 0x14: // 2411: ZPI=Conditional Halt
+			case 024: // 2411: ZPI=Conditional Halt
 				if (this->r.US14X) {
 					// STOP OPERATOR switch on
 					stop(this);
 				}
 				break;
-			case 0x18: // 3011: SFI=Store for Interrupt
+			case 030: // 3011: SFI=Store for Interrupt
 				storeForInterrupt(this, false, false);
 				break;
-			case 0x1C: // 3411: SFT=Store for Test
+			case 034: // 3411: SFT=Store for Test
 				storeForInterrupt(this, false, true);
 				break;
-			case 0x21: // 4111: IP1=Initiate Processor 1
+			case 041: // 4111: IP1=Initiate Processor 1
 				if (!this->r.NCSF) {
 					// control-state only
 					initiate(this, false);
 				}
 				break;
-			case 0x22: // 4211: IP2=Initiate Processor 2
+			case 042: // 4211: IP2=Initiate Processor 2
 				if (!this->r.NCSF) {
 					// control-state only
 					this->r.M = AA_IODESC;
@@ -270,7 +270,7 @@ void b5500_execute_wm(CPU *this)
 					initiateP2(this);
 				}
 				break;
-			case 0x24: // 4411: IIO=Initiate I/O
+			case 044: // 4411: IIO=Initiate I/O
 				if (!this->r.NCSF) {
 					// address of IOD is stored in @10
 					this->r.M = AA_IODESC;
@@ -291,7 +291,7 @@ void b5500_execute_wm(CPU *this)
 					initiateIO(this);
 				}
 				break;
-			case 0x29: // 5111: IFT=Initiate For Test
+			case 051: // 5111: IFT=Initiate For Test
 				if (!this->r.NCSF) {
 					// control-state only
 					initiate(this, 1);
@@ -301,30 +301,31 @@ void b5500_execute_wm(CPU *this)
 			break;
 		case 015: // XX15: logical (bitmask) ops
 			switch (variant) {
-			case 0x01: // 0115: LNG=logical negate
+			case 001: // 0115: LNG=logical negate
 				adjustAFull(this);
 				this->r.A ^= MASK_NUMBER;
 				break;
-			case 0x02: // 0215: LOR=logical OR
+			case 002: // 0215: LOR=logical OR
 				adjustABFull(this);
 				this->r.A = (this->r.A & MASK_NUMBER) | this->r.B;
 				this->r.BROF = false;
 				break;
-			case 0x04: // 0415: LND=logical AND
+			case 004: // 0415: LND=logical AND
 				adjustABFull(this);
 				this->r.A = (this->r.A | MASK_FLAG) & this->r.B;
 				this->r.BROF = false;
 				break;
-			case 0x08: // 1015: LQV=logical EQV
+			case 010: // 1015: LQV=logical EQV
 				adjustABFull(this);
 				this->r.B ^= (~this->r.A) & MASK_NUMBER;
 				this->r.AROF = false;
 				break;
-			case 0x10: // 2015: MOP=reset flag bit (make operand)
+
+			case 020: // 2015: MOP=reset flag bit (make operand)
 				adjustAFull(this);
 				this->r.A &= MASK_NUMBER;
 				break;
-			case 0x20: // 4015: MDS=set flag bit (make descriptor)
+			case 040: // 4015: MDS=set flag bit (make descriptor)
 				adjustAFull(this);
 				this->r.A |= MASK_FLAG; // set [0:1]
 				break;
@@ -332,13 +333,13 @@ void b5500_execute_wm(CPU *this)
 			break;
 		case 021: // XX21: load & store ops
 			switch (variant) {
-			case 0x01: // 0121: CID=Conditional integer store destructive
+			case 001: // 0121: CID=Conditional integer store destructive
 				integerStore(this, true, true);
 				break;
-			case 0x02: // 0221: CIN=Conditional integer store nondestructive
+			case 002: // 0221: CIN=Conditional integer store nondestructive
 				integerStore(this, true, false);
 				break;
-			case 0x04: // 0421: STD=Store destructive
+			case 004: // 0421: STD=Store destructive
 				adjustABFull(this);
 				if (OPERAND(this->r.A)) {
 					// it's an operand
@@ -354,7 +355,7 @@ void b5500_execute_wm(CPU *this)
 					}
 				}
 				break;
-			case 0x08: // 1021: SND=Store nondestructive
+			case 010: // 1021: SND=Store nondestructive
 				adjustABFull(this);
 				if (OPERAND(this->r.A)) {
 					// it's an operand
@@ -370,7 +371,7 @@ void b5500_execute_wm(CPU *this)
 					}
 				}
 				break;
-			case 0x10: // 2021: LOD=Load operand
+			case 020: // 2021: LOD=Load operand
 				adjustAFull(this);
 				if (OPERAND(this->r.A)) {
 					// simple operand
@@ -382,35 +383,39 @@ void b5500_execute_wm(CPU *this)
 					loadAviaM(this);
 				}
 				break;
-			case 0x21: // 4121: ISD=Integer store destructive
+			case 041: // 4121: ISD=Integer store destructive
 				integerStore(this, false, true);
 				break;
-			case 0x22: // 4221: ISN=Integer store nondestructive
+			case 042: // 4221: ISN=Integer store nondestructive
 				integerStore(this, false, false);
 				break;
 			}
 			break;
 		case 025: // XX25: comparison & misc. stack ops
 			switch (variant) {
-			case 0x01: // 0125: GEQ=compare B greater or equal to A
+			case 001: // 0125: GEQ=compare B greater or equal to A
 				this->r.B = (singlePrecisionCompare(this) >= 0) ? true : false;
 				break;
-			case 0x02: // 0225: GTR=compare B greater to A
+			case 002: // 0225: GTR=compare B greater to A
 				this->r.B = (singlePrecisionCompare(this) > 0) ? true : false;
 				break;
-			case 0x04: // 0425: NEQ=compare B not equal to A
+			case 004: // 0425: NEQ=compare B not equal to A
 				this->r.B = (singlePrecisionCompare(this) != 0) ? true : false;
 				break;
-			case 0x08: // 1025: XCH=exchange TOS words
+			case 041: // 4125: LEQ=compare B less or equal to A
+				this->r.B = (singlePrecisionCompare(this) <= 0) ? true : false;
+				break;
+			case 042: // 4225: LSS=compare B less to A
+				this->r.B = (singlePrecisionCompare(this) < 0) ? true : false;
+				break;
+			case 044: // 4425: EQL=compare B equal to A
+				this->r.B = (singlePrecisionCompare(this) == 0) ? true : false;
+				break;
+
+			case 010: // 1025: XCH=exchange TOS words
 				exchangeTOS(this);
 				break;
-			case 0x0C: // 1425: FTC=F field to core field
-				adjustABFull(this);
-				t1 = (this->r.A & MASK_RCWrF) >> SHFT_RCWrF;
-				this->r.B = (this->r.B & ~MASK_RCWrC) | (t1 << SHFT_RCWrC);
-				this->r.AROF = false;
-				break;
-			case 0x10: // 2025: DUP=Duplicate TOS
+			case 020: // 2025: DUP=Duplicate TOS
 				if (this->r.AROF) {
 					adjustBEmpty(this);
 					this->r.B = this->r.A;
@@ -421,27 +426,25 @@ void b5500_execute_wm(CPU *this)
 					this->r.AROF = true;
 				}
 				break;
-			case 0x1C: // 3425: FTF=F field to F field
+
+			case 014: // 1425: FTC=F field to C field
+				adjustABFull(this);
+				t1 = (this->r.A & MASK_RCWrF) >> SHFT_RCWrF;
+				this->r.B = (this->r.B & ~MASK_RCWrC) | (t1 << SHFT_RCWrC);
+				this->r.AROF = false;
+				break;
+			case 034: // 3425: FTF=F field to F field
 				adjustABFull(this);
 				t1 = (this->r.A & MASK_RCWrF) >> SHFT_RCWrF;
 				this->r.B = (this->r.B & ~MASK_RCWrF) | (t1 << SHFT_RCWrF);
 				break;
-			case 0x21: // 4125: LEQ=compare B less or equal to A
-				this->r.B = (singlePrecisionCompare(this) <= 0) ? true : false;
-				break;
-			case 0x22: // 4225: LSS=compare B less to A
-				this->r.B = (singlePrecisionCompare(this) < 0) ? true : false;
-				break;
-			case 0x24: // 4425: EQL=compare B equal to A
-				this->r.B = (singlePrecisionCompare(this) == 0) ? true : false;
-				break;
-			case 0x2C: // 5425: CTC=core field to C field
+			case 054: // 5425: CTC=C field to C field
 				adjustABFull(this);
 				t1 = (this->r.A & MASK_RCWrC) >> SHFT_RCWrC;
 				this->r.B = (this->r.B & ~MASK_RCWrC) | (t1 << SHFT_RCWrC);
 				this->r.AROF = false;
 				break;
-			case 0x3C: // 7425: CTF=core field to F field
+			case 074: // 7425: CTF=C field to F field
 				adjustABFull(this);
 				t1 = (this->r.A & MASK_RCWrC) >> SHFT_RCWrC;
 				this->r.B = (this->r.B & ~MASK_RCWrF) | (t1 << SHFT_RCWrF);
@@ -451,224 +454,109 @@ void b5500_execute_wm(CPU *this)
 			break;
 		case 031: // XX31: branch, sign-bit, interrogate ops
 			switch (variant) {
-			case 0x01: // 0131: BBC=branch backward conditional
+			case 001: // 0131: BBC=branch backward conditional
+			case 002: // 0231: BFC=branch forward conditional
 				adjustABFull(this);
 				if (this->r.B & 1) {
 					// true => no branch
 					this->r.AROF = this->r.BROF = false;
+					break;
+				}
+				this->r.BROF = false;
+				goto common_branch;
+			case 041: // 4131: BBW=branch backward unconditional
+			case 042: // 4231: BFW=branch forward unconditional
+				adjustAFull(this);
+common_branch:
+				if (OPERAND(this->r.A)) {
+					// simple operand
+					if (variant == 001 || variant == 041)
+						jumpSyllables(this, -(this->r.A & MASKMEM));
+					else
+						jumpSyllables(this, this->r.A & MASKMEM);
+					this->r.AROF = false;
 				} else {
-					this->r.BROF = false;
-					if (OPERAND(this->r.A)) {
-						// simple operand
-						jumpSyllables(this, -(this->r.A & 0x0fff));
+					// descriptor
+					if (this->r.L == 0) {
+						--this->r.C;
+						// adjust for Inhibit Fetch
+					}
+					if (presenceTest(this, this->r.A)) {
+						this->r.C = this->r.A & MASKMEM;
+						this->r.L = 0;
+						// require fetch at SECL
+						this->r.PROF = false;
 						this->r.AROF = false;
-					} else {
-						// descriptor
-						if (this->r.L == 0) {
-							--this->r.C;
-							// adjust for Inhibit Fetch
-						}
-						if (presenceTest(this, this->r.A)) {
-							this->r.C = this->r.A & MASKMEM;
-							this->r.L = 0;
-							this->r.PROF = false; // require fetch at SECL
-							this->r.AROF = false;
-						}
 					}
 				}
 				break;
-			case 0x02: // 0231: BFC=branch forward conditional
+
+			case 021: // 2131: LBC=branch backward word conditional
+			case 022: // 2231: LFC=branch forward word conditional
 				adjustABFull(this);
 				if (this->r.B & 1) {
 					// true => no branch
 					this->r.AROF = this->r.BROF = false;
+					break;
+				}
+				this->r.BROF = false;
+				goto common_branch_word;
+			case 061: // 6131: LBU=branch backward word unconditional
+			case 062: // 6231: LFU=branch forward word unconditional
+				adjustAFull(this);
+common_branch_word:
+				if (this->r.L == 0) {
+					--this->r.C;
+					// adjust for Inhibit Fetch
+				}
+				if (OPERAND(this->r.A)) {
+					// simple operand
+					if (variant == 021 || variant == 061)
+						jumpWords(this, -(this->r.A & 0x03ff));
+					else
+						jumpWords(this, this->r.A & 0x03ff);
+					this->r.AROF = false;
 				} else {
-					this->r.BROF = false;
-					if (OPERAND(this->r.A)) {
-						// simple operand
-						jumpSyllables(this, this->r.A & 0x0fff);
+					// descriptor
+					if (presenceTest(this, this->r.A)) {
+						this->r.C = this->r.A & MASKMEM;
+						this->r.L = 0;
+						// require fetch at SECL
+						this->r.PROF = false;
 						this->r.AROF = false;
-					} else {
-						// descriptor
-						if (this->r.L == 0) {
-							--this->r.C;
-							// adjust for Inhibit Fetch
-						}
-						if (presenceTest(this, this->r.A)) {
-							this->r.C = this->r.A & 0x0fff;
-							this->r.L = 0;
-							this->r.PROF = false; // require fetch at SECL
-							this->r.AROF = false;
-						}
 					}
 				}
 				break;
-			case 0x04: // 0431: SSN=set sign bit (set negative)
+
+			case 004: // 0431: SSN=set sign bit (set negative)
 				adjustAFull(this);
 				this->r.A |= MASK_SIGNMANT;
 				break;
-			case 0x08: // 1031: CHS=change sign bit
+			case 010: // 1031: CHS=change sign bit
 				adjustAFull(this);
 				this->r.A ^= MASK_SIGNMANT;
 				break;
-			case 0x10: // 2031: TOP=test flag bit (test for operand)
+			case 020: // 2031: TOP=test flag bit (test for operand)
 				adjustAEmpty(this);
 				adjustBFull(this);
 				this->r.A = OPERAND(this->r.B) ? true : false;
 				this->r.AROF = true;
 				break;
-			case 0x11: // 2131: LBC=branch backward word conditional
-				adjustABFull(this);
-				if (this->r.B & 1) {
-					// true => no branch
-					this->r.AROF = this->r.BROF = false;
-				} else {
-					this->r.BROF = false;
-					if (this->r.L == 0) {
-						--this->r.C;
-						// adjust for Inhibit Fetch
-					}
-					if (OPERAND(this->r.A)) {
-						// simple operand
-						jumpWords(this, -(this->r.A & 0x03ff));
-						this->r.AROF = false;
-					} else {
-						// descriptor
-						if (presenceTest(this, this->r.A)) {
-							this->r.C = this->r.A & MASKMEM;
-							this->r.L = 0;
-							this->r.PROF = false; // require fetch at SECL
-							this->r.AROF = false;
-						}
-					}
-				}
-				break;
-			case 0x12: // 2231: LFC=branch forward word conditional
-				adjustABFull(this);
-				if (this->r.B & 1) {
-					// true => no branch
-					this->r.AROF = this->r.BROF = false;
-				} else {
-					this->r.BROF = false;
-					if (this->r.L == 0) {
-						--this->r.C;
-						// adjust for Inhibit Fetch
-					}
-					if (OPERAND(this->r.A)) {
-						// simple operand
-						jumpWords(this, this->r.A & 0x03ff);
-						this->r.AROF = false;
-					} else {
-						// descriptor
-						if (presenceTest(this, this->r.A)) {
-							this->r.C = this->r.A & MASKMEM;
-							this->r.L = 0;
-							this->r.PROF = false;
-							// require fetch at SECL
-							this->r.AROF = false;
-						}
-					}
-				}
-				break;
-			case 0x14: // 2431: TUS=interrogate peripheral status
+			case 024: // 2431: TUS=interrogate peripheral status
 				adjustAEmpty(this);
 				this->r.A = interrogateUnitStatus(this);
 				this->r.AROF = true;
 				break;
-			case 0x21: // 4131: BBW=branch backward unconditional
-				adjustAFull(this);
-				if (OPERAND(this->r.A)) {
-					// simple operand
-					jumpSyllables(this, -(this->r.A & 0x0fff));
-					this->r.AROF = false;
-				} else {
-					// descriptor
-					if (this->r.L == 0) {
-						--this->r.C;
-						// adjust for Inhibit Fetch
-					}
-					if (presenceTest(this, this->r.A)) {
-						this->r.C = this->r.A & MASKMEM;
-						this->r.L = 0;
-						this->r.PROF = false;
-						// require fetch at SECL
-						this->r.AROF = false;
-					}
-				}
-				break;
-			case 0x22: // 4231: BFW=branch forward unconditional
-				adjustAFull(this);
-				if (OPERAND(this->r.A)) {
-					// simple operand
-					jumpSyllables(this, this->r.A & 0x0fff);
-					this->r.AROF = false;
-				} else {
-					// descriptor
-					if (this->r.L == 0) {
-						--this->r.C;
-						// adjust for Inhibit Fetch
-					}
-					if (presenceTest(this, this->r.A)) {
-						this->r.C = this->r.A & MASKMEM;
-						this->r.L = 0;
-						this->r.PROF = false;
-						// require fetch at SECL
-						this->r.AROF = false;
-					}
-				}
-				break;
-			case 0x24: // 4431: SSP=reset sign bit (set positive)
+			case 044: // 4431: SSP=reset sign bit (set positive)
 				adjustAFull(this);
 				this->r.A &= ~MASK_SIGNMANT;
 				break;
-			case 0x31: // 6131: LBU=branch backward word unconditional
-				adjustAFull(this);
-				if (this->r.L == 0) {
-					--this->r.C;
-					// adjust for Inhibit Fetch
-				}
-				if (OPERAND(this->r.A)) {
-					// simple operand
-					jumpWords(this, -(this->r.A & 0x03ff));
-					this->r.AROF = false;
-				} else {
-					// descriptor
-					if (presenceTest(this, this->r.A)) {
-						this->r.C = this->r.A & MASKMEM;
-						this->r.L = 0;
-						this->r.PROF = false;
-						// require fetch at SECL
-						this->r.AROF = false;
-					}
-				}
-				break;
-			case 0x32: // 6231: LFU=branch forward word unconditional
-				adjustAFull(this);
-				if (this->r.L == 0) {
-					--this->r.C;
-					// adjust for Inhibit Fetch
-				}
-				if (OPERAND(this->r.A)) {
-					// simple operand
-					jumpWords(this, this->r.A & 0x03ff);
-					this->r.AROF = false;
-				} else {
-					// descriptor
-					if (presenceTest(this, this->r.A)) {
-						this->r.C = this->r.A & MASKMEM;
-						this->r.L = 0;
-						// require fetch at SECL
-						this->r.PROF = false;
-						this->r.AROF = false;
-					}
-				}
-				break;
-			case 0x34: // 6431: TIO=interrogate I/O channel
+			case 064: // 6431: TIO=interrogate I/O channel
 				adjustAEmpty(this);
 				this->r.A = interrogateIOChannel(this);
 				this->r.AROF = true;
 				break;
-			case 0x38: // 7031: FBS=stack search for flag
+			case 070: // 7031: FBS=stack search for flag
 				adjustAFull(this);
 				this->r.M = this->r.A & MASKMEM;
 				loadAviaM(this);
@@ -683,7 +571,7 @@ void b5500_execute_wm(CPU *this)
 			break;
 		case 035: // XX35: exit & return ops
 			switch (variant) {
-			case 0x01: // 0135: BRT=branch return
+			case 001: // 0135: BRT=branch return
 				adjustAEmpty(this);
 				if (!this->r.BROF) {
 					this->r.Q03F = true;
@@ -747,20 +635,20 @@ void b5500_execute_wm(CPU *this)
 			break;
 		case 041: // XX41: index, mark stack, etc.
 			switch (variant) {
-			case 0x01: // 0141: INX=index
+			case 001: // 0141: INX=index
 				adjustABFull(this);
 				this->r.M = (this->r.A + this->r.B) & MASKMEM;
 				this->r.A = (this->r.A & ~MASKMEM) | this->r.M;
 				this->r.BROF = false;
 				break;
 
-			case 0x02: // 0241: COC=construct operand call
+			case 002: // 0241: COC=construct operand call
 				exchangeTOS(this);
 				this->r.A |= MASK_FLAG;
 				// set [0:1]
 				operandCall(this);
 				break;
-			case 0x04: // 0441: MKS=mark stack
+			case 004: // 0441: MKS=mark stack
 				adjustABEmpty(this);
 				this->r.B = buildMSCW(this);
 				this->r.BROF = true;
@@ -776,13 +664,13 @@ void b5500_execute_wm(CPU *this)
 					this->r.MSFF = true;
 				}
 				break;
-			case 0x0A: // 1241: CDC=construct descriptor call
+			case 012: // 1241: CDC=construct descriptor call
 				exchangeTOS(this);
 				this->r.A |= MASK_FLAG;
 				// set [0:1]
 				descriptorCall(this);
 				break;
-			case 0x11: // 2141: SSF=F & S register set/store
+			case 021: // 2141: SSF=F & S register set/store
 				adjustABFull(this);
 				switch (this->r.A & 3) {
 				case 0: // store F into B.[18:15]
@@ -803,7 +691,7 @@ void b5500_execute_wm(CPU *this)
 				}
 				this->r.AROF = false;
 				break;
-			case 0x15: // 2541: LLL=link list look-up
+			case 025: // 2541: LLL=link list look-up
 				adjustABFull(this);
 				// get test field
 				t1 = this->r.A & MASK_MANTISSA;
@@ -824,7 +712,7 @@ void b5500_execute_wm(CPU *this)
 					}
 				} while (true);
 				break;
-			case 0x24: // 4441: CMN=enter character mode inline
+			case 044: // 4441: CMN=enter character mode inline
 				enterCharModeInline(this);
 				break;
 			}
