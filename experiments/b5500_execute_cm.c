@@ -20,6 +20,7 @@
 ***********************************************************/
 void b5500_execute_cm(CPU *this)
 {
+#if 0
 	WORD12 opcode = this->r.T;
 	WORD12 variant;
 	WORD48 t1, t2;
@@ -40,5 +41,5 @@ void b5500_execute_cm(CPU *this)
 	this->r.M = 0;
 	this->r.N = 0;
 	this->r.X = 0;
-
+#endif
 }

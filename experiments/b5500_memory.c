@@ -58,8 +58,24 @@ void store(ACCESSOR *acc)
 			acc->addr, acc->word, acc->MPED, acc->MAED);
 }
 
+/*
+ * Common error handling routine for all memory acccesses
+ */
 void accessError(CPU *this)
 {
+	if (this->acc.MAED) {
+		// set I02F: memory address/inhibit error
+		this->r.I |= 0x02;
+		signalInterrupt(this);
+	} else if (this->acc.MPED) {
+		// set I01F: memory parity error
+		this->r.I |= 0x01;
+		signalInterrupt(this);
+		if (this->isP1 && !this->r.NCSF) {
+			// P1 memory parity in Control State stops the proc
+			stop(this);
+		}
+	}
 }
 
 /*
@@ -93,7 +109,7 @@ void computeRelativeAddr(CPU *this, unsigned offset, BIT cEnabled)
 			// reach 0..255
 			if (this->r.MSFF) {
 				// during function parameter loading its (R+7)+
-				this->r.M = (this->r.R<<6) + 7;
+				this->r.M = (this->r.R<<6) + RR_MSCW;
 				loadMviaM(this); // M = [M].[18:15]
 				this->r.M += (offset & 0xff);
 				if (dotrcmem)
@@ -125,7 +141,7 @@ void computeRelativeAddr(CPU *this, unsigned offset, BIT cEnabled)
 			// pattern 111 xxxxxxx - F- or (R+7)- relative
 			// reach 0..127 (negative direction)
 			if (this->r.MSFF) {
-				this->r.M = (this->r.R<<6) + 7;
+				this->r.M = (this->r.R<<6) + RR_MSCW;
 				loadMviaM(this); // M = [M].[18:15]
 				this->r.M -= (offset & 0x7f);
 				if (dotrcmem)
@@ -148,8 +164,8 @@ void computeRelativeAddr(CPU *this, unsigned offset, BIT cEnabled)
 	if (this->r.VARF) {
 		if (dotrcmem)
 			printf("Resetting VARF\n");
-		this->r.SALF = 1;
-		this->r.VARF = 0;
+		this->r.SALF = true;
+		this->r.VARF = false;
 	}
 }
 
@@ -162,7 +178,7 @@ BIT indexDescriptor(CPU *this)
 {
 	WORD48		aw;	// local copy of A reg
 	WORD48		bw;	// local copy of B reg
-	BIT		interrupted = 0;	// fatal error, interrupt set
+	BIT		interrupted = false;	// fatal error, interrupt set
 	int		xe;	// index exponent
 	WORD64		xm;	// index mantissa
 	BIT		xs;	// index mantissa sign
@@ -196,7 +212,7 @@ BIT indexDescriptor(CPU *this)
 				// oops... integer overflow normalizing the index
 				// kill the loop
 				xe = 0;
-				interrupted = 1;
+				interrupted = true;
 				if (this->r.NCSF) {
 					// set I07/8: integer overflow
 					this->r.I = (this->r.I & 0x0F) | 0xC0;
@@ -217,7 +233,7 @@ BIT indexDescriptor(CPU *this)
 	if (!interrupted) {
 		if (xs && xm) {
 			// Oops... index is negative
-			interrupted = 1;
+			interrupted = true;
 			if (this->r.NCSF) {
 				// set I05/8: invalid-index
 				this->r.I = (this->r.I & 0x0F) | 0x90;
@@ -227,10 +243,10 @@ BIT indexDescriptor(CPU *this)
 			// We finally have a valid index
 			xm = (aw + xm) & MASK_DDADDR;
 			this->r.A = (aw & ~MASK_DDADDR) | xm;
-			this->r.BROF = 0;
+			this->r.BROF = false;
 		} else {
 			// Oops... index not less than size
-			interrupted = 1;
+			interrupted = true;
 			if (this->r.NCSF) {
 				// set I05/8: invalid-index
 				this->r.I = (this->r.I & 0x0F) | 0x90;
@@ -250,14 +266,14 @@ void loadAviaS(CPU *this)
 		printf("A=[S]");
 	this->r.E = 2;		// Just to show the world what's happening
 	this->acc.addr = this->r.S;
-	this->acc.MAIL = (this->r.S < 0x0200) && this->r.NCSF;
+	this->acc.MAIL = (this->r.S < AA_USERMEM) && this->r.NCSF;
 	fetch(&this->acc);
 	//this->cycleCount += B5500CentralControl.memReadCycles;
 	if (this->acc.MAED || this->acc.MPED) {
 		accessError(this);
 	} else {
 		this->r.A = this->acc.word;
-		this->r.AROF = 1;
+		this->r.AROF = true;
 	}
 }
 
@@ -267,14 +283,14 @@ void loadBviaS(CPU *this)
 		printf("B=[S]");
 	this->r.E = 3;		// Just to show the world what's happening
 	this->acc.addr = this->r.S;
-	this->acc.MAIL = (this->r.S < 0x0200) && this->r.NCSF;
+	this->acc.MAIL = (this->r.S < AA_USERMEM) && this->r.NCSF;
 	fetch(&this->acc);
 	//this->cycleCount += B5500CentralControl.memReadCycles;
 	if (this->acc.MAED || this->acc.MPED) {
 		accessError(this);
 	} else {
 		this->r.B = this->acc.word;
-		this->r.BROF = 1;
+		this->r.BROF = true;
 	}
 }
 
@@ -284,14 +300,14 @@ void loadAviaM(CPU *this)
 		printf("A=[M]");
 	this->r.E = 4;		// Just to show the world what's happening
 	this->acc.addr = this->r.M;
-	this->acc.MAIL = (this->r.M < 0x0200) && this->r.NCSF;
+	this->acc.MAIL = (this->r.M < AA_USERMEM) && this->r.NCSF;
 	fetch(&this->acc);
 	//this->cycleCount += B5500CentralControl.memReadCycles;
 	if (this->acc.MAED || this->acc.MPED) {
 		accessError(this);
 	} else {
 		this->r.A = this->acc.word;
-		this->r.AROF = 1;
+		this->r.AROF = true;
 	}
 }
 
@@ -301,30 +317,32 @@ void loadBviaM(CPU *this)
 		printf("B=[M]");
 	this->r.E = 5;		// Just to show the world what's happening
 	this->acc.addr = this->r.M;
-	this->acc.MAIL = (this->r.M < 0x0200) && this->r.NCSF;
+	this->acc.MAIL = (this->r.M < AA_USERMEM) && this->r.NCSF;
 	fetch(&this->acc);
 	//this->cycleCount += B5500CentralControl.memReadCycles;
 	if (this->acc.MAED || this->acc.MPED) {
 		accessError(this);
 	} else {
 		this->r.B = this->acc.word;
-		this->r.BROF = 1;
+		this->r.BROF = true;
 	}
 }
 
 void loadMviaM(CPU *this)
 {
+	// note: this is only used to get the saved F registers value from
+	// the saved MSCW at R+7.
 	if (dotrcmem)
 		printf("M=[M]");
 	this->r.E = 6;		// Just to show the world what's happening
 	this->acc.addr = this->r.M;
-	this->acc.MAIL = (this->r.M < 0x0200) && this->r.NCSF;
+	this->acc.MAIL = (this->r.M < AA_USERMEM) && this->r.NCSF;
 	fetch(&this->acc);
 	//this->cycleCount += B5500CentralControl.memReadCycles;
 	if (this->acc.MAED || this->acc.MPED) {
 		accessError(this);
 	} else {
-		this->r.M = this->acc.word;
+		this->r.M = (this->acc.word & MASK_MSCWrF) >> SHFT_MSCWrF;
 	}
 }
 
@@ -334,9 +352,10 @@ void loadPviaC(CPU *this)
 		printf("P=[C]");
 	this->r.E = 48;		// Just to show the world what's happening
 	this->acc.addr = this->r.C;
-	this->acc.MAIL = (this->r.C < 0x0200) && this->r.NCSF;
+	this->acc.MAIL = (this->r.C < AA_USERMEM) && this->r.NCSF;
 	fetch(&this->acc);
-	this->r.PROF = 1;
+	// TODO: should this not be in the else part?
+	this->r.PROF = true;
 	//this->cycleCount += B5500CentralControl.memReadCycles;
 	if (this->acc.MAED || this->acc.MPED) {
 		accessError(this);
@@ -354,7 +373,7 @@ void storeAviaS(CPU *this)
 		printf("[S]=A");
 	this->r.E = 10;		// Just to show the world what's happening
 	this->acc.addr = this->r.S;
-	this->acc.MAIL = (this->r.S < 0x0200) && this->r.NCSF;
+	this->acc.MAIL = (this->r.S < AA_USERMEM) && this->r.NCSF;
 	this->acc.word = this->r.A;
 	store(&this->acc);
 	//this->cycleCount += B5500CentralControl.memReadCycles;
@@ -369,7 +388,7 @@ void storeBviaS(CPU *this)
 		printf("[S]=B");
 	this->r.E = 11;		// Just to show the world what's happening
 	this->acc.addr = this->r.S;
-	this->acc.MAIL = (this->r.S < 0x0200) && this->r.NCSF;
+	this->acc.MAIL = (this->r.S < AA_USERMEM) && this->r.NCSF;
 	this->acc.word = this->r.B;
 	store(&this->acc);
 	//this->cycleCount += B5500CentralControl.memReadCycles;
@@ -384,7 +403,7 @@ void storeAviaM(CPU *this)
 		printf("[M]=A");
 	this->r.E = 12;		// Just to show the world what's happening
 	this->acc.addr = this->r.M;
-	this->acc.MAIL = (this->r.M < 0x0200) && this->r.NCSF;
+	this->acc.MAIL = (this->r.M < AA_USERMEM) && this->r.NCSF;
 	this->acc.word = this->r.A;
 	store(&this->acc);
 	//this->cycleCount += B5500CentralControl.memReadCycles;
@@ -399,7 +418,7 @@ void storeBviaM(CPU *this)
 		printf("[M]=B");
 	this->r.E = 12;		// Just to show the world what's happening
 	this->acc.addr = this->r.M;
-	this->acc.MAIL = (this->r.M < 0x0200) && this->r.NCSF;
+	this->acc.MAIL = (this->r.M < AA_USERMEM) && this->r.NCSF;
 	this->acc.word = this->r.B;
 	store(&this->acc);
 	//this->cycleCount += B5500CentralControl.memReadCycles;
@@ -422,14 +441,14 @@ void integerStore(CPU *this, BIT conditional, BIT destructive)
 	WORD64		bm;	// B mantissa
 	BIT		bs;	// B mantissa sign
 	BIT		bt;	// B exponent sign
-	BIT		doStore = 1;	// okay to store
-	BIT		normalize = 1;	// okay to integerize
+	BIT		doStore = true;		// okay to store
+	BIT		normalize = true;	// okay to integerize
 
 	adjustABFull(this);
 	aw = this->r.A;
 	if (!(aw & MASK_FLAG)) {
 		// it's an operand
-		computeRelativeAddr(this, aw, 0);
+		computeRelativeAddr(this, aw, false);
 	} else {
 		// it's a descriptor
 		if (presenceTest(this, aw)) {
@@ -487,9 +506,9 @@ void integerStore(CPU *this, BIT conditional, BIT destructive)
 
 	if (doStore) {
 		storeBviaM(this);
-		this->r.AROF = 0;
+		this->r.AROF = false;
 		if (destructive) {
-			this->r.BROF = 0;
+			this->r.BROF = false;
 		}
 	}
 }

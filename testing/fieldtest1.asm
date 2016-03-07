@@ -2,8 +2,8 @@
 
 	.ORG	020
 	NOP
-	DIA	041
-	DIB	021
+	DIA	000
+	DIB	020
 	TRB	48
 	ZPI
 

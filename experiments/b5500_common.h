@@ -150,6 +150,20 @@ extern CPU		*CPUB;
 extern CENTRAL_CONTROL	*CC;
 
 /*
+ * special memory locations (absolute addresses)
+ */
+#define	AA_IODESC	010	// (0x08) IOCW is stored here by IIO operator
+				// also used to store IP2 value
+#define	AA_IRQSTACK	0100	// (0x40) stack is set here for IRQ processing
+#define	AA_USERMEM	01000	// (0x200) user memory starts here
+
+/*
+ * special memory locations (R relative)
+ */
+#define	RR_MSCW		007	// MSCW is stored here for nested calls
+#define	RR_INCW		010	// INCW is stored here on interrupt
+
+/*
  * B5500 integer/real format:
  * 0 <sign mantissa> <sign exponent> <6 bits exponent> <39 bits mantissa>
  * octet numbers         FEDCBA9876543210
@@ -171,15 +185,19 @@ extern CENTRAL_CONTROL	*CC;
  * octet numbers         FEDCBA9876543210
  */
 #define	MASK_FLAG	04000000000000000 // (8000'0000'0000) the control bit
-#define	MASK_CODE	02000000000000000 // (4000'0000'0000) the code bit
+#define	MASK_CODE	02000000000000000 // (4000'0000'0000) the code bit (0=data)
 #define	MASK_PBIT	01000000000000000 // (2000'0000'0000) the presence bit
-#define	MASK_XBIT	00400000000000000 // (1000'0000'0000) the extra bit
-#define	MASK_TYPE	03400000000000000 // (7000'0000'0000) the type bits
+#define	MASK_XBIT	00400000000000000 // (1000'0000'0000) the execute bit (1=PD, 0=CW)
+#define	MASK_TYPE	03400000000000000 // (f000'0000'0000) the type bits
 #define	SHFT_FLAG	47
 #define	SHFT_CODE	46
 #define	SHFT_PBIT	45
 #define	SHFT_XBIT	44
 #define	SHFT_TYPE	44
+#define	DESCRIPTOR(x)	((x)&MASK_FLAG)
+#define	OPERAND(x)	(!DESCRIPTOR(x))
+#define	PRESENT(x)	((x)&MASK_PBIT)
+#define	ABSENT(x)	(!PRESENT(x))
 
 /*
  * data descriptor:

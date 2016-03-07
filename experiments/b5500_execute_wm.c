@@ -52,7 +52,7 @@ void b5500_execute_wm(CPU *this)
 		adjustAEmpty(this);
 		computeRelativeAddr(this, opcode >> 2, true);
 		loadAviaM(this);
-		if (this->r.A & MASK_FLAG) {
+		if (DESCRIPTOR(this->r.A)) {
 			// if it's a control word, evaluate it
 			operandCall(this);
 		}
@@ -116,7 +116,7 @@ void b5500_execute_wm(CPU *this)
 				// get it into A and copy into t1
 				adjustAFull(this);
 				t1 = this->r.A;
-				if (!(t1 & MASK_FLAG)) {
+				if (OPERAND(t1)) {
 					// it's an operand
 					computeRelativeAddr(this, t1, false);
 					t2 = true;
@@ -160,7 +160,7 @@ void b5500_execute_wm(CPU *this)
 					// control-state only
 					this->r.C = CC->IAR;
 					this->r.L = 0;
-					this->r.S = 0x40;
+					this->r.S = AA_IRQSTACK;
 					// stack address @100
 					clearInterrupt(this);
 					this->r.PROF = false;
@@ -204,11 +204,11 @@ void b5500_execute_wm(CPU *this)
 					// no-op in Normal State
 					adjustAFull(this);
 					t1 = this->r.A;
-					if (!(t1 & MASK_FLAG)) {
+					if (OPERAND(t1)) {
 						// it's an operand
 						computeRelativeAddr(this, t1, 0);
 						t2 = true;
-					} else if (t1 & MASK_PBIT) {
+					} else if (PRESENT(t1)) {
 						this->r.M = t1 & MASKMEM;
 						// present descriptor
 						t2 = true;
@@ -251,7 +251,7 @@ void b5500_execute_wm(CPU *this)
 			case 0x22: // 4211: IP2=Initiate Processor 2
 				if (!this->r.NCSF) {
 					// control-state only
-					this->r.M = 0x08;
+					this->r.M = AA_IODESC;
 					// INCW is stored in @10
 					if (this->r.AROF) {
 						storeAviaM(this);
@@ -273,7 +273,7 @@ void b5500_execute_wm(CPU *this)
 			case 0x24: // 4411: IIO=Initiate I/O
 				if (!this->r.NCSF) {
 					// address of IOD is stored in @10
-					this->r.M = 010;
+					this->r.M = AA_IODESC;
 					if (this->r.AROF) {
 						storeAviaM(this);
 						// [M] = A
@@ -299,8 +299,8 @@ void b5500_execute_wm(CPU *this)
 				break;
 			} // end switch for XX11 ops
 			break;
-		case 0x0D: // XX15: logical (bitmask) ops
-		switch (variant) {
+		case 015: // XX15: logical (bitmask) ops
+			switch (variant) {
 			case 0x01: // 0115: LNG=logical negate
 				adjustAFull(this);
 				this->r.A ^= MASK_NUMBER;
@@ -330,7 +330,7 @@ void b5500_execute_wm(CPU *this)
 				break;
 			}
 			break;
-		case 0x11: // XX21: load & store ops
+		case 021: // XX21: load & store ops
 			switch (variant) {
 			case 0x01: // 0121: CID=Conditional integer store destructive
 				integerStore(this, true, true);
@@ -340,7 +340,7 @@ void b5500_execute_wm(CPU *this)
 				break;
 			case 0x04: // 0421: STD=Store destructive
 				adjustABFull(this);
-				if (!(this->r.A & MASK_FLAG)) {
+				if (OPERAND(this->r.A)) {
 					// it's an operand
 					computeRelativeAddr(this, this->r.A, false);
 					storeBviaM(this);
@@ -356,7 +356,7 @@ void b5500_execute_wm(CPU *this)
 				break;
 			case 0x08: // 1021: SND=Store nondestructive
 				adjustABFull(this);
-				if (!(this->r.A & MASK_FLAG)) {
+				if (OPERAND(this->r.A)) {
 					// it's an operand
 					computeRelativeAddr(this, this->r.A, false);
 					storeBviaM(this);
@@ -372,7 +372,7 @@ void b5500_execute_wm(CPU *this)
 				break;
 			case 0x10: // 2021: LOD=Load operand
 				adjustAFull(this);
-				if (!(this->r.A & MASK_FLAG)) {
+				if (OPERAND(this->r.A)) {
 					// simple operand
 					computeRelativeAddr(this, this->r.A, true);
 					loadAviaM(this);
@@ -390,7 +390,7 @@ void b5500_execute_wm(CPU *this)
 				break;
 			}
 			break;
-		case 0x15: // XX25: comparison & misc. stack ops
+		case 025: // XX25: comparison & misc. stack ops
 			switch (variant) {
 			case 0x01: // 0125: GEQ=compare B greater or equal to A
 				this->r.B = (singlePrecisionCompare(this) >= 0) ? true : false;
@@ -449,7 +449,7 @@ void b5500_execute_wm(CPU *this)
 				break;
 			}
 			break;
-		case 0x19: // XX31: branch, sign-bit, interrogate ops
+		case 031: // XX31: branch, sign-bit, interrogate ops
 			switch (variant) {
 			case 0x01: // 0131: BBC=branch backward conditional
 				adjustABFull(this);
@@ -458,7 +458,7 @@ void b5500_execute_wm(CPU *this)
 					this->r.AROF = this->r.BROF = false;
 				} else {
 					this->r.BROF = false;
-					if (!(this->r.A & MASK_FLAG)) {
+					if (OPERAND(this->r.A)) {
 						// simple operand
 						jumpSyllables(this, -(this->r.A & 0x0fff));
 						this->r.AROF = false;
@@ -484,7 +484,7 @@ void b5500_execute_wm(CPU *this)
 					this->r.AROF = this->r.BROF = false;
 				} else {
 					this->r.BROF = false;
-					if (!(this->r.A & MASK_FLAG)) {
+					if (OPERAND(this->r.A)) {
 						// simple operand
 						jumpSyllables(this, this->r.A & 0x0fff);
 						this->r.AROF = false;
@@ -514,7 +514,7 @@ void b5500_execute_wm(CPU *this)
 			case 0x10: // 2031: TOP=test flag bit (test for operand)
 				adjustAEmpty(this);
 				adjustBFull(this);
-				this->r.A = this->r.B & MASK_FLAG ? true : false;
+				this->r.A = OPERAND(this->r.B) ? true : false;
 				this->r.AROF = true;
 				break;
 			case 0x11: // 2131: LBC=branch backward word conditional
@@ -528,7 +528,7 @@ void b5500_execute_wm(CPU *this)
 						--this->r.C;
 						// adjust for Inhibit Fetch
 					}
-					if (!(this->r.A & MASK_FLAG)) {
+					if (OPERAND(this->r.A)) {
 						// simple operand
 						jumpWords(this, -(this->r.A & 0x03ff));
 						this->r.AROF = false;
@@ -554,7 +554,7 @@ void b5500_execute_wm(CPU *this)
 						--this->r.C;
 						// adjust for Inhibit Fetch
 					}
-					if (!(this->r.A & MASK_FLAG)) {
+					if (OPERAND(this->r.A)) {
 						// simple operand
 						jumpWords(this, this->r.A & 0x03ff);
 						this->r.AROF = false;
@@ -577,7 +577,7 @@ void b5500_execute_wm(CPU *this)
 				break;
 			case 0x21: // 4131: BBW=branch backward unconditional
 				adjustAFull(this);
-				if (!(this->r.A & MASK_FLAG)) {
+				if (OPERAND(this->r.A)) {
 					// simple operand
 					jumpSyllables(this, -(this->r.A & 0x0fff));
 					this->r.AROF = false;
@@ -598,7 +598,7 @@ void b5500_execute_wm(CPU *this)
 				break;
 			case 0x22: // 4231: BFW=branch forward unconditional
 				adjustAFull(this);
-				if (!(this->r.A & MASK_FLAG)) {
+				if (OPERAND(this->r.A)) {
 					// simple operand
 					jumpSyllables(this, this->r.A & 0x0fff);
 					this->r.AROF = false;
@@ -627,7 +627,7 @@ void b5500_execute_wm(CPU *this)
 					--this->r.C;
 					// adjust for Inhibit Fetch
 				}
-				if (!(this->r.A & MASK_FLAG)) {
+				if (OPERAND(this->r.A)) {
 					// simple operand
 					jumpWords(this, -(this->r.A & 0x03ff));
 					this->r.AROF = false;
@@ -648,17 +648,17 @@ void b5500_execute_wm(CPU *this)
 					--this->r.C;
 					// adjust for Inhibit Fetch
 				}
-				if (!(this->r.A & MASK_FLAG)) {
+				if (OPERAND(this->r.A)) {
 					// simple operand
-					jumpWords(this, this->r.A % 0x0400);
+					jumpWords(this, this->r.A & 0x03ff);
 					this->r.AROF = false;
 				} else {
 					// descriptor
 					if (presenceTest(this, this->r.A)) {
 						this->r.C = this->r.A & MASKMEM;
 						this->r.L = 0;
-						this->r.PROF = false;
 						// require fetch at SECL
+						this->r.PROF = false;
 						this->r.AROF = false;
 					}
 				}
@@ -671,20 +671,17 @@ void b5500_execute_wm(CPU *this)
 			case 0x38: // 7031: FBS=stack search for flag
 				adjustAFull(this);
 				this->r.M = this->r.A & MASKMEM;
-				do {
+				loadAviaM(this);
+				while (OPERAND(this->r.A)) {
+					this->r.M = (this->r.M+1) & MASKMEM;
 					loadAviaM(this);
-					if (!(this->r.A & MASK_FLAG)) {
-						this->r.M = (this->r.M+1) & MASKMEM;
-					} else {
-						this->r.A = this->r.M | (MASK_FLAG | MASK_PBIT);
-						break;
-						// flag bit found: stop the search
-					}
-				} while (true);
+				}
+				// flag bit found: stop the search
+				this->r.A = INIT_DD | MASK_PBIT | this->r.M;
 				break;
 			}
 			break;
-		case 0x1D: // XX35: exit & return ops
+		case 035: // XX35: exit & return ops
 			switch (variant) {
 			case 0x01: // 0135: BRT=branch return
 				adjustAEmpty(this);
@@ -706,15 +703,20 @@ void b5500_execute_wm(CPU *this)
 					this->r.BROF = false;
 				}
 				break;
-			case 0x02: // 0235: RTN=return normal
+			case 002: // 0235: RTN=return normal
+			case 012: // 1235: RTS=return special
 				adjustAFull(this);
 				// If A is an operand or a present descriptor,
 				// proceed with the return,
 				// otherwise throw a p-bit interrupt
 				// (this isn't well-documented)
-				if (!(this->r.A & MASK_FLAG) ||
-					presenceTest(this, this->r.A)) {
-					this->r.S = this->r.F;
+				if (OPERAND(this->r.A) || presenceTest(this, this->r.A)) {
+					if (variant == 002) {
+						// RTN - reset stack to F to be at RCW
+						this->r.S = this->r.F;
+					} else {
+						// RTS - stack already at RCW
+					}
 					loadBviaS(this);
 					// B = [S], fetch the RCW
 					switch (exitSubroutine(this, false)) {
@@ -723,8 +725,8 @@ void b5500_execute_wm(CPU *this)
 						operandCall(this);
 						break;
 					case 1:
-						this->r.Q05F = true;
 						// set Q05F, for display only
+						this->r.Q05F = true;
 						this->r.X = 0;
 						descriptorCall(this);
 						break;
@@ -733,44 +735,17 @@ void b5500_execute_wm(CPU *this)
 					}
 				}
 				break;
-			case 0x04: // 0435: XIT=exit procedure
+
+			case 004: // 0435: XIT=exit procedure
 				this->r.AROF = false;
 				this->r.S = this->r.F;
 				loadBviaS(this);
 				// B = [S], fetch the RCW
-				exitSubroutine(this, 0);
-				break;
-			case 0x0A: // 1235: RTS=return special
-				adjustAFull(this);
-				// If A is an operand or a present descriptor,
-				// proceed with the return,
-				// otherwise throw a p-bit interrupt
-				// (this isn't well-documented)
-				if (!(this->r.A & MASK_FLAG) ||
-					presenceTest(this, this->r.A)) {
-					// Note that RTS assumes the RCW
-					// is pointed to by S, not F
-					loadBviaS(this);
-					// B = [S], fetch the RCW
-					switch (exitSubroutine(this, false)) {
-					case 0:
-						this->r.X = 0;
-						operandCall(this);
-						break;
-					case 1:
-						this->r.Q05F = true;
-						// set Q05F, for display only
-						this->r.X = 0;
-						descriptorCall(this);
-						break;
-					case 2: // flag-bit interrupt occurred, do nothing
-						break;
-					}
-				}
+				exitSubroutine(this, false);
 				break;
 			}
 			break;
-		case 0x21: // XX41: index, mark stack, etc.
+		case 041: // XX41: index, mark stack, etc.
 			switch (variant) {
 			case 0x01: // 0141: INX=index
 				adjustABFull(this);
@@ -830,19 +805,20 @@ void b5500_execute_wm(CPU *this)
 				break;
 			case 0x15: // 2541: LLL=link list look-up
 				adjustABFull(this);
-				t1 = this->r.A % 0x8000000000;
+				// get test field
+				t1 = this->r.A & MASK_MANTISSA;
 				// test value
-				this->r.M = this->r.B % 0x8000;
+				this->r.M = this->r.B & MASKMEM;
 				// starting link address
 				do {
 					this->cycleCount += 2;
 					// approximate the timing
 					loadBviaM(this);
-					t2 = this->r.B % 0x8000000000;
+					t2 = this->r.B & MASK_MANTISSA;
 					if (t2 < t1) {
-						this->r.M = t2 % 0x8000;
+						this->r.M = t2 & MASKMEM;
 					} else {
-						this->r.A = this->r.M + 0xA00000000000;
+						this->r.A = INIT_DD | MASK_PBIT | this->r.M;
 						break;
 						// B >= A: stop look-up
 					}
@@ -853,7 +829,7 @@ void b5500_execute_wm(CPU *this)
 				break;
 			}
 			break;
-		case 0x25: // XX45: ISO=Variable Field Isolate op
+		case 045: // XX45: ISO=Variable Field Isolate op
 			adjustAFull(this);
 			t2 = variant >> 3; // number of whole chars
 			if (t2) {
@@ -874,7 +850,7 @@ void b5500_execute_wm(CPU *this)
 				this->r.H = 0;
 			}
 			break;
-		case 0x29: // XX51: delete & conditional branch ops
+		case 051: // XX51: delete & conditional branch ops
 			if (variant < 4) {
 				// 0051=DEL: delete TOS (or field branch with zero-length field)
 				if (this->r.AROF) {
@@ -899,7 +875,7 @@ void b5500_execute_wm(CPU *this)
 					// no break: fall through
 				case 0x00: // X051/X451: CFN=non-zero field branch forward nondestructive
 					if (t1) {
-						if (this->r.A < 0x800000000000) {
+						if (OPERAND(this->r.A)) {
 							// simple operand
 							jumpSyllables(this, this->r.A & 0x0fff);
 						} else {
@@ -909,7 +885,7 @@ void b5500_execute_wm(CPU *this)
 								// adjust for Inhibit Fetch
 							}
 							if (presenceTest(this, this->r.A)) {
-								this->r.C = this->r.A % 0x8000;
+								this->r.C = this->r.A & MASKMEM;
 								this->r.L = 0;
 								this->r.PROF = false;
 								// require fetch at SEQL
@@ -922,7 +898,7 @@ void b5500_execute_wm(CPU *this)
 					// no break: fall through
 				case 0x01: // X151/X551: CBN=non-zero field branch backward nondestructive
 					if (t1) {
-						if (this->r.A < 0x800000000000) {
+						if (OPERAND(this->r.A)) {
 							// simple operand
 							jumpSyllables(this, -(this->r.A & 0x0fff));
 						} else {
@@ -932,7 +908,7 @@ void b5500_execute_wm(CPU *this)
 								// adjust for Inhibit Fetch
 							}
 							if (presenceTest(this, this->r.A)) {
-								this->r.C = this->r.A % 0x8000;
+								this->r.C = this->r.A & MASKMEM;
 								this->r.L = 0;
 								this->r.PROF = false;
 								// require fetch at SEQL
@@ -943,14 +919,14 @@ void b5500_execute_wm(CPU *this)
 				}
 			}
 			break;
-		case 0x2D: // XX55: NOP & DIA=Dial A ops
+		case 055: // XX55: NOP & DIA=Dial A ops
 			if (opcode & 0xFC0) {
 				this->r.G = variant >> 3;
 				this->r.H = variant & 7;
 			// else // 0055: NOP=no operation (the official one, at least)
 			}
 			break;
-		case 0x31: // XX61: XRT & DIB=Dial B ops
+		case 061: // XX61: XRT & DIB=Dial B ops
 			if (opcode & 0xFC0) {
 				this->r.K = variant >> 3;
 				this->r.V = variant & 7;
@@ -959,7 +935,7 @@ void b5500_execute_wm(CPU *this)
 				this->r.SALF = false;
 			}
 			break;
-		case 0x35: // XX65: TRB=Transfer Bits
+		case 065: // XX65: TRB=Transfer Bits
 			adjustABFull(this);
 			if (variant > 0) {
 				t1 = this->r.G*6 + this->r.H; // A register starting bit nr
@@ -975,7 +951,7 @@ void b5500_execute_wm(CPU *this)
 			this->r.AROF = false;
 			this->cycleCount += variant + this->r.G + this->r.K;       // approximate the shift counts
 			break;
-		case 0x39: // XX71: FCL=Compare Field Low
+		case 071: // XX71: FCL=Compare Field Low
 			adjustABFull(this);
 			t1 = this->r.G*6 + this->r.H;     // A register starting bit nr
 			if (t1+variant > 48) {
@@ -994,7 +970,7 @@ void b5500_execute_wm(CPU *this)
 			}
 			this->cycleCount += variant + this->r.G + this->r.K;       // approximate the shift counts
 			break;
-		case 0x3D: // XX75: FCE=Compare Field Equal
+		case 075: // XX75: FCE=Compare Field Equal
 			adjustABFull(this);
 			t1 = this->r.G*6 + this->r.H;     // A register starting bit nr
 			if (t1+variant > 48) {

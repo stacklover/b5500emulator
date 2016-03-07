@@ -144,6 +144,7 @@ void operandCall(CPU *this)
 	WORD48	aw = this->r.A;		// local copy of A reg value
 	BIT	interrupted = 0;	// interrupt occurred
 
+//printf("descriptorCall: A=%016llo->", this->r.A);
 	// If A contains a simple operand, just leave it there, otherwise...
 	if (aw & MASK_FLAG) {
 		// It's not a simple operand
