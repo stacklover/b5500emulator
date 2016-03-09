@@ -156,30 +156,30 @@ void b5500_execute_wm(CPU *this)
 				}
 				break;
 			case 002: // 0211: ITI=Interrogate Interrupt
+				// control-state only
 				if (CC->IAR && !this->r.NCSF) {
-					// control-state only
 					this->r.C = CC->IAR;
 					this->r.L = 0;
-					this->r.S = AA_IRQSTACK;
 					// stack address @100
+					this->r.S = AA_IRQSTACK;
 					clearInterrupt(this);
-					this->r.PROF = false;
 					// require fetch at SECL
+					this->r.PROF = false;
 				}
 				break;
 			case 004: // 0411: RTR=Read Timer
+				// control-state only
 				if (!this->r.NCSF) {
-					// control-state only
 					adjustAEmpty(this);
 					this->r.A = readTimer(this);
 					this->r.AROF = true;
 				}
 				break;
 			case 010: // 1011: COM=Communicate
+				// no-op in Control State
 				if (this->r.NCSF) {
-					// no-op in Control State
-					this->r.M = this->r.R*64 + 9;
 					// address = R+@11
+					this->r.M = this->r.R*64 + RR_COM;
 					if (this->r.AROF) {
 						storeAviaM(this);
 						// [M] = A
@@ -194,14 +194,14 @@ void b5500_execute_wm(CPU *this)
 						// [M] = B
 						this->r.BROF = false;
 					}
-					this->r.I = (this->r.I & 0x0F) | 0x40;
 					// set I07: communicate
+					this->r.I = (this->r.I & 0x0F) | 0x40;
 					signalInterrupt(this);
 				}
 				break;
 			case 021: // 2111: IOR=I/O Release
+				// no-op in Normal State
 				if (!this->r.NCSF) {
-					// no-op in Normal State
 					adjustAFull(this);
 					t1 = this->r.A;
 					if (OPERAND(t1)) {
@@ -225,8 +225,8 @@ void b5500_execute_wm(CPU *this)
 				}
 				break;
 			case 022: // 2211: HP2=Halt Processor 2
+				// control-state only
 				if (!(this->r.NCSF || CC->HP2F)) {
-					// control-state only
 					haltP2(this);
 				}
 				break;
@@ -243,16 +243,16 @@ void b5500_execute_wm(CPU *this)
 				storeForInterrupt(this, false, true);
 				break;
 			case 041: // 4111: IP1=Initiate Processor 1
+				// control-state only
 				if (!this->r.NCSF) {
-					// control-state only
 					initiate(this, false);
 				}
 				break;
 			case 042: // 4211: IP2=Initiate Processor 2
+				// control-state only
 				if (!this->r.NCSF) {
-					// control-state only
-					this->r.M = AA_IODESC;
 					// INCW is stored in @10
+					this->r.M = AA_IODESC;
 					if (this->r.AROF) {
 						storeAviaM(this);
 						// [M] = A

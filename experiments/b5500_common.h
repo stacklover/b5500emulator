@@ -162,6 +162,7 @@ extern CENTRAL_CONTROL	*CC;
  */
 #define	RR_MSCW		007	// MSCW is stored here for nested calls
 #define	RR_INCW		010	// INCW is stored here on interrupt
+#define	RR_COM		011	// COM word is stored here on COM operator
 
 /*
  * B5500 integer/real format:

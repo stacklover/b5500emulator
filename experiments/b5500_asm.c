@@ -485,18 +485,18 @@ void assemble(void)
 				this->cycleLimit = 1;
 				run(this);
 				if (dotrcins) {
-					printf("  A=%016llo(%u) GH=%o%o Y=%02o M=%05o F=%05o\n",
+					printf("  A=%016llo(%u) GH=%o%o Y=%02o M=%05o F=%05o R=%03o\n",
 						this->r.A, this->r.AROF,
 						this->r.G, this->r.H,
 						this->r.Y, this->r.M,
-						this->r.F);
+						this->r.F, this->r.R);
 					printf("  B=%016llo(%u) KV=%o%o Z=%02o S=%05o N=%d MSFF/TFFF=%u SALF=%u\n",
 						this->r.B, this->r.BROF,
 						this->r.K, this->r.V,
 						this->r.Z, this->r.S,
 						this->r.N, this->r.MSFF, this->r.SALF);
 				}
-				//sleep(1);
+				sleep(1);
 			}
 			wc = this->r.C;
 			sc = this->r.L;

@@ -26,7 +26,7 @@ const INSTRUCTION instr[] = {
 //
 // WORD mode instructions
 //
-	{"LITC", 00000, OP_EXPR, OP_TOP10},
+	{"LITC", 00000, OP_RELA, OP_TOP10},
 	{"OPDC", 00002, OP_RELA, OP_TOP10},
 	{"DESC", 00003, OP_RELA, OP_TOP10},
 // single-precision numerics
