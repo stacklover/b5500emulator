@@ -16,7 +16,7 @@
 #include "b5500_common.h"
 
 /***********************************************************
-*  Word Mode Syllables                                     *
+*  Character Mode Syllables                                *
 ***********************************************************/
 void b5500_execute_cm(CPU *this)
 {

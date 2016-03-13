@@ -17,11 +17,11 @@
 	.WORD	0
 # REAL A, B, C;
 # PRT(26) = A
-	.WORD	00123456701234567
+	.WORD	00000000000000377
 # PRT(27) = B
-	.WORD	0
+	.WORD	1
 # PRT(30) = C
-	.WORD	03333117777224444
+	.WORD	00000000000000511
 # PRT(31) = CALLEE
 # PRT(31) = SEGMENT DESCRIPTOR, TYPE = 1, RELATIVE ADDRESS = 0024, SEGMENT NUMBER = 0003.
 	.WORD	07500000000001305
@@ -47,13 +47,13 @@
 # RESULT:= CALLEE(A+C, A<C, 302);
 	MKS		# prepare to call CALLEE
 # branch around code for first expression parameter
-	LITC  010
+	LITC  	010
 	BFW
 	NOP		# word alignment
 # now code for first expression parameter @1104
 	OPDC	026	# A
 	OPDC	030	# C
-	LND		# should be ADD, but we don't have that yet
+	ADD
 	LITC	021	# temp storage
 	STD
 	DESC	021	# pointer to that storage
@@ -72,7 +72,7 @@
 # now code for second expression parameter @1124
 	OPDC	026	# A
 	OPDC	030	# C
-	LOR		# should be LSS, but we don't have that yet
+	LSS
 #	LITC	0	# this EXTRA LITC is somewhat odd, its overwritten by the next
 	LITC	021	# temp storage
 	STD
@@ -125,7 +125,7 @@
 # CALLEE:= A*C
 	OPDC	F-3	# A
 	OPDC	F-1	# C
-	LND		# should be MUL
+	MUL
 	LITC	F+2	# result
 	STD
 # branch around the false part
@@ -135,7 +135,7 @@
 # CALLEE:= A-C;
 	OPDC	F-3	# A
 	OPDC	F-1	# C
-	LOR		# should be SUB
+	SUB
 	LITC	F+2	# result
 	STD
 # END CALLEE;
@@ -159,9 +159,11 @@
 	LBC
 
 # now lets go
+	.SET	isP1	1
 	.SET	R	010	# 00
-	.SET	S	0100
+	.SET	S	02000
 	.SET	F	012345
+	.SET	NCSF	1	# requires stack to be above 01000 !
 	.ORG	01100
 	.RUN
 	.END

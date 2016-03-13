@@ -56,6 +56,7 @@ void signalInterrupt(CPU *this)
 
 CPU *this;
 int dotrcmem = 0;
+int dotrcins = 0;
 
 int main(int argc, char *argv[])
 {

@@ -87,8 +87,8 @@ void accessError(CPU *this)
 void computeRelativeAddr(CPU *this, unsigned offset, BIT cEnabled)
 {
 	if (dotrcmem)
-		printf("computeRelativeAddr offset=%o:%03o cEn=%u -> ",
-			offset>>7, offset & 0x3f, cEnabled);
+		printf("RelAddr(%04o,%u) -> ",
+			offset, cEnabled);
 	this->cycleCount += 2; // approximate the timing
 	if (this->r.SALF) {
 		// subroutine level - check upper 3 bits of the 10 bit offset
@@ -99,65 +99,70 @@ void computeRelativeAddr(CPU *this, unsigned offset, BIT cEnabled)
 		case 3:
 			// pattern 0xx xxxxxxx - R+ relative
 			// reach 0..511
-			this->r.M = (this->r.R<<6) + (offset & 0x1ff);
+			offset &= 0x1ff;
+			this->r.M = (this->r.R<<6) + offset;
 			if (dotrcmem)
-				printf("R+,M=%05o\n", this->r.M);
+				printf("R+%o -> M=%05o\n", offset, this->r.M);
 			break;
 		case 4:
 		case 5:
 			// pattern 10x xxxxxxx - F+ or (R+7)+ relative
 			// reach 0..255
+			offset &= 0xff;
 			if (this->r.MSFF) {
 				// during function parameter loading its (R+7)+
 				this->r.M = (this->r.R<<6) + RR_MSCW;
 				loadMviaM(this); // M = [M].[18:15]
-				this->r.M += (offset & 0xff);
+				this->r.M += offset;
 				if (dotrcmem)
-					printf("(R+7)+,M=%05o\n", this->r.M);
+					printf("(R+7)+%o -> M=%05o\n", offset, this->r.M);
 			} else {
 				// inside function its F+
 				this->r.M = this->r.F + (offset & 0xff);
 				if (dotrcmem)
-					printf("F+,M=%05o\n", this->r.M);
+					printf("F+%o -> M=%05o\n", offset, this->r.M);
 			}
 			break;
 		case 6:
 			// pattern 110 xxxxxxx - C+ relative on read, R+ on write
 			// reach 0..127
+			offset &= 0x7f;
 			if (cEnabled) {
 				// adjust C for fetch offset from
 				// syllable the instruction was in
 				this->r.M = (this->r.L ? this->r.C : this->r.C-1)
-					+ (offset & 0x7f);
+					+ offset;
 				if (dotrcmem)
-					printf("C+,M=%05o\n", this->r.M);
+					printf("C+%o -> M=%05o\n", offset, this->r.M);
 			} else {
-				this->r.M = (this->r.R<<6) + (offset & 0x7f);
+				this->r.M = (this->r.R<<6) + offset;
 				if (dotrcmem)
-					printf("R+,M=%05o\n", this->r.M);
+					printf("R+%o -> M=%05o\n", offset, this->r.M);
 			}
 			break;
 		case 7:
 			// pattern 111 xxxxxxx - F- or (R+7)- relative
 			// reach 0..127 (negative direction)
+			offset &= 0x7f;
 			if (this->r.MSFF) {
 				this->r.M = (this->r.R<<6) + RR_MSCW;
 				loadMviaM(this); // M = [M].[18:15]
-				this->r.M -= (offset & 0x7f);
+				this->r.M -= offset;
 				if (dotrcmem)
-					printf("(R+7)-,M=%05o\n", this->r.M);
+					printf("(R+7)-%o -> M=%05o\n", offset, this->r.M);
 			} else {
-				this->r.M = this->r.F - (offset & 0x7f);
+				this->r.M = this->r.F - offset;
 				if (dotrcmem)
-					printf("F-,M=%05o\n", this->r.M);
+					printf("F-%o -> M=%05o\n", offset, this->r.M);
 			}
 			break;
 		} // switch
 	} else {
 		// program level - all 10 bits are offset
-		this->r.M = (this->r.R<<6) + (offset & 0x3ff);
+		offset &= 0x3ff;
+		this->r.M = (this->r.R<<6) + offset;
 		if (dotrcmem)
-			printf("R+,M=%05o\n", this->r.M);
+			printf("R+%o,M=%05o\n", offset, this->r.M);
 	}
 
 	// Reset variant-mode R-relative addressing, if it was enabled
@@ -176,80 +181,57 @@ void computeRelativeAddr(CPU *this, unsigned offset, BIT cEnabled)
  */
 BIT indexDescriptor(CPU *this)
 {
-	WORD48		aw;	// local copy of A reg
-	WORD48		bw;	// local copy of B reg
+	WORD48	aw;	// local copy of A reg
 	BIT		interrupted = false;	// fatal error, interrupt set
-	int		xe;	// index exponent
-	WORD64		xm;	// index mantissa
-	BIT		xs;	// index mantissa sign
-	BIT		xt;	// index exponent sign
+	NUM		I;	// index
 
 	adjustABFull(this);
 	aw = this->r.A;
-	bw = this->r.B;
-	xm = (bw & MASK_MANTISSA) << SHFT_MANTISSALJ;
-	xe = (bw & MASK_EXPONENT) >> SHFT_EXPONENT;
-	xs = (bw & MASK_SIGNMANT) >> SHFT_SIGNMANT;
-	xt = (bw & MASK_SIGNEXPO) >> SHFT_SIGNEXPO;
-	if (xt)
-		xe = -xe;
+	num_extract(&this->r.B, &I);
 
 	// Normalize the index, if necessary
-	if (xe < 0) {
+	if (I.e < 0) {
 		// index exponent is negative
-		do {
-			++this->cycleCount;
-			xm >>= 3;
-			++xe;
-		} while (xe < 0);
+		this->cycleCount += num_right_shift_exp(&I, 0);
 		// round up the index
-		xm += VALU_ROUNDUP;
-	} else if (xe > 0) {
+		num_round(&I);
+	} else if (I.e > 0) {
 		// index exponent is positive
-		do {
-			++this->cycleCount;
-			if (xm & MASK_MANTHIGHLJ) {
-				// oops... integer overflow normalizing the index
-				// kill the loop
-				xe = 0;
-				interrupted = true;
-				if (this->r.NCSF) {
-					// set I07/8: integer overflow
-					this->r.I = (this->r.I & 0x0F) | 0xC0;
-					signalInterrupt(this);
-				}
-			} else {
-				xm <<= 3;
+		this->cycleCount += num_left_shift_exp(&I, 0);
+		if (I.e != 0) {
+			// oops... integer overflow normalizing the index
+			interrupted = true;
+			if (this->r.NCSF) {
+				// set I07/8: integer overflow
+				this->r.I = (this->r.I & IRQ_MASKL) | IRQ_INTO;
+				signalInterrupt(this);
 			}
-		} while (--xe > 0);
+		}
 	}
-	// right align mantissa in word
-	xm >>= SHFT_MANTISSALJ;
-
 	// look only at lowest 10 bits
-	xm &= 0x3ff;
+	I.m &= 0x3ff;
 
-	// Now we have an integerized index value in xm
+	// Now we have an integerized index value in I
 	if (!interrupted) {
-		if (xs && xm) {
+		if (I.s && I.m) {
 			// Oops... index is negative
 			interrupted = true;
 			if (this->r.NCSF) {
 				// set I05/8: invalid-index
-				this->r.I = (this->r.I & 0x0F) | 0x90;
+				this->r.I = (this->r.I & IRQ_MASKL) | IRQ_INDEX;
 				signalInterrupt(this);
 			}
-		} else if (xm < ((aw & MASK_DDWC) >> SHFT_DDWC)) {
+		} else if (I.m < ((aw & MASK_DDWC) >> SHFT_DDWC)) {
 			// We finally have a valid index
-			xm = (aw + xm) & MASK_DDADDR;
-			this->r.A = (aw & ~MASK_DDADDR) | xm;
+			I.m = (aw + I.m) & MASK_DDADDR;
+			this->r.A = (aw & ~MASK_DDADDR) | I.m;
 			this->r.BROF = false;
 		} else {
 			// Oops... index not less than size
 			interrupted = true;
 			if (this->r.NCSF) {
 				// set I05/8: invalid-index
-				this->r.I = (this->r.I & 0x0F) | 0x90;
+				this->r.I = (this->r.I & IRQ_MASKL) | IRQ_INDEX;
 				signalInterrupt(this);
 			}
 		}
@@ -435,12 +417,8 @@ void storeBviaM(CPU *this)
  */
 void integerStore(CPU *this, BIT conditional, BIT destructive)
 {
-	WORD48		aw;	// local copy of A reg
-	WORD48		bw;	// local copy of B reg
-	int		be;	// B exponent
-	WORD64		bm;	// B mantissa
-	BIT		bs;	// B mantissa sign
-	BIT		bt;	// B exponent sign
+	WORD48	aw;	// local copy of A reg
+	NUM		B;	// B mantissa
 	BIT		doStore = true;		// okay to store
 	BIT		normalize = true;	// okay to integerize
 
@@ -464,42 +442,27 @@ void integerStore(CPU *this, BIT conditional, BIT destructive)
 	}
 
 	if (normalize) {
-		bw = this->r.B;
-		bm = (bw & MASK_MANTISSA) << SHFT_MANTISSALJ;
-		be = (bw & MASK_EXPONENT) >> SHFT_EXPONENT;
-		bs = (bw & MASK_SIGNMANT) >> SHFT_SIGNMANT;
-		bt = (bw & MASK_SIGNEXPO) >> SHFT_SIGNEXPO;
-		if (bt)
-			be = -be;
+		num_extract(&this->r.B, &B);
 
-		if (be != 0) { // is B non-integer?
-			if (be < 0) { // B exponent is negative
-				do {
-					++this->cycleCount;
-					bm >>= 3;
-				} while (++be < 0);
-				bm += VALU_ROUNDUP; // round up
-			} else { // B exponent is positive and not zero
-				do {
-					++this->cycleCount;
-					if (!(bm & MASK_MANTHIGHLJ)) {
-						bm <<= 3;
-					} else {
-						// oops... integer overflow normalizing the mantisa
-						doStore = false;
-						if (this->r.NCSF) {
-							this->r.I = (this->r.I & 0x0F) | 0xC0; // set I07/8: integer overflow
-							signalInterrupt(this);
-						}
-						break; // kill the loop
-					}
-				} while (--be > 0);
+		if (B.e < 0) {
+			// exponent is negative
+			this->cycleCount += num_right_shift_exp(&B, 0);
+			// round up the number
+			num_round(&B);
+		} else if (B.e > 0) {
+			// exponent is positive
+			this->cycleCount += num_left_shift_exp(&B, 0);
+			if (B.e != 0) {
+				// oops... integer overflow normalizing the mantisa
+				doStore = false;
+				if (this->r.NCSF) {
+					// set I07/8: integer overflow
+					this->r.I = (this->r.I & IRQ_MASKL) | IRQ_INTO;
+					signalInterrupt(this);
+				}
 			}
-			// right align mantissa in word
-			bm >>= SHFT_MANTISSALJ;
-
 			if (doStore) {
-				this->r.B = ((WORD48)bs << SHFT_SIGNMANT) + bm;
+				num_compose(&B, &this->r.B);
 			}
 		}
 	}

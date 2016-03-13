@@ -13,6 +13,7 @@
 *   Converted Paul's work from Javascript to C
 ***********************************************************************/
 
+#include <stdio.h>
 #include "b5500_common.h"
 
 /*
@@ -81,6 +82,8 @@ void storeForInterrupt(CPU *this, BIT forced, BIT forTest)
 			((WORD48)this->r.X << SHFT_ILCWrX) |
 			((WORD48)saveAROF << SHFT_ILCWAROF); 
 		++this->r.S;
+		if (dotrcins)
+			printf("ILCW:");
 		storeBviaS(this); // [S] = ILCW
 	} else {
 		// in word mode, save B and A if not empty
@@ -107,6 +110,8 @@ void storeForInterrupt(CPU *this, BIT forced, BIT forTest)
 		((WORD48)this->r.MSFF << SHFT_ICWMSFF) |
 		((WORD48)this->r.R << SHFT_ICWrR);
 	++this->r.S;
+	if (dotrcins)
+		printf("ICW: ");
 	storeBviaS(this); // [S] = ICW
 
 	// store Interrupt Return Control Word (IRCW)
@@ -123,6 +128,8 @@ void storeForInterrupt(CPU *this, BIT forced, BIT forTest)
 		((WORD48)this->r.H << SHFT_RCWrH) |
 		((WORD48)saveBROF << SHFT_RCWBROF);
 	++this->r.S;
+	if (dotrcins)
+		printf("IRCW:");
 	storeBviaS(this); // [S] = IRCW
 
 	if (this->r.CWMF) {
@@ -159,6 +166,8 @@ void storeForInterrupt(CPU *this, BIT forced, BIT forTest)
 		((WORD48)this->r.Q08F << SHFT_INCWQ08F) |
 		((WORD48)this->r.Q09F << SHFT_INCWQ09F);
 	this->r.M = (this->r.R<<6) + 8; // store initiate word at R+@10
+	if (dotrcins)
+		printf("INCW:");
 	storeBviaM(this); // [M] = INCW
 
 	this->r.M = 0;
@@ -177,15 +186,9 @@ void storeForInterrupt(CPU *this, BIT forced, BIT forTest)
 		this->r.CWMF = 0;
 	}
 
-	if (!this->isP1) {
-		// if it's P2
-		stop(this); // idle the P2 processor
-		CC->P2BF = 0; // tell CC and P1 we've stopped
-	} else {
-		// otherwise, if it's P1
-		if (!forTest) {
-			this->r.T = 0x89; // inject 0211=ITI into P1's T register
-		} else {
+	if (this->isP1) {
+		// if it's P1
+		if (forTest) {
 			loadBviaM(this); // B = [M]: load DD for test
 			this->r.C = (this->r.B & MASK_RCWrC) >> SHFT_RCWrC;
 			this->r.L = 0;
@@ -194,7 +197,15 @@ void storeForInterrupt(CPU *this, BIT forced, BIT forTest)
 			this->r.H = 0;
 			this->r.K = 0;
 			this->r.V = 0;
+		} else {
+			if (dotrcins)
+				printf("injected ITI\n");
+			this->r.T = 0211; // inject 0211=ITI into P1's T register
 		}
+	} else {
+		// if it's P2
+		stop(this); // idle the P2 processor
+		CC->P2BF = 0; // tell CC and P1 we've stopped
 	}
 }
 

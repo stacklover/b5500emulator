@@ -136,10 +136,10 @@ void b5500_execute_wm(CPU *this)
 						// test continuity bit, [20:1]
 						if (this->r.A & MASK_DDCONT) {
 							// set I07/6: continuity bit
-							this->r.I = (this->r.I & 0x0F) | 0x60;
+							this->r.I = (this->r.I & IRQ_MASKL) | IRQ_CONT;
 						} else {
 							// set I07/5: program release
-							this->r.I = (this->r.I & 0x0F) | 0x50;
+							this->r.I = (this->r.I & IRQ_MASKL) | IRQ_PREL;
 						}
 						signalInterrupt(this);
 						this->r.A = this->r.M;
@@ -195,7 +195,7 @@ void b5500_execute_wm(CPU *this)
 						this->r.BROF = false;
 					}
 					// set I07: communicate
-					this->r.I = (this->r.I & 0x0F) | 0x40;
+					this->r.I = (this->r.I & IRQ_MASKL) | IRQ_COM;
 					signalInterrupt(this);
 				}
 				break;
@@ -750,13 +750,13 @@ common_branch_word:
 				}
 			} else {
 				adjustABFull(this);
-				t2 = variant >> 2;
 				// field length (1-15 bits)
+				t2 = variant >> 2;
 				t1 = fieldIsolate(this->r.B, this->r.G*6+this->r.H, t2);
-				this->cycleCount += this->r.G + this->r.H + (t2 >> 1);
 				// approximate the shift counts
-				this->r.AROF = false;
+				this->cycleCount += this->r.G + this->r.H + (t2 >> 1);
 				// A is unconditionally empty at end
+				this->r.AROF = false;
 				switch (variant & 0x03) {
 				case 0x02: // X251/X651: CFD=non-zero field branch forward destructive
 					this->r.BROF = false;
@@ -769,14 +769,14 @@ common_branch_word:
 						} else {
 							// descriptor
 							if (this->r.L == 0) {
-								--this->r.C;
 								// adjust for Inhibit Fetch
+								--this->r.C;
 							}
 							if (presenceTest(this, this->r.A)) {
 								this->r.C = this->r.A & MASKMEM;
 								this->r.L = 0;
-								this->r.PROF = false;
 								// require fetch at SEQL
+								this->r.PROF = false;
 							}
 						}
 					}
@@ -792,14 +792,14 @@ common_branch_word:
 						} else {
 							// descriptor
 							if (this->r.L == 0) {
-								--this->r.C;
 								// adjust for Inhibit Fetch
+								--this->r.C;
 							}
 							if (presenceTest(this, this->r.A)) {
 								this->r.C = this->r.A & MASKMEM;
 								this->r.L = 0;
-								this->r.PROF = false;
 								// require fetch at SEQL
+								this->r.PROF = false;
 							}
 						}
 					}

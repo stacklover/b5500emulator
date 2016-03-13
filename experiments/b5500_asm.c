@@ -30,6 +30,8 @@ int dodmpins	 = false;	/* dump instructions after assembly */
 int dotrcmem	 = false;	/* trace memory accesses */
 int dolistsource = false;	/* list source line */
 int dotrcins	 = false;	/* trace instruction execution */
+int	dotrcmat	 = false;	/* trace math operations */
+int	clearpath	 = false;	/* clearpath math */
 
 typedef enum labelst {entered=0, defined} LABELST;
 typedef struct labelrec {
@@ -283,6 +285,10 @@ int verifyreg(char *regname, long long c)
 	if (strcmp(regname, "BROF") == 0) { if (this->r.BROF == c) return true;	} else
 	if (strcmp(regname, "PROF") == 0) { if (this->r.PROF == c) return true;	} else
 	if (strcmp(regname, "TROF") == 0) { if (this->r.TROF == c) return true;	} else
+	if (strcmp(regname, "MSFF") == 0) { if (this->r.MSFF == c) return true;	} else
+	if (strcmp(regname, "SALF") == 0) { if (this->r.SALF == c) return true;	} else
+	if (strcmp(regname, "NCSF") == 0) { if (this->r.NCSF == c) return true;	} else
+	if (strcmp(regname, "isP1") == 0) { if (this->isP1 == c) return true;	} else
 	if (strcmp(regname, "A") == 0) { if (this->r.A == c) return true; } else
 	if (strcmp(regname, "B") == 0) { if (this->r.B == c) return true; } else
 	if (strcmp(regname, "C") == 0) { if (this->r.C == c) return true; } else
@@ -313,6 +319,10 @@ void setreg(char *regname, long long c)
 	if (strcmp(regname, "BROF") == 0) { this->r.BROF = c; } else
 	if (strcmp(regname, "PROF") == 0) { this->r.PROF = c; } else
 	if (strcmp(regname, "TROF") == 0) { this->r.TROF = c; } else
+	if (strcmp(regname, "MSFF") == 0) { this->r.MSFF = c; } else
+	if (strcmp(regname, "SALF") == 0) { this->r.SALF = c; } else
+	if (strcmp(regname, "NCSF") == 0) { this->r.NCSF = c; } else
+	if (strcmp(regname, "isP1") == 0) { this->isP1 = c; } else
 	if (strcmp(regname, "A") == 0) { this->r.A = c;	} else
 	if (strcmp(regname, "B") == 0) { this->r.B = c;	} else
 	if (strcmp(regname, "C") == 0) { this->r.C = c;	} else
@@ -485,18 +495,20 @@ void assemble(void)
 				this->cycleLimit = 1;
 				run(this);
 				if (dotrcins) {
-					printf("  A=%016llo(%u) GH=%o%o Y=%02o M=%05o F=%05o R=%03o\n",
+					printf("  A=%016llo(%u) GH=%o%o Y=%02o M=%05o F=%05o N=%d NCSF=%u\n",
 						this->r.A, this->r.AROF,
 						this->r.G, this->r.H,
 						this->r.Y, this->r.M,
-						this->r.F, this->r.R);
-					printf("  B=%016llo(%u) KV=%o%o Z=%02o S=%05o N=%d MSFF/TFFF=%u SALF=%u\n",
+						this->r.F,
+						this->r.N, this->r.NCSF);
+					printf("  B=%016llo(%u) KV=%o%o Z=%02o S=%05o R=%03o MSFF/TFFF=%u SALF=%u\n",
 						this->r.B, this->r.BROF,
 						this->r.K, this->r.V,
 						this->r.Z, this->r.S,
-						this->r.N, this->r.MSFF, this->r.SALF);
+						this->r.R,
+						this->r.MSFF, this->r.SALF);
 				}
-				sleep(1);
+				//sleep(1);
 			}
 			wc = this->r.C;
 			sc = this->r.L;
@@ -584,10 +596,16 @@ int main(int argc, char *argv[])
 
 	printf("B5500 Assembler\n");
 
-	while ((opt = getopt(argc, argv, "bmst")) != -1) {
+	while ((opt = getopt(argc, argv, "abcmst")) != -1) {
 		switch (opt) {
+		case 'a':
+			dotrcmat = true; /* trace math */
+			break;
 		case 'b':
 			dodmpins = true; /* dump instructions after assembly */
+			break;
+		case 'c':
+			clearpath = true; /* do math the clearpath way */
 			break;
 		case 'm':
 			dotrcmem = true; /* trace memory accesses */
@@ -600,7 +618,7 @@ int main(int argc, char *argv[])
 			break;
 		default: /* '?' */
 			fprintf(stderr,
-				"Usage: %s [-b] [-m] [-s] [-t] input\n",
+				"Usage: %s [-a] [-b] [-m] [-s] [-t] input\n",
 				argv[0]);
 			exit(2);
 		}
@@ -620,6 +638,7 @@ int main(int argc, char *argv[])
 	this = CPUA;
 	memset(this, 0, sizeof(CPU));
 	this->id = "CPUA";
+	//this->isP1 = true;
 	start(this);
 
 	printf("Pass 1\n");
