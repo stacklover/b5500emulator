@@ -509,15 +509,11 @@ void singlePrecisionMultiply(CPU *this)
 			num_printf(&B);
 		}
 #endif
-		if (d == 0) {
-			// if multiplier digit is zero
-			// hardware optimizes this case
+		while (d > 0) {
 			this->cycleCount++;
-		} else {
-			// just estimate the average number of clocks
-			this->cycleCount += 3;
 			// develop the partial product
-			B.m += A.m * d;
+			B.m += A.m;
+			d--;
 		}
 
 		// Shift B & X together one octade to the right
@@ -549,6 +545,13 @@ void singlePrecisionMultiply(CPU *this)
 		num_printf(&B);
 	}
 #endif
+
+	// on B5500, return 0 on exponent underflow here
+	if (!emode && (B.e < -63)) {
+		B.m = 0;
+		goto exit1;
+	}
+
 	// Round the result
 	this->r.Q05F = false;
 	// required by specs due to the way rounding addition worked
@@ -557,8 +560,23 @@ void singlePrecisionMultiply(CPU *this)
 	// Normalize and round as necessary
 	if (emode)
 		num_normalize(&B, -62);
+	else
+		num_normalize(&B, -63);
+#if DEBUG
+	if (dotrcmat) {
+		printf("after normalization\n");
+		num_printf(&B);
+	}
+#endif
 	num_round(&B);
+#if DEBUG
+	if (dotrcmat) {
+		printf("after rounding\n");
+		num_printf(&B);
+	}
+#endif
 
+exit1:
 	if (B.m == 0) {
 		// don't see how this could be necessary here, but
 		// the TM says to do it anyway
@@ -694,6 +712,12 @@ void singlePrecisionDivide(CPU *this)
 		B.x = MASK_MANTHBIT;	// round up the result
 	}
 
+	// on B5500, return 0 on exponent underflow here
+	if (!emode && (B.e < -63)) {
+		B.m = 0;
+		goto exit1;
+	}
+
 	// Normalize and round as necessary
 	if (emode) {
 #if DEBUG
@@ -730,6 +754,7 @@ void singlePrecisionDivide(CPU *this)
 		}
 	}
 
+exit1:
 	num_compose(&B, &this->r.B);
 	this->r.X = B.x;
 }
@@ -927,8 +952,12 @@ void remainderDivide(CPU *this)
 		// if divisor has greater magnitude
 		// quotient is < 1, so set A to zero and
 		this->r.A = 0;
-		// result is original B (less the flag bit)
-		goto normalize;
+		// EMODE: normalize B before returning
+		if (emode)
+			goto normalize;
+		// B5500: the result is original B (less the flag bit)
+		this->r.B &= MASK_NUMBER;
+		return;
 	}
 
 	B.s ^= A.s;	// positive if signs are same, negative if different

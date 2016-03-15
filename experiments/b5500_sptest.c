@@ -436,7 +436,7 @@ int main(int argc, char *argv[])
 {
 	int opt;
 
-	printf("B5500 Single Precision Math Test\n");
+	printf("Single Precision Math Test\n");
 
 	while ((opt = getopt(argc, argv, "abcmst")) != -1) {
 		switch (opt) {
@@ -480,6 +480,11 @@ int main(int argc, char *argv[])
 	this = CPUA;
 	memset(this, 0, sizeof(CPU));
 	this->id = "CPUA";
+
+	if (emode)
+		printf("Testing in EMODE\n");
+	else
+		printf("Testing in B5500 mode\n");
 
 	load_data();
 
