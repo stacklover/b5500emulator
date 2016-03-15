@@ -30,8 +30,8 @@ typedef unsigned short ADDR9;		// 9 bits higher part of memory address
 typedef unsigned short WORD12;		// 12 bits instruction register
 typedef unsigned short ADDR15;		// 15 bits memory address
 typedef unsigned long WORD21;		// 21 bits
-typedef /*unsigned*/ long long WORD39;	// 39 bits mantissa extension
-typedef /*unsigned*/ long long WORD48;	// 48 bits machine word
+typedef unsigned long long WORD39;	// 39 bits mantissa extension
+typedef unsigned long long WORD48;	// 48 bits machine word
 
 typedef struct central_control {
 	BIT		IAR;
