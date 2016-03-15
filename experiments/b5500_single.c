@@ -39,7 +39,6 @@ void num_extract(WORD48 *in, NUM *out)
 		out->s = false;
 	} else {
 		// Extract the exponents and sign
-		out->e = (*in & MASK_EXPONENT) >> SHFT_EXPONENT;
 		out->s = (*in & MASK_SIGNMANT) >> SHFT_SIGNMANT;
 		out->e = (*in & MASK_EXPONENT) >> SHFT_EXPONENT;
 		if (*in & MASK_SIGNEXPO)
@@ -89,31 +88,60 @@ void num_normalize(NUM *n, int exp)
 }
 
 /*
- * round a number using the extension
+ * round a number using the mantissa and the extension
+ *
+ * there are interesting differences in EMODE and B5500 mode:
+ *
+ * EMODE: checks highest bit of X for non-zero to enable rounding.
+ *        if the highest octet of the mantissa is zero:
+ *          shift both X and mantissa
+ *          one octet to the left (and adjust exponent),
+ *          increasing precision of the result by one octet.
+ *        else
+ *          increase mantissa by one and handle carry
+ * B5500: checks highest octet of X for non-zero to enable rounding. 
+ *        if the highest octet of the mantissa is zero:
+ *          shift both X and mantissa
+ *          one octet to the left (and adjust exponent),
+ *          increasing precision of the result by one octet.
+ *        check the now highest bit of X for non-zero AND
+ *        mantissa not being all-ones:
+ *          increase mantissa by one (no carry can happen)
+ * Note: the highest octet of the mantissa can only happen to be zero
+ *       after a subtraction of two same sign numbers or after an addition
+ *       of two opposite sign numbers. In both cases the B5500 seems to do
+ *       the better rounding.
  */
 void num_round(NUM *n)
 {
 	// round up
-	if (n->x & MASK_MANTHBIT) {
-		if (clearpath) {
+	if (emode) {
+		// EMODE: check highest bit
+		if (n->x & MASK_MANTHBIT) {
+			// shift left if highest octet is zero
 			if ((n->m & MASK_MANTHIGH) == 0) {
 				num_left_shift(n, 0);
 			} else {
+				// OTHERWISE:
+				// increment mantissa and handle possible
+				// carry on an all-ones mantissa
 				n->m++;
-				// if carry
 				if (n->m & MASK_MANTCARRY)
 					num_right_shift_cnt(n, 1);
 			}
-		} else {
+		}
+	} else {
+		// B5500: check highest octet
+		if (n->x & MASK_MANTHIGH) {
+			// shift left if highest octet is zero
 			if ((n->m & MASK_MANTHIGH) == 0) {
 				num_left_shift(n, 0);
 			}
+			// ADDITIONALLY: round if the now topmost bit of X is set
+			// increment mantissa ONLY if there will be no carry
 			if ((n->x & MASK_MANTHBIT)
 						&& ((n->m & MASK_MANTISSA) != MASK_MANTISSA)) {
 				n->m++;
-				// if carry
-				if (n->m & MASK_MANTCARRY)
-					num_right_shift_cnt(n, 1);
 			}
 		}
 	}
@@ -157,11 +185,18 @@ unsigned num_right_shift_exp(NUM *n, int exp)
 {
 	unsigned cnt = 0;
 	while (n->e < exp) {
+		cnt++;
 		// shift rightmost octet into x
 		n->x = (n->x >> 3) | ((n->m & 7) << 36);
 		n->m >>= 3;	// shift right
 		n->e++;
-		cnt++;
+		// on B5500, stop when mantissa is zero
+		// UNLESS the exponents just became the same!
+		if (!emode && (n->m == 0) && (n->e != exp)) {
+			n->e = exp;
+			n->x = 0;
+			break;
+		}
 	}
 	return cnt;
 }
@@ -321,15 +356,12 @@ void singlePrecisionAdd(CPU *this, BIT add)
 	// A and B have same sign?
 	if (A.s == B.s) {
 		// we really add!
-		// add extension first
+		// add extensions first
 		B.x += A.x;
-		// carry in extension add?
-		if (B.x & MASK_MANTCARRY) {
-			// increase mantissa
-			B.m++;
-			// correct extension
-			B.x &= MASK_MANTISSA;
-		}
+		// add possible carry from extension add
+		B.m += (B.x >> SHFT_MANTCARRY);
+		// correct extension
+		B.x &= MASK_MANTISSA;
 		// now add mantissa
 		B.m += A.m;
 		// carry in mantissa add?
@@ -378,9 +410,11 @@ void singlePrecisionAdd(CPU *this, BIT add)
 #endif
 
 	// Normalize and round as necessary
-	if (clearpath)
+	if (emode) {
 		num_normalize(&B, -62);
+	}
 	num_round(&B);
+
 #if DEBUG
 	if (dotrcmat) {
 		printf("After rounding:\n");
@@ -521,7 +555,7 @@ void singlePrecisionMultiply(CPU *this)
 	this->r.A = 0;
 
 	// Normalize and round as necessary
-	if (clearpath)
+	if (emode)
 		num_normalize(&B, -62);
 	num_round(&B);
 
@@ -661,7 +695,7 @@ void singlePrecisionDivide(CPU *this)
 	}
 
 	// Normalize and round as necessary
-	if (clearpath) {
+	if (emode) {
 #if DEBUG
 		if (dotrcmat) {
 			printf("before normalization\n");
@@ -863,7 +897,7 @@ void remainderDivide(CPU *this)
 		num_printf(&B);
 	}
 #endif
-	// needed for clearpath normalization
+	// needed for emode normalization
 	af = (A.e != 0) || (B.e != 0);
 
 	// divide by zero?
@@ -986,7 +1020,7 @@ void remainderDivide(CPU *this)
 
 	// Normalize and round as necessary
 normalize:
-	if (clearpath) {
+	if (emode) {
 		B.x = 0;
 #if DEBUG
 		if (dotrcmat) {

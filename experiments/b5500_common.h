@@ -30,8 +30,8 @@ typedef unsigned short ADDR9;		// 9 bits higher part of memory address
 typedef unsigned short WORD12;		// 12 bits instruction register
 typedef unsigned short ADDR15;		// 15 bits memory address
 typedef unsigned long WORD21;		// 21 bits
-typedef unsigned long long WORD39;	// 39 bits mantissa extension
-typedef unsigned long long WORD48;	// 48 bits machine word
+typedef /*unsigned*/ long long WORD39;	// 39 bits mantissa extension
+typedef /*unsigned*/ long long WORD48;	// 48 bits machine word
 
 typedef struct central_control {
 	BIT		IAR;
@@ -197,7 +197,7 @@ extern CENTRAL_CONTROL	*CC;
 #define	MASK_MANTHIGH	00007000000000000 // highest octet of mantissa
 #define	MASK_MANTHBIT	00004000000000000 // highest bit of mantissa
 #define	MASK_MANTCARRY	00010000000000000 // the carry bit
-//#define	SHFT_MANTISSA	0
+#define	SHFT_MANTCARRY	39
 #define	SHFT_EXPONENT	39
 #define	SHFT_SIGNEXPO	45
 #define	SHFT_SIGNMANT	46
@@ -583,6 +583,6 @@ typedef struct instruction {
 extern int dotrcmem;		// trace memory accesses
 extern int dotrcins;		// trace instruction and IRQs
 extern int dotrcmat;		// trace math operations
-extern int clearpath;		// clearpath math
+extern int emode;			// emode math
 
 #endif /* B5500_COMMON_H */

@@ -1,0 +1,167 @@
+# Single Precision Add-Subtract
+# 1-01
+
+$A13L   A{13}==0            #A mantissa leftmost octade is zero
+$B13L   B{13}==0            #B mantissa leftmost octade is zero
+$W02L   A[39:37]<B[39:37]   #leftmost octades of A<B
+$W03L   A[39:37]==B[39:37]  #leftmost octades of A==B
+$W06L   A[39:1]==0          #A mantissa is zero
+$W07L   B[39:1]==0          #B mantissa is zero
+$W73L   A[46:40]==B[46:40]  #Exponent A = Exponent B
+$W74L   A[46:40]>>B[46:40]  #Exponent A > Exponent B (signed)
+$W75L   A[46:40]<<B[46:40]  #Exponent A < Exponent B (signed)
+
+@J00L                       #Adjust Stack
+    @/AROF+/BROF
+        J=1
+    @AROF
+        BROF=1
+    @(AROF*/BROF)+(/AROF*BROF)
+        E=3
+    @/AROF                  #this is a secondary control
+        AROF=1
+        @BROF
+            A=B
+        @/BROF
+            E=2
+
+# one might ask why the following is not part of the previous...
+@J00L*AROF*BROF
+    AROF=0
+    B48F=0
+    @W06L*W07L              #Answer = 0
+        B=0
+    @W06L                   #Answer in B
+        EXIT
+    @/W06L*W07L             #Exponent of A to B
+        B[46:40]=A[46:40]
+    @/W06L*/W73L            #Exponents not equal
+        J=2
+
+@J01L                       #Continue Stack Adjustment
+    @MROF
+        S-1                 #Decrement Stack
+        BROF=1
+    @/MROF
+        E=3
+    @BROF
+        J=0
+
+@J02L                       #Test for B=0
+    @W74L*W07L
+        B[46:40]=A[46:40]
+        Q01F=0
+        Q04F=0
+
+@W74L*/W07L*J91L
+    @A13L                   #Normalize A
+        A{1}=0              #Clear rightmost octet
+        M[7]A[46:40]-1      #Decrement Exponent, with carry in M[7]
+        A{13:2}=A{12:1}     #Shift mantissa one octet to the left
+    @/A13L                  #Scale B
+        M[11]B[46:40]+1     #Increment Exponent, with Carry in M[11]
+        B{12:1}=B{13:2}     #Shift mantissa one octet to the right
+        B{13}=0             #Clear leftmost octet
+        X{12:1}=X{13:2}     #Shift extension one octet to the right
+        @/Q04F
+            X[39:37]=-B[3:1]#Shift 8's complement of 1st non zero digit
+        @Q04F
+            X[39:37]=^B[3:1]#Shift 7's complement of subsequent digits
+        @W99L*/B03F
+            Q01F=0
+        @W99L*B03F
+            Q01F=1
+        @/B01L
+            Q04F=1
+        @/B01L*W99L
+            Q01F=1
+            
+@W75L*J91L*/W07L
+    @B13L                   #Normalize B,X
+        B{13:2}=B{12:1}     #Shift mantissa one octet to the left
+        B{1}=X{13}          #Get rightmost octet from extension
+        X{13:2}=X{12:1}     #Shift extension one octet to the left
+        M[11]B[46:40]-1     #Decrement Exponent, with carry in M[11]
+    @/B13L                  #Interchange operands
+        Q06F=1
+        A=B
+        B=A
+
+@W73L*J91L
+    @W99L                   #Exit to subtract operation
+        J=5
+        Q01F=^Q01F
+        M[6:4]=^M[6:4]
+    @W02L                   #Place the complement of the smallest operand in A
+        A[39:1]=^A[39:1]
+        Q01F=^Q01F
+    @/W02L
+        A[39:1]=^B[39:1]
+        B=A
+    @SUIL*/Q06F*/W02L       #Memorize change of sign
+        Q02F=1
+    @W99L
+        M[10:8]B[39:1]=M[10:8]B[39:1]+M[6:4]A[39:1]+Q01F
+        A=0
+        @SUIL*Q06F
+            B[47]=^B[47]    #Set sign of result
+        @W13L
+            J=4             #Exit to scale result
+        @/W13L
+            EXIT            #No overflow,operation complete
+
+@J04L                       #Scale for overflow
+    M[11]B[46:40]+1
+    J=15                    #Scale B
+    B{12:1}=B{13:2}
+    B[39:37]=M[10:8]
+    @B03F
+        Q01F=1
+    @/B02F*/B01F+/B03F
+        Q01F=0
+
+@J05L                       #Subtract
+    M[10:8]B[39:1]=M[10:8]B[39:1]+M[6:4]A[39:1]+Q01F
+    Q01F=0
+    A=0
+    M[6:4]=0
+    @Q02F
+        B47F=^B47F          #Set sign of result
+    @/W13L
+        J=7                 #Exit to decomplement
+    @Q04F
+        @/W36C*/B39F*/B38F
+            J=8             #Exit to normalize
+        @W36C*/B39F*/B38F+X39F*I07L
+            J=15            #Exit to round
+        @/X39F*I07L
+            EXIT
+        @/W36C*/B39F*/B38F*X36F+X39F*(W36C+B39F+B38F)
+            Q01F=1          #Prepare for round
+    @/Q04F
+        @/W03L
+            EXIT
+        @W03L*W13L
+            J=15            #Exit to Round
+
+@J07L                       #Decomplement
+    B[39:1]=0               #Clear B Mantissa
+    A[39:1]=^B[39:1]        #7's complement of result to A
+    J=15                    #Exit to round
+    B47F=^B47F              #Change sign of result
+    Q01F=1
+
+@J08L
+    J=15                    #Exit to round
+    X{13:2}=X{12:1}
+    M[11]B[46:40]-1
+    B1=X13
+    B{13:2}=B{12:1}
+
+@J15L
+    M[10:8]B[39:1]=M[10:8]B[39:1]+M[6:4]A[39:1]+Q01F
+    EXIT
+    @M11F*NCSF
+        EXP_INT=1
+    @/Q01F*W07L
+        B=0                 #Set B to 0

@@ -31,7 +31,7 @@ int dotrcmem	 = false;	/* trace memory accesses */
 int dolistsource = false;	/* list source line */
 int dotrcins	 = false;	/* trace instruction execution */
 int	dotrcmat	 = false;	/* trace math operations */
-int	clearpath	 = false;	/* clearpath math */
+int	emode	 = false;	/* emode math */
 
 typedef enum labelst {entered=0, defined} LABELST;
 typedef struct labelrec {
@@ -605,7 +605,7 @@ int main(int argc, char *argv[])
 			dodmpins = true; /* dump instructions after assembly */
 			break;
 		case 'c':
-			clearpath = true; /* do math the clearpath way */
+			emode = true; /* do math the emode way */
 			break;
 		case 'm':
 			dotrcmem = true; /* trace memory accesses */
