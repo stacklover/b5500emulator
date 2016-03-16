@@ -521,7 +521,7 @@ extern void run(CPU *);
 /*
  * bit and field manipulations
  *
- * observe bit numbering!
+ * observe bit numbering (0..47)!
  */
 extern void fieldTransfer(
 	WORD48 *dest,		// word to insert into
@@ -541,13 +541,9 @@ extern WORD48 fieldInsert(
 	unsigned width,
 	WORD48 value);
 
-extern void bitSet(
-	WORD48 *dest,
-	unsigned bit);
-
-extern void bitReset(
-	WORD48 *dest,
-	unsigned bit);
+extern void bitSet(WORD48 *, unsigned);
+extern void bitReset(WORD48 *, unsigned);
+extern BIT bitTest(WORD48, unsigned);
 
 /*
  * for assembler/disassembler

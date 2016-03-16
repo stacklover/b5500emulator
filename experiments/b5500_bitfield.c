@@ -17,6 +17,10 @@
 #include "b5500_common.h"
 
 /*
+ * Note: Bits are numbered 0..47 from most significant to least significant!
+ */
+
+/*
  * bitmasks for 0..48 bits
  */
 const WORD48 bitmask[49] = {0,
@@ -41,7 +45,7 @@ const WORD48 bitmask[49] = {0,
  * Inserts a bit field from value.[vstart:width] into word.[wstart:width]
  * and returns the updated word
  */
-extern void fieldTransfer(
+void fieldTransfer(
 	WORD48 *dest,		// word to insert into
 	unsigned wstart,	// starting bit in that word
 	unsigned width,		// number of bits
@@ -54,7 +58,7 @@ extern void fieldTransfer(
 	*dest = fieldInsert(*dest, wstart, width, temp);
 }
 
-extern WORD48 fieldIsolate(
+WORD48 fieldIsolate(
 	WORD48 word,		// value to isolate from
 	unsigned start,		// starting bit in the value
 	unsigned width)		// number of bits
@@ -70,7 +74,7 @@ extern WORD48 fieldIsolate(
 }
 
 
-extern WORD48 fieldInsert(
+WORD48 fieldInsert(
 	WORD48 word,
 	unsigned start,
 	unsigned width,
@@ -88,16 +92,24 @@ extern WORD48 fieldInsert(
 }
 
 
-extern void bitSet(
+void bitSet(
 	WORD48 *dest,
 	unsigned bit)
 {
+	*dest |= 1ll << (48-bit);
 }
 
 
-extern void bitReset(
+void bitReset(
 	WORD48 *dest,
 	unsigned bit)
 {
+	*dest &= ~(1ll << (48-bit));
 }
 
+BIT bitTest(
+	WORD48 src,
+	unsigned bit)
+{
+	return src & (1ll << (48-bit)) ? true : false;
+}
