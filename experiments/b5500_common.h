@@ -387,20 +387,6 @@ extern CENTRAL_CONTROL	*CC;
 #define	SHFT_IODRESULT	15
 #define	SHFT_IODADDR	0
 
-#if 0
-/*
- * special use of host wordsize to aid in arithmetics
- */
-typedef unsigned long long WORD64;		// carry + 39 bits mantissa + 24 bit extension
-#define	MASK_MANTLJ		00777777777777700000000	// mantissa left aligned in 64 bit word
-#define	MASK_MANTROUND	00000000000000077777777	// right shifted rounding part
-#define	MASK_MANTHIGHLJ	00700000000000000000000	// highest octet of left justified mantissa
-#define	MASK_MANTCARRY	01000000000000000000000	// the carry/not borrow bit
-#define	SHFT_MANTISSALJ	24
-#define	SHFT_EXTTOXREG	(39-24)
-#define	VALU_ROUNDUP	00000000000000040000000	// value that causes rounding up
-#endif
-
 /*
  * For all single precision operations we use the 64 bits of the host
  * machine's "unsigned long long" (typedef WORD48) to hold the
@@ -493,6 +479,7 @@ extern void doublePrecisionMultiply(CPU *);
 extern void doublePrecisionDivide(CPU *);
 
 /* stream operations */
+extern const WORD6 collation[64];
 extern void streamAdjustSourceChar(CPU *);
 extern void streamAdjustDestChar(CPU *);
 extern void compareSourceWithDest(CPU *, unsigned count, BIT numeric);

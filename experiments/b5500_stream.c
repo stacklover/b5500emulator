@@ -16,7 +16,7 @@
 #include "b5500_common.h"
 
 // index by BIC to get collation value
-const WORD6 collation[] = {
+const WORD6 collation[64] = {
 	53, 54, 55, 56, 57, 58, 59, 60,		// @00: 0 1 2 3 4 5 6 7
 	61, 62, 19, 20, 63, 21, 22, 23,		// @10: 8 9 # @ ? : > }
 	24, 25, 26, 27, 28, 29, 30, 31,		// @20: + A B C D E F G
@@ -25,6 +25,21 @@ const WORD6 collation[] = {
 	42, 43,  7,  8, 12,  9, 10, 11,		// @50: Q R $ * - ) ; {
 	 0, 13, 45, 46, 47, 48, 49, 50,		// @60: _ / S T U V W X  (_ = blank)
 	51, 52, 14, 15, 44, 16, 17, 18};	// @70: Y Z , % ! = ] "
+
+/*
+ * Generally
+ *
+ * M/C Source address
+ * A/P Source word
+ * G Source char index in word 0..7 (for display in Y)
+ * H Source bit index in char 0..5
+ *
+ * S Destination address
+ * B Destination word
+ * K Destination char index in word 0..7 (for display in Z)
+ * V Destination bit index in char 0..5
+ */
+
 /*
  * Adjusts the character-mode source pointer to the next character
  * boundary, as necessary. If the adjustment crosses a word boundary,
@@ -33,12 +48,18 @@ const WORD6 collation[] = {
 void streamAdjustSourceChar(CPU *this)
 {
 	if (this->r.H > 0) {
+		// not at bit position 0
+		// reset bit position
 		this->r.H = 0;
+		// more to next char
 		if (this->r.G < 7) {
+			// in same word
 			++this->r.G;
 		} else {
+			// in next word
 			this->r.G = 0;
-			this->r.AROF = 0;
+			// make sure its loaded next
+			this->r.AROF = false;
 			++this->r.M;
 		}
 	}
@@ -53,15 +74,21 @@ void streamAdjustSourceChar(CPU *this)
 void streamAdjustDestChar(CPU *this)
 {
 	if (this->r.V > 0) {
+		// not at bit position 0
+		// reset bit position
 		this->r.V = 0;
+		// more to next char
 		if (this->r.K < 7) {
+			// in same word
 			++this->r.K;
 		} else {
+			// in next word
 			this->r.K = 0;
+			// current word touched?
 			if (this->r.BROF) {
-				// [S] = B
+				// store it
 				storeBviaS(this);
-				this->r.BROF = 0;
+				this->r.BROF = false;
 			}
 			++this->r.S;
 		}
@@ -74,10 +101,10 @@ void streamAdjustDestChar(CPU *this)
  * "count" is the number of source characters to process.
  * The result of the comparison is left in two flip-flops:
  * Q03F=1: an inequality was detected
- * MSFF=1: the inequality was source > destination
- * If the two strings are equal, Q03F and MSFF will both be zero. Once an
- * inequality is encountered, Q03F will be set to 1 and MSFF (also known as
- * TFFF) will be set based on the nature of inequality. After this point, the
+ * TFFF=1: the inequality was source > destination
+ * If the two strings are equal, Q03F and TFFF will both be zero. Once an
+ * inequality is encountered, Q03F will be set to 1 and TFFF (also known as
+ * MSFF) will be set based on the nature of inequality. After this point, the
  * processor merely advances its address pointers to exhaust the count and does
  * not fetch additional words from memory. Note that the processor uses Q04F to
  * inhibit storing the B register at the end of a word boundary. This store
@@ -87,27 +114,27 @@ void streamAdjustDestChar(CPU *this)
 void compareSourceWithDest(CPU *this, unsigned count, BIT numeric)
 {
 	unsigned	aBit;	// A register bit nr
-	WORD48		aw;	// current A register word
+	WORD48		aw;		// current A register word
 	unsigned	bBit;	// B register bit nr
-	WORD48		bw;	// current B register word
-	BIT		Q03F = this->r.Q03F; // local copy of Q03F: inequality detected
-	BIT		Q04F = this->r.Q04F; // local copy of Q04F: B not dirty
+	WORD48		bw;		// current B register word
+	BIT			Q03F = this->r.Q03F; // local copy of Q03F: inequality detected
+	BIT			Q04F = this->r.Q04F; // local copy of Q04F: B not dirty
 	unsigned	yc = 0;	// local Y register
 	unsigned	zc = 0;	// local Z register
 
-	this->r.MSFF = 0;
+	this->r.TFFF = false;
 	streamAdjustSourceChar(this);
 	streamAdjustDestChar(this);
 	if (count) {
 		if (this->r.BROF) {
 			if (this->r.K == 0) {
 				// set Q04F -- at start of word, no need to store B later
-				Q04F = 1;
+				Q04F = true;
 			}
 		} else {
 			loadBviaS(this); // B = [S]
 			// set Q04F -- just loaded B, no need to store it later
-			Q04F = 1;
+			Q04F = true;
 		}
 		if (!this->r.AROF) {
 			loadAviaM(this); // A = [M]
@@ -115,7 +142,7 @@ void compareSourceWithDest(CPU *this, unsigned count, BIT numeric)
 
 		// setting Q06F and saving the count in H & V is only significant if this
 		// routine is executed as part of Field Add (FAD) or Field Subtract (FSU).
-		this->r.Q06F = 1; // set Q06F
+		this->r.Q06F = true; // set Q06F
 		this->r.H = count >> 3;
 		this->r.V = count & 7;
 
@@ -133,11 +160,11 @@ void compareSourceWithDest(CPU *this, unsigned count, BIT numeric)
 						// test Q04F to see if B may be dirty
 						storeBviaS(this); // [S] = B
 						// set Q04F so we won't store B anymore
-						Q04F = 1;
+						Q04F = true;
 					}
-					this->r.BROF = 0;
+					this->r.BROF = false;
 					++this->r.S;
-					this->r.AROF = 0;
+					this->r.AROF = false;
 					++this->r.M;
 				} else {
 					--count;
@@ -148,17 +175,17 @@ void compareSourceWithDest(CPU *this, unsigned count, BIT numeric)
 							// test Q04F to see if B may be dirty
 							storeBviaS(this); // [S] = B
 							// set Q04F so we won't store B anymore
-							Q04F = 1;
+							Q04F = true;
 						}
 						this->r.K = 0;
-						this->r.BROF = 0;
+						this->r.BROF = false;
 						++this->r.S;
 					}
 					if (this->r.G < 7) {
 						++this->r.G;
 					} else {
 						this->r.G = 0;
-						this->r.AROF = 0;
+						this->r.AROF = false;
 						++this->r.M;
 					}
 				}
@@ -173,11 +200,11 @@ void compareSourceWithDest(CPU *this, unsigned count, BIT numeric)
 				}
 				if (yc != zc) {
 					// set Q03F to stop further comparison
-					Q03F = 1;
+					Q03F = true;
 					if (numeric) {
-						this->r.MSFF = yc > zc ? 1 : 0;
+						this->r.TFFF = yc > zc ? 1 : 0;
 					} else {
-						this->r.MSFF = collation[yc] > collation[zc] ? 1 : 0;
+						this->r.TFFF = collation[yc] > collation[zc] ? 1 : 0;
 					}
 				} else {
 					// strings still equal -- advance to next character
@@ -186,34 +213,34 @@ void compareSourceWithDest(CPU *this, unsigned count, BIT numeric)
 						bBit += 6;
 						++this->r.K;
 					} else {
-						bBit = 0;
+						bBit = false;
 						this->r.K = 0;
 						// test Q04F to see if B may be dirty
 						if (!Q04F) {
 							storeBviaS(this); // [S] = B
 							// set Q04F so we won't store B anymore
-							Q04F = 1;
+							Q04F = true;
 						}
 						++this->r.S;
 						if (count > 0) {
 							loadBviaS(this); // B = [S]
 							bw = this->r.B;
 						} else {
-							this->r.BROF = 0;
+							this->r.BROF = false;
 						}
 					}
 					if (aBit < 42) {
 						aBit += 6;
 						++this->r.G;
 					} else {
-						aBit = 0;
+						aBit = false;
 						this->r.G = 0;
 						++this->r.M;
 						if (count > 0) {
 							loadAviaM(this); // A = [M]
 							aw = this->r.A;
 						} else {
-							this->r.AROF = 0;
+							this->r.AROF = false;
 						}
 					}
 				}
@@ -235,26 +262,26 @@ void compareSourceWithDest(CPU *this, unsigned count, BIT numeric)
 void fieldArithmetic(CPU *this, unsigned count, BIT adding)
 {
 	unsigned	aBit;	// A register bit nr
-	WORD48		aw;	// current A register word
+	WORD48		aw;		// current A register word
 	unsigned	bBit;	// B register bit nr
-	WORD48		bw;	// current B register word
-	BIT		carry = 0;	// carry/borrow bit
-	BIT		compl = false;	// complement addition (i.e., subtract the digits)
-	BIT		TFFF;	// local copy of MSFF/TFFF
-	BIT		Q03F;	// local copy of Q03F
-	BIT		resultNegative;	// sign of result is negative
-	unsigned	sd;	// digit sum
-	BIT		ycompl = false;	// complement source digits
-	unsigned	yd;	// source digit
-	BIT		zcompl = false;	// complement destination digits
-	unsigned	zd;	// destination digit
+	WORD48		bw;		// current B register word
+	BIT			carry = false;	// carry/borrow bit
+	BIT			compl = false;	// complement addition (i.e., subtract the digits)
+	BIT			TFFF;	// local copy of TFFF/TFFF
+	BIT			Q03F;	// local copy of Q03F
+	BIT			resultNegative;	// sign of result is negative
+	unsigned	sd;		// digit sum
+	BIT			ycompl = false;	// complement source digits
+	unsigned	yd;		// source digit
+	BIT			zcompl = false;	// complement destination digits
+	unsigned	zd;		// destination digit
 
 	compareSourceWithDest(this, count, true);
 	this->cycleCount += 2;	// approximate the timing thus far
 	if (this->r.Q06F) {	// Q06F => count > 0, so there's characters to add
-		this->r.Q06F = 0;
-		this->r.Q04F = 0; // reset Q06F and Q04F
-		TFFF = (this->r.MSFF != 0); // get TFFF as a Boolean
+		this->r.Q06F = false;
+		this->r.Q04F = false; // reset Q06F and Q04F
+		TFFF = (this->r.TFFF != 0); // get TFFF as a Boolean
 		Q03F = this->r.Q03F; // get Q03F as a Boolean
 
 		// Back down the pointers to the last characters of their respective fields
@@ -262,14 +289,14 @@ void fieldArithmetic(CPU *this, unsigned count, BIT adding)
 			--this->r.K;
 		} else {
 			this->r.K = 7;
-			this->r.BROF = 0;
+			this->r.BROF = false;
 			--this->r.S;
 		}
 		if (this->r.G > 0) {
 			--this->r.G;
 		} else {
 			this->r.G = 7;
-			this->r.AROF = 0;
+			this->r.AROF = false;
 			--this->r.M;
 		}
 
@@ -280,7 +307,7 @@ void fieldArithmetic(CPU *this, unsigned count, BIT adding)
 			loadAviaM(this); // A = [M]
 		}
 
-		this->r.Q08F = 1; // set Q08F (for display only)
+		this->r.Q08F = true; // set Q08F (for display only)
 		aBit = this->r.G*6; // A-bit number
 		aw = this->r.A;
 		bBit = this->r.K*6; // B-bit number
@@ -294,11 +321,11 @@ void fieldArithmetic(CPU *this, unsigned count, BIT adding)
 			(zd != 0 && compl && Q03F && TFFF) ||
 			(compl && !Q03F));
 		if (compl) {
-			this->r.Q07F = 1;
-			this->r.Q02F = 1; // set Q07F and Q02F (for display only)
-			carry = 1; // preset the carry/borrow bit (Q07F)
+			this->r.Q07F = true;
+			this->r.Q02F = true; // set Q07F and Q02F (for display only)
+			carry = true; // preset the carry/borrow bit (Q07F)
 			if (TFFF) {
-				this->r.Q04F = 1; // set Q04F (for display only)
+				this->r.Q04F = true; // set Q04F (for display only)
 				zcompl = true;
 			} else {
 				ycompl = true;
@@ -313,9 +340,9 @@ void fieldArithmetic(CPU *this, unsigned count, BIT adding)
 			zd = fieldIsolate(bw, bBit+2, 4); // get the dest digit
 			sd = (ycompl ? 9-yd : yd) + (zcompl ? 9-zd : zd) + carry; // develop binary digit sum
 			if (sd <= 9) {
-				carry = 0;
+				carry = false;
 			} else {
-				carry = 1;
+				carry = true;
 				sd -= 10;
 			}
 			if (resultNegative) {
@@ -380,9 +407,9 @@ void fieldArithmetic(CPU *this, unsigned count, BIT adding)
 		}
 		this->r.A = aw;
 		this->r.B = bw;
-		this->r.AROF = this->r.BROF = 0;
+		this->r.AROF = this->r.BROF = false;
 		this->r.H = this->r.V = this->r.N = 0;
-		this->r.MSFF = (compl ? 1-carry : carry); // MSFF/TFFF = overflow indicator
+		this->r.TFFF = (compl ? 1-carry : carry); // TFFF/TFFF = overflow indicator
 	}
 }
 
@@ -426,7 +453,7 @@ void streamBitsToDest(CPU *this, unsigned count, WORD48 mask)
 				if (count > 0) {
 					loadBviaS(this); // B = [S], fetch next word in sequence
 				} else {
-					this->r.BROF = 0;
+					this->r.BROF = false;
 				}
 			}
 		} while (count);
@@ -440,10 +467,10 @@ void streamBitsToDest(CPU *this, unsigned count, WORD48 mask)
 void streamProgramToDest(CPU *this, unsigned count)
 {
 	unsigned	bBit;	// B register bit nr
-	WORD48		bw;	// current B register value
-	unsigned	c;	// current character
+	WORD48		bw;		// current B register value
+	unsigned	c;		// current character
 	unsigned	pBit;	// P register bit nr
-	WORD48		pw;	// current P register value
+	WORD48		pw;		// current P register value
 
 	streamAdjustDestChar(this);
 	if (count) { // count > 0
@@ -466,7 +493,7 @@ void streamProgramToDest(CPU *this, unsigned count)
 				bBit += 6;
 				++this->r.K;
 			} else {
-				bBit = 0;
+				bBit = false;
 				this->r.K = 0;
 				this->r.B = bw;
 				storeBviaS(this); // [S] = B
@@ -475,7 +502,7 @@ void streamProgramToDest(CPU *this, unsigned count)
 					loadBviaS(this); // B = [S]
 					bw = this->r.B;
 				} else {
-					this->r.BROF = 0;
+					this->r.BROF = false;
 				}
 			}
 			if (pBit < 42) {
@@ -484,7 +511,7 @@ void streamProgramToDest(CPU *this, unsigned count)
 					++this->r.L;
 				}
 			} else {
-				pBit = 0;
+				pBit = false;
 				this->r.L = 0;
 				++this->r.C;
 				loadPviaC(this); // P = [C]
@@ -503,10 +530,10 @@ void streamProgramToDest(CPU *this, unsigned count)
 void streamCharacterToDest(CPU *this, unsigned count)
 {
 	unsigned	aBit;	// A register bit nr
-	WORD48		aw;	// current A register word
+	WORD48		aw;		// current A register word
 	unsigned	bBit;	// B register bit nr
-	WORD48		bw;	// current B register word
-	unsigned	c;	// current character
+	WORD48		bw;		// current B register word
+	unsigned	c;		// current character
 
 	streamAdjustSourceChar(this);
 	streamAdjustDestChar(this);
@@ -530,7 +557,7 @@ void streamCharacterToDest(CPU *this, unsigned count)
 				bBit += 6;
 				++this->r.K;
 			} else {
-				bBit = 0;
+				bBit = false;
 				this->r.K = 0;
 				this->r.B = bw;
 				storeBviaS(this); // [S] = B
@@ -539,21 +566,21 @@ void streamCharacterToDest(CPU *this, unsigned count)
 					loadBviaS(this); // B = [S]
 					bw = this->r.B;
 				} else {
-					this->r.BROF = 0;
+					this->r.BROF = false;
 				}
 			}
 			if (aBit < 42) {
 				aBit += 6;
 				++this->r.G;
 			} else {
-				aBit = 0;
+				aBit = false;
 				this->r.G = 0;
 				++this->r.M;
 				if (count > 0) { // only need to load A if there's more to do
 					loadAviaM(this); // A = [M]
 					aw = this->r.A;
 				} else {
-					this->r.AROF = 0;
+					this->r.AROF = false;
 				}
 			}
 		} while (count);
@@ -565,15 +592,15 @@ void streamCharacterToDest(CPU *this, unsigned count)
 /*
  * Transfers from source to destination for the TRN and TRZ syllables. "count"
  * is the number of source characters to transfer. If transferring numerics and the
- * low-order character has a negative sign (BA=10), sets MSFF=1
+ * low-order character has a negative sign (BA=10), sets TFFF=1
  */
 void streamNumericToDest(CPU *this, unsigned count, unsigned zones)
 {
 	unsigned	aBit;	// A register bit nr
-	WORD48		aw;	// current A register word
+	WORD48		aw;		// current A register word
 	unsigned	bBit;	// B register bit nr
-	WORD48		bw;	// current B register word
-	unsigned	c;	// current character
+	WORD48		bw;		// current B register word
+	unsigned	c;		// current character
 
 	streamAdjustSourceChar(this);
 	streamAdjustDestChar(this);
@@ -606,7 +633,7 @@ void streamNumericToDest(CPU *this, unsigned count, unsigned zones)
 				bBit += 6;
 				++this->r.K;
 			} else {
-				bBit = 0;
+				bBit = false;
 				this->r.K = 0;
 				this->r.B = bw;
 				storeBviaS(this); // [S] = B
@@ -615,28 +642,28 @@ void streamNumericToDest(CPU *this, unsigned count, unsigned zones)
 					loadBviaS(this); // B = [S]
 					bw = this->r.B;
 				} else {
-					this->r.BROF = 0;
+					this->r.BROF = false;
 				}
 			}
 			if (aBit < 42) {
 				aBit += 6;
 				++this->r.G;
 			} else {
-				aBit = 0;
+				aBit = false;
 				this->r.G = 0;
 				++this->r.M;
 				if (count > 0) { // only need to load A if there's more to do
 					loadAviaM(this); // A = [M]
 					aw = this->r.A;
 				} else {
-					this->r.AROF = 0;
+					this->r.AROF = false;
 				}
 			}
 		} while (count);
 		this->r.B = bw;
 		this->r.Y = c; // for display purposes only
 		if (!zones && (c & 0x30) == 0x20) {
-			this->r.MSFF = 1; // last char had a negative sign
+			this->r.TFFF = true; // last char had a negative sign
 		}
 	}
 }
@@ -645,16 +672,16 @@ void streamNumericToDest(CPU *this, unsigned count, unsigned zones)
  * Implements the TBN (Transfer Blanks for Non-Numeric) syllable, which is
  * generally used to suppress leading zeroes in numeric strings. Transfers blanks
  * to the destination under control of the count as long as the destination characters
- * are not in the range "1"-"9". Sets MSFF (TFFF) true if the count is exhausted.
+ * are not in the range "1"-"9". Sets TFFF (MSFF) true if the count is exhausted.
  * "count" is the maximum number of characters to blank
  */
 void streamBlankForNonNumeric(CPU *this, unsigned count)
 {
 	unsigned	bBit;	// B register bit nr
-	WORD48		bw;	// current B register word
-	unsigned 	c;	// current destination character
+	WORD48		bw;		// current B register word
+	unsigned 	c;		// current destination character
 
-	this->r.MSFF = 1; // assume the count will be exhausted
+	this->r.TFFF = true; // assume the count will be exhausted
 	streamAdjustDestChar(this);
 	if (count) {
 		if (!this->r.BROF) {
@@ -667,9 +694,9 @@ void streamBlankForNonNumeric(CPU *this, unsigned count)
 			c = fieldIsolate(bw, bBit, 6);
 			if (c > 0 && c <= 9) {
 				// is numeric and non-zero: stop blanking
-				this->r.MSFF = 0;
+				this->r.TFFF = false;
 				// set Q03F (display only)
-				this->r.Q03F = 1;
+				this->r.Q03F = true;
 				// terminate, pointing at this char
 				break;
 			} else {
@@ -679,7 +706,7 @@ void streamBlankForNonNumeric(CPU *this, unsigned count)
 					bBit += 6;
 					++this->r.K;
 				} else {
-					bBit = 0;
+					bBit = false;
 					this->r.K = 0;
 					this->r.B = bw;
 					storeBviaS(this); // [S] = B
@@ -688,7 +715,7 @@ void streamBlankForNonNumeric(CPU *this, unsigned count)
 						loadBviaS(this); // B = [S]
 						bw = this->r.B;
 					} else {
-						this->r.BROF = 0;
+						this->r.BROF = false;
 					}
 				}
 			}
@@ -714,14 +741,14 @@ void streamBlankForNonNumeric(CPU *this, unsigned count)
  */
 void streamInputConvert(CPU *this, unsigned count)
 {
-	WORD48		a = 0;	// local working copy of A
-	WORD48		b = 0;	// local working copy of B
-	WORD48		power = 1;	// A-register shift factor
+	WORD48	a = 0;		// local working copy of A
+	WORD48	b = 0;		// local working copy of B
+	WORD48	power = 1;	// A-register shift factor
 
 	streamAdjustSourceChar(this);
 	if (this->r.BROF) {
 		storeBviaS(this); // [S] = B
-		this->r.BROF = 0;
+		this->r.BROF = false;
 	}
 	if (this->r.K || this->r.V) { // adjust dest to word boundary
 		this->r.K = this->r.V = 0;
@@ -745,13 +772,13 @@ void streamInputConvert(CPU *this, unsigned count)
 				if (count > 1) {
 					loadAviaM(this); // A = [M], only if more chars are needed
 				} else {
-					this->r.AROF = 0;
+					this->r.AROF = false;
 				}
 			}
 		} while (--count);
 
 		// Then do the artful shifting to form the binary value in A
-		this->r.AROF = 0;
+		this->r.AROF = false;
 		this->r.B = b; // for display purposes only
 		while (b) {
 			if (b & 0x01) {
@@ -790,25 +817,25 @@ void streamInputConvert(CPU *this, unsigned count)
  * Converts the binary word addressed by M (after word-boundary adjustment)
  * to decimal BIC at the destination address of S & K. The maximum number of
  * digits to convert is 8. If the binary value can be represented in "count"
- * digits (or the count is zero), the true-false FF, MSFF, is set; otherwise it
+ * digits (or the count is zero), the true-false FF, TFFF, is set; otherwise it
  * is reset. The sign is stored in low-order character of the result
  */
 void streamOutputConvert(CPU *this, unsigned count)
 {
-	WORD48		a;	// local working copy of A
+	WORD48		a;		// local working copy of A
 	WORD48		b = 0;	// local working copy of B
-	unsigned	c;	// converted decimal character
+	unsigned	c;		// converted decimal character
 	unsigned	d = 0;	// digit counter
-	WORD48		power = 1;	// power-of-64 factor for result digits
+	WORD48	power = 1;	// power-of-64 factor for result digits
 
-	this->r.MSFF = 1; // set TFFF unless there's overflow
+	this->r.TFFF = true; // set TFFF unless there's overflow
 	streamAdjustDestChar(this);
 	if (this->r.BROF) {
 		storeBviaS(this); // [S] = B, but leave BROF set
 	}
 	if (this->r.G || this->r.H) { // adjust source to word boundary
 		this->r.G = this->r.H = 0;
-		this->r.AROF = 0;
+		this->r.AROF = false;
 		++this->r.M;
 	}
 	if (count) { // count > 0
@@ -833,10 +860,10 @@ void streamOutputConvert(CPU *this, unsigned count)
 			} while (a && (++d < count));
 			if (a) {
 				// overflow occurred, so reset TFFF
-				this->r.MSFF = 0;
+				this->r.TFFF = false;
 			}
 		}
-		this->r.AROF = 0; // invalidate A
+		this->r.AROF = false; // invalidate A
 		++this->r.M; // and advance to the next source word
 
 		// Finally, stream the digits from A (whose value is still in local b) to the destination
@@ -855,7 +882,7 @@ void streamOutputConvert(CPU *this, unsigned count)
 				if (count > 1) {
 					loadBviaS(this); // B = [S]
 				} else {
-					this->r.BROF = 0;
+					this->r.BROF = false;
 				}
 			}
 		} while (--count);
