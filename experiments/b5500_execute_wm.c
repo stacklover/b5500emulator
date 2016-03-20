@@ -471,9 +471,9 @@ common_branch:
 				if (OPERAND(this->r.A)) {
 					// simple operand
 					if (variant == 001 || variant == 041)
-						jumpSyllables(this, -(this->r.A & MASKMEM));
+						jumpSyllables(this, -(this->r.A & 0xfff));
 					else
-						jumpSyllables(this, this->r.A & MASKMEM);
+						jumpSyllables(this, this->r.A & 0xfff);
 					this->r.AROF = false;
 				} else {
 					// descriptor
