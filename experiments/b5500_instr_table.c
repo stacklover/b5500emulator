@@ -136,124 +136,124 @@ const INSTRUCTION instr[] = {
 // CHAR mode instructions
 //
 // CMX, EXC: Exit character mode
-	{"EXC",  00000, OP_NONE, OP_ASIS},
-	{"CMX",  00100, OP_NONE, OP_ASIS},
+	{"EXC",  00000, OP_NONE, OP_ASIS, true},
+	{"CMX",  00100, OP_NONE, OP_ASIS, true},
 // BSD=Skip bit destination
-	{"BSD",  00002, OP_EXPR, OP_TOP6},
+	{"BSD",  00002, OP_EXPR, OP_TOP6, true},
 // BSS=Skip bit source
-	{"BSS",  00003, OP_EXPR, OP_TOP6},
+	{"BSS",  00003, OP_EXPR, OP_TOP6, true},
 // RDA=Recall destination address
-	{"RDA",  00004, OP_EXPR, OP_TOP6},
+	{"RDA",  00004, OP_EXPR, OP_TOP6, true},
 // TRW=Transfer words
-	{"TRW",  00005, OP_NONE, OP_TOP6},
+	{"TRW",  00005, OP_NONE, OP_TOP6, true},
 // SED=Set destination address
-	{"SED",  00006, OP_EXPR, OP_TOP6},
+	{"SED",  00006, OP_EXPR, OP_TOP6, true},
 // TDA=Transfer destination address
-	{"TDA",  00007, OP_NONE, OP_ASIS},
+	{"TDA",  00007, OP_NONE, OP_ASIS, true},
 // Control State ops
-	{"ZPI",  02411, OP_NONE, OP_ASIS},
-   	{"SFI",  03011, OP_NONE, OP_ASIS},
-	{"SFT",  03411, OP_NONE, OP_ASIS},
+	{"ZPI",  02411, OP_NONE, OP_ASIS, true},
+   	{"SFI",  03011, OP_NONE, OP_ASIS, true},
+	{"SFT",  03411, OP_NONE, OP_ASIS, true},
 // TBN=Transfer blanks for non-numeric
-	{"TBN",  00012, OP_EXPR, OP_TOP6},
+	{"TBN",  00012, OP_EXPR, OP_TOP6, true},
 // SDA=Store destination address
-	{"SDA",  00014, OP_EXPR, OP_TOP6},
+	{"SDA",  00014, OP_EXPR, OP_TOP6, true},
 // SSA=Store source address
-	{"SSA",  00015, OP_EXPR, OP_TOP6},
+	{"SSA",  00015, OP_EXPR, OP_TOP6, true},
 // SFD=Skip forward destination
-	{"SFD",  00016, OP_EXPR, OP_TOP6},
+	{"SFD",  00016, OP_EXPR, OP_TOP6, true},
 // SRD=Skip reverse destination
-	{"SRD",  00017, OP_EXPR, OP_TOP6},
+	{"SRD",  00017, OP_EXPR, OP_TOP6, true},
 // SES=Set source address
-	{"SES",  00022, OP_EXPR, OP_TOP6},
+	{"SES",  00022, OP_EXPR, OP_TOP6, true},
 // TEQ=Test for equal
-	{"TEQ",  00024, OP_EXPR, OP_TOP6},
+	{"TEQ",  00024, OP_EXPR, OP_TOP6, true},
 // TNE=Test for not equal
-	{"TNE",  00025, OP_EXPR, OP_TOP6},
+	{"TNE",  00025, OP_EXPR, OP_TOP6, true},
 // TEG=Test for equal or greater
-	{"TEG",  00026, OP_EXPR, OP_TOP6},
+	{"TEG",  00026, OP_EXPR, OP_TOP6, true},
 // TGR=Test for greater
-	{"TGR",  00027, OP_EXPR, OP_TOP6},
+	{"TGR",  00027, OP_EXPR, OP_TOP6, true},
 // SRS=Skip reverse source
-	{"SRS",  00030, OP_EXPR, OP_TOP6},
+	{"SRS",  00030, OP_EXPR, OP_TOP6, true},
 // SFS=Skip forward source
-	{"SFS",  00031, OP_EXPR, OP_TOP6},
+	{"SFS",  00031, OP_EXPR, OP_TOP6, true},
 // FSB=Field subtract (aux)
-	{"FSB",  00032, OP_EXPR, OP_TOP6},
+	{"FSB",  00032, OP_EXPR, OP_TOP6, true},
 // FAD=Field add (aux)
-	{"FAD",  00033, OP_EXPR, OP_TOP6},
+	{"FAD",  00033, OP_EXPR, OP_TOP6, true},
 // TEL=Test for equal or less
-	{"TEL",  00034, OP_EXPR, OP_TOP6},
+	{"TEL",  00034, OP_EXPR, OP_TOP6, true},
 // TLS=Test for less
-	{"TLS",  00035, OP_EXPR, OP_TOP6},
+	{"TLS",  00035, OP_EXPR, OP_TOP6, true},
 // TAN=Test for alphanumeric
-	{"TAN",  00036, OP_EXPR, OP_TOP6},
+	{"TAN",  00036, OP_EXPR, OP_TOP6, true},
 // BIT=Test bit
-	{"BIT",  00037, OP_EXPR, OP_TOP6},
+	{"BIT",  00037, OP_EXPR, OP_TOP6, true},
 // INC=Increase TALLY
-	{"INC",  00040, OP_EXPR, OP_TOP6},
+	{"INC",  00040, OP_EXPR, OP_TOP6, true},
 // STC=Store TALLY
-	{"STC",  00041, OP_EXPR, OP_TOP6},
+	{"STC",  00041, OP_EXPR, OP_TOP6, true},
 // SEC=Set TALLY
-	{"SEC",  00042, OP_EXPR, OP_TOP6},
+	{"SEC",  00042, OP_EXPR, OP_TOP6, true},
 // CRF=Call repeat field
-	{"CRF",  00043, OP_EXPR, OP_TOP6},
+	{"CRF",  00043, OP_EXPR, OP_TOP6, true},
 // JNC=Jump out of loop conditional
-	{"JNC",  00044, OP_EXPR, OP_TOP6},
+	{"JNC",  00044, OP_EXPR, OP_TOP6, true},
 // JFC=Jump forward conditional
-	{"JFC",  00045, OP_EXPR, OP_TOP6},
+	{"JFC",  00045, OP_EXPR, OP_TOP6, true},
 // JNS=Jump out of loop
-	{"JNS",  00046, OP_EXPR, OP_TOP6},
+	{"JNS",  00046, OP_EXPR, OP_TOP6, true},
 // JFW=Jump forward unconditional
-	{"JFW",  00047, OP_EXPR, OP_TOP6},
+	{"JFW",  00047, OP_EXPR, OP_TOP6, true},
 // RCA=Recall control address
-	{"RCA",  00050, OP_EXPR, OP_TOP6},
+	{"RCA",  00050, OP_EXPR, OP_TOP6, true},
 // ENS=End loop
-	{"ENS",  00051, OP_EXPR, OP_TOP6},
+	{"ENS",  00051, OP_EXPR, OP_TOP6, true},
 // BNS=Begin loop
-	{"BNS",  00052, OP_EXPR, OP_TOP6},
+	{"BNS",  00052, OP_EXPR, OP_TOP6, true},
 // RSA=Recall source address
-	{"RSA",  00053, OP_EXPR, OP_TOP6},
+	{"RSA",  00053, OP_EXPR, OP_TOP6, true},
 // SCA=Store control address
-	{"SCA",  00054, OP_EXPR, OP_TOP6},
+	{"SCA",  00054, OP_EXPR, OP_TOP6, true},
 // JRC=Jump reverse conditional
-	{"JRC",  00055, OP_EXPR, OP_TOP6},
+	{"JRC",  00055, OP_EXPR, OP_TOP6, true},
 // TSA=Transfer source address
-	{"TSA",  00056, OP_EXPR, OP_TOP6},
+	{"TSA",  00056, OP_EXPR, OP_TOP6, true},
 // JRV=Jump reverse unconditional
-	{"JRV",  00057, OP_EXPR, OP_TOP6},
+	{"JRV",  00057, OP_EXPR, OP_TOP6, true},
 // CEQ=Compare equal
-	{"CEQ",  00060, OP_EXPR, OP_TOP6},
+	{"CEQ",  00060, OP_EXPR, OP_TOP6, true},
 // CNE=Compare not equal
-	{"CNE",  00061, OP_EXPR, OP_TOP6},
+	{"CNE",  00061, OP_EXPR, OP_TOP6, true},
 // CEG=Compare greater or equal
-	{"CEG",  00062, OP_EXPR, OP_TOP6},
+	{"CEG",  00062, OP_EXPR, OP_TOP6, true},
 // CGR=Compare greater
-	{"CGR",  00063, OP_EXPR, OP_TOP6},
+	{"CGR",  00063, OP_EXPR, OP_TOP6, true},
 // BIS=Set bit
-	{"BIS",  00064, OP_EXPR, OP_TOP6},
+	{"BIS",  00064, OP_EXPR, OP_TOP6, true},
 // BIR=Reset bit
-	{"BIR",  00065, OP_EXPR, OP_TOP6},
+	{"BIR",  00065, OP_EXPR, OP_TOP6, true},
 // OCV=Output convert
-	{"OCV",  00066, OP_EXPR, OP_TOP6},
+	{"OCV",  00066, OP_EXPR, OP_TOP6, true},
 // ICV=Input convert
-	{"ICV",  00067, OP_EXPR, OP_TOP6},
+	{"ICV",  00067, OP_EXPR, OP_TOP6, true},
 // CEL=Compare equal or less
-	{"CEL",  00070, OP_EXPR, OP_TOP6},
+	{"CEL",  00070, OP_EXPR, OP_TOP6, true},
 // CLS=Compare less
-	{"CLS",  00071, OP_EXPR, OP_TOP6},
+	{"CLS",  00071, OP_EXPR, OP_TOP6, true},
 // FSU=Field subtract
-	{"FSU",  00072, OP_EXPR, OP_TOP6},
+	{"FSU",  00072, OP_EXPR, OP_TOP6, true},
 // FAD=Field add
-	{"FAD",  00073, OP_EXPR, OP_TOP6},
+	{"FAD",  00073, OP_EXPR, OP_TOP6, true},
 // TRP=Transfer program characters
-	{"TRP",  00074, OP_EXPR, OP_TOP6},
+	{"TRP",  00074, OP_EXPR, OP_TOP6, true},
 // TRN=Transfer source numerics
-	{"TRN",  00075, OP_EXPR, OP_TOP6},
+	{"TRN",  00075, OP_EXPR, OP_TOP6, true},
 // TRZ=Transfer source zones
-	{"TRZ",  00076, OP_EXPR, OP_TOP6},
+	{"TRZ",  00076, OP_EXPR, OP_TOP6, true},
 // TRS=Transfer source characters
-	{"TRS",  00077, OP_EXPR, OP_TOP6},
+	{"TRS",  00077, OP_EXPR, OP_TOP6, true},
 // end of table
 	{0, 0, 0, 0}
 };

@@ -561,6 +561,7 @@ typedef struct instruction {
 	WORD12	code;		// coding
 	OPTYPE	intype;		// operand combination in input
 	OPTYPE	outtype;	// operand combination in output
+	BIT		cwmf;		// character mode instruction
 } INSTRUCTION;
 
 extern int dotrcmem;		// trace memory accesses

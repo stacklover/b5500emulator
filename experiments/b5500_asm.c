@@ -173,12 +173,37 @@ void getlin(void) /* get next line */
 	}
 }
 
+const char int2ascii[64] =
+	"0123456789#@?:>}"
+	"+ABCDEFGHI.[&(<~"
+	"|JKLMNOPQR$*-);{"
+	" /STUVWXYZ,%!=]\"";
+
+WORD48 string(char *lp, char **rp)
+{
+	WORD48	res = 0;
+	char *p;
+	lp++;
+	while (*lp != '"') {
+		p = strchr(int2ascii, *lp);
+		if (p)
+			res = (res << 6) | (p - int2ascii);
+		else
+			res = (res << 6) | (014);
+		lp++;
+	}
+	*rp = lp;
+	return res;
+}
+
 WORD48 parseint(void)
 {
 	while(isspace((int)*linep))
 		linep++;
 	if (isdigit((int)*linep) || (*linep == '-'))
 		return strtoll(linep, &linep, 0);
+	if (*linep == '"')
+		return string(linep, &linep);
 	errorl("expected integer");
 	return -1LL;
 }
@@ -227,7 +252,7 @@ int parselabel(void)
 	return -1;
 }
 
-void printinstr(ADDR15 wc, WORD2 sc, BIT symbolic)
+void printinstr(ADDR15 wc, WORD2 sc, BIT symbolic, BIT cwmf)
 {
 	const INSTRUCTION *ip;
 	WORD12 code;
@@ -247,25 +272,25 @@ void printinstr(ADDR15 wc, WORD2 sc, BIT symbolic)
 			case OP_ASIS:
 			case OP_BRAS:
 			case OP_BRAW:
-				if (ip->code == code) {
+				if (ip->cwmf == cwmf && ip->code == code) {
 					printf (" %s", ip->name);
 					return;
 				}
 				break;
 			case OP_TOP4:
-				if (ip->code == (code & 0x0ff)) {
+				if (ip->cwmf == cwmf && ip->code == (code & 0x0ff)) {
 					printf (" %s %u", ip->name, code >> 8);
 					return;
 				}
 				break;
 			case OP_TOP6:
-				if (ip->code == (code & 0x03f)) {
+				if (ip->cwmf == cwmf && ip->code == (code & 0x03f)) {
 					printf (" %s 0%02o", ip->name, code >> 6);
 					return;
 				}
 				break;
 			case OP_TOP10:
-				if (ip->code == (code & 0x003)) {
+				if (ip->cwmf == cwmf && ip->code == (code & 0x003)) {
 					printf (" %s 0%04o", ip->name, code >> 2);
 					return;
 				}
@@ -288,6 +313,7 @@ int verifyreg(char *regname, long long c)
 	if (strcmp(regname, "MSFF") == 0) { if (this->r.MSFF == c) return true;	} else
 	if (strcmp(regname, "SALF") == 0) { if (this->r.SALF == c) return true;	} else
 	if (strcmp(regname, "NCSF") == 0) { if (this->r.NCSF == c) return true;	} else
+	if (strcmp(regname, "CWMF") == 0) { if (this->r.CWMF == c) return true;	} else
 	if (strcmp(regname, "isP1") == 0) { if (this->isP1 == c) return true;	} else
 	if (strcmp(regname, "A") == 0) { if (this->r.A == c) return true; } else
 	if (strcmp(regname, "B") == 0) { if (this->r.B == c) return true; } else
@@ -322,6 +348,7 @@ void setreg(char *regname, long long c)
 	if (strcmp(regname, "MSFF") == 0) { this->r.MSFF = c; } else
 	if (strcmp(regname, "SALF") == 0) { this->r.SALF = c; } else
 	if (strcmp(regname, "NCSF") == 0) { this->r.NCSF = c; } else
+	if (strcmp(regname, "CWMF") == 0) { this->r.CWMF = c; } else
 	if (strcmp(regname, "isP1") == 0) { this->isP1 = c; } else
 	if (strcmp(regname, "A") == 0) { this->r.A = c;	} else
 	if (strcmp(regname, "B") == 0) { this->r.B = c;	} else
@@ -489,18 +516,18 @@ void assemble(void)
 						l--;
 					}
 					printf("%05o:%o ", c, l);
-					printinstr(c, l, true);
+					printinstr(c, l, true, this->r.CWMF);
 					printf("\n");
 				}
 				this->cycleLimit = 1;
 				run(this);
 				if (dotrcins) {
-					printf("  A=%016llo(%u) GH=%o%o Y=%02o M=%05o F=%05o N=%d NCSF=%u\n",
+					printf("  A=%016llo(%u) GH=%o%o Y=%02o M=%05o F=%05o N=%d NCSF=%u CWMF=%u\n",
 						this->r.A, this->r.AROF,
 						this->r.G, this->r.H,
 						this->r.Y, this->r.M,
 						this->r.F,
-						this->r.N, this->r.NCSF);
+						this->r.N, this->r.NCSF, this->r.CWMF);
 					printf("  B=%016llo(%u) KV=%o%o Z=%02o S=%05o R=%03o MSFF/TFFF=%u SALF=%u\n",
 						this->r.B, this->r.BROF,
 						this->r.K, this->r.V,
@@ -570,9 +597,9 @@ void assemble(void)
 				printf("%05o   %016llo\n", wc-1, MAIN[wc-1]);
 		} else {
 			if (dodmpins) {
-				printf("%05o:%o ", oldwc, oldsc);
+				printf("%05o:%o (%o) ", oldwc, oldsc, oldwc*4 + oldsc);
 				if ((oldwc!=wc) || (oldsc!=sc))
-					printinstr(oldwc, oldsc, false);
+					printinstr(oldwc, oldsc, false, false);
 				else
 					printf("    ");
 			}
