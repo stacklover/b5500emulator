@@ -848,7 +848,7 @@ void streamOutputConvert(CPU *this, unsigned count)
 		if (a) { // mantissa is non-zero, so conversion is required
 			if (this->r.A & MASK_SIGNMANT) {
 				// result is negative, so preset the sign in the low-order digit
-				b = 0x20;
+				b = 040;	// BA'8421=10'0000
 			}
 			do { // Convert the binary value in A to BIC digits in B
 				c = a % 10;

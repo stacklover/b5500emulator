@@ -68,8 +68,8 @@ WORD48 fieldIsolate(
 
 	rbitpos = 48-start-width;
 	res = (word >> rbitpos) & bitmask[width];
-	printf("fieldIsolate: w=%016llo s=%u w=%u -> %016llo\n",
-		word, start, width, res); 
+//	printf("fieldIsolate: w=%016llo s=%u w=%u -> %016llo\n",
+//		word, start, width, res); 
 	return res;
 }
 
@@ -86,8 +86,8 @@ WORD48 fieldInsert(
 	rbitpos = 48-start-width;
 	res = (word & ~(bitmask[width] << rbitpos)) |
 		((value & bitmask[width]) << rbitpos); 
-	printf("fieldInsert: w=%016llo s=%u w=%u v=%016llo -> %016llo\n",
-		word, start, width, value, res); 
+//	printf("fieldInsert: w=%016llo s=%u w=%u v=%016llo -> %016llo\n",
+//		word, start, width, value, res); 
 	return res;
 }
 

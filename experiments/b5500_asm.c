@@ -176,7 +176,7 @@ void getlin(void) /* get next line */
 const char int2ascii[64] =
 	"0123456789#@?:>}"
 	"+ABCDEFGHI.[&(<~"
-	"|JKLMNOPQR$*-);{"
+	"xJKLMNOPQR$*-);{"
 	" /STUVWXYZ,%!=]\"";
 
 WORD48 string(char *lp, char **rp)
@@ -194,6 +194,18 @@ WORD48 string(char *lp, char **rp)
 	}
 	*rp = lp;
 	return res;
+}
+
+char *tostring(WORD48 w)
+{
+	static char buf[9];
+	int i;
+	for (i=7; i>=0; i--) {
+		buf[i] = int2ascii[w&077];
+		w>>=6;
+	}
+	buf[8]=0;
+	return buf;
 }
 
 WORD48 parseint(void)
@@ -522,20 +534,26 @@ void assemble(void)
 				this->cycleLimit = 1;
 				run(this);
 				if (dotrcins) {
-					printf("  A=%016llo(%u) GH=%o%o Y=%02o M=%05o F=%05o N=%d NCSF=%u CWMF=%u\n",
-						this->r.A, this->r.AROF,
+					printf("  A=%016llo'%s'(%u) GH=%o%o Y=%02o M=%05o F=%05o N=%d NCSF=%u CWMF=%u\n",
+						this->r.A, tostring(this->r.A), this->r.AROF,
 						this->r.G, this->r.H,
 						this->r.Y, this->r.M,
 						this->r.F,
 						this->r.N, this->r.NCSF, this->r.CWMF);
-					printf("  B=%016llo(%u) KV=%o%o Z=%02o S=%05o R=%03o MSFF/TFFF=%u SALF=%u\n",
-						this->r.B, this->r.BROF,
+					printf("  B=%016llo'%s'(%u) KV=%o%o Z=%02o S=%05o R=%03o MSFF/TFFF=%u SALF=%u\n",
+						this->r.B, tostring(this->r.B), this->r.BROF,
 						this->r.K, this->r.V,
 						this->r.Z, this->r.S,
 						this->r.R,
 						this->r.MSFF, this->r.SALF);
+					for (wc = 01000; wc < 01040; wc++)
+						if (MAIN[wc] != MAIN[wc+0x4000]) {
+							printf("  %05o: %016llo'%s'\n",
+								wc, MAIN[wc], tostring(MAIN[wc]));
+							MAIN[wc+0x4000] = MAIN[wc];
+						}
 				}
-				//sleep(1);
+				sleep(1);
 			}
 			wc = this->r.C;
 			sc = this->r.L;
@@ -583,6 +601,9 @@ void assemble(void)
 		break;
 	case OP_WORD:
 		storeword(c);
+		break;
+	case OP_SYLL:
+		storesyllable(c);
 		break;
 	default:
 		printf("{%d}", op);
@@ -662,6 +683,7 @@ int main(int argc, char *argv[])
 
 	b5500_init_shares();
 
+	memset(MAIN, 0, MAXMEM*sizeof(WORD48));
 	this = CPUA;
 	memset(this, 0, sizeof(CPU));
 	this->id = "CPUA";

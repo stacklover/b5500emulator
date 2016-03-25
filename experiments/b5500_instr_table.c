@@ -23,6 +23,7 @@ const INSTRUCTION instr[] = {
 	{".SET", 00000, OP_REGVAL, OP_SET},
 	{".VFY", 00000, OP_REGVAL, OP_VFY},
 	{".WORD", 00000, OP_EXPR, OP_WORD},
+	{".SYLL", 00000, OP_EXPR, OP_SYLL},
 //
 // WORD mode instructions
 //
@@ -179,9 +180,9 @@ const INSTRUCTION instr[] = {
 // SFS=Skip forward source
 	{"SFS",  00031, OP_EXPR, OP_TOP6, true},
 // FSB=Field subtract (aux)
-	{"FSB",  00032, OP_EXPR, OP_TOP6, true},
+	{"FSUX",  00032, OP_EXPR, OP_TOP6, true},
 // FAD=Field add (aux)
-	{"FAD",  00033, OP_EXPR, OP_TOP6, true},
+	{"FADX",  00033, OP_EXPR, OP_TOP6, true},
 // TEL=Test for equal or less
 	{"TEL",  00034, OP_EXPR, OP_TOP6, true},
 // TLS=Test for less
@@ -209,7 +210,7 @@ const INSTRUCTION instr[] = {
 // RCA=Recall control address
 	{"RCA",  00050, OP_EXPR, OP_TOP6, true},
 // ENS=End loop
-	{"ENS",  00051, OP_EXPR, OP_TOP6, true},
+	{"ENS",  00051, OP_NONE, OP_TOP6, true},
 // BNS=Begin loop
 	{"BNS",  00052, OP_EXPR, OP_TOP6, true},
 // RSA=Recall source address
@@ -219,7 +220,7 @@ const INSTRUCTION instr[] = {
 // JRC=Jump reverse conditional
 	{"JRC",  00055, OP_EXPR, OP_TOP6, true},
 // TSA=Transfer source address
-	{"TSA",  00056, OP_EXPR, OP_TOP6, true},
+	{"TSA",  00056, OP_NONE, OP_TOP6, true},
 // JRV=Jump reverse unconditional
 	{"JRV",  00057, OP_EXPR, OP_TOP6, true},
 // CEQ=Compare equal
