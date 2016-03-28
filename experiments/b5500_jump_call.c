@@ -60,7 +60,7 @@ void jumpOutOfLoop(CPU *this, int count)
 
 	this->cycleCount += 2;
 	// get prior LCW addr from X value
-	this->r.S = fieldIsolate(this->r.X, 18, 15);
+	this->r.S = (this->r.X & MASK_LCWrF) >> SHFT_LCWrF;
 	loadAviaS(this); // A = [S], fetch prior LCW from stack
 	if (count) {
 		this->cycleCount += (count >> 2) + (count & 3);

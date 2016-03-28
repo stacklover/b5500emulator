@@ -39,7 +39,7 @@ void enterCharModeInline(CPU *this)
 	this->r.F = this->r.S;
 	this->r.R = 0;
 	this->r.CWMF = true;
-	this->r.X = (WORD39)this->r.S << 15; // inserting S into X.[18:15], but X is zero at this point
+	this->r.X = (WORD39)this->r.S << SHFT_LCWrF; // inserting S into X.[18:15], but X is zero at this point
 	this->r.V = 0;
 	this->r.B = bw = this->r.A;
 
@@ -137,7 +137,7 @@ void initiate(CPU *this, BIT forTest)
 		loadBviaS(this); // B = [S]
 		--this->r.S;
 		bw = this->r.B;
-		this->r.X = (bw & MASK_ILCWrX) >> SHFT_ILCWrX;
+		this->r.X = bw & MASK_MANTISSA;
 		saveAROF = (bw & MASK_ILCWAROF) >> SHFT_ILCWAROF;
 
 		// restore the B register
@@ -157,9 +157,9 @@ void initiate(CPU *this, BIT forTest)
 		if (this->r.CWMF) {
 			// exchange S with its field in X
 			temp = this->r.S;
-			this->r.S = (this->r.X & MASK_ILCWrX_S) >> SHFT_ILCWrX_S;
-			this->r.X = (this->r.X & ~MASK_ILCWrX_S)
-					|| ((WORD48)temp << SHFT_ILCWrX_S);
+			this->r.S = (this->r.X & MASK_LCWrF) >> SHFT_LCWrF;
+			this->r.X = (this->r.X & ~MASK_LCWrF)
+					|| ((WORD48)temp << SHFT_LCWrF);
 		}
 	} else {
 		this->r.AROF = 0; // don't restore A or B for word mode --

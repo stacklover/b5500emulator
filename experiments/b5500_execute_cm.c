@@ -496,11 +496,11 @@ void b5500_execute_cm(CPU *this)
 			if (variant) {
 				// if repeat count from parameter > 0,
 				// apply it to the next syllable
-				this->r.T = opcode = (opcode & 0x03f) + (variant << 6);
+				this->r.T = opcode = (opcode & 00077) + (variant << 6);
 			} else {
 				// otherwise, construct JFW (XX47) using repeat
 				// count from next syl (whew!)
-				this->r.T = opcode = (opcode & 0xfc0) + 047;
+				this->r.T = opcode = (opcode & 07700) + 047;
 			}
 
 			// Since we are bypassing normal SECL behavior,
@@ -589,27 +589,28 @@ void b5500_execute_cm(CPU *this)
 			this->r.AROF = this->r.BROF;
 			t1 = this->r.X;
 			// get repeat count
-			variant = fieldIsolate(t1, 12, 6);
-			if (variant) {
-					// loop count exhausted?
+			t2 = (t1 & MASK_LCWrpt) >> SHFT_LCWrpt;
+			// loop count exhausted?
+			if (t2) {
 					// no, restore C, L, and P to loop again
-					this->r.C = fieldIsolate(t1, 33, 15);
-					this->r.L = fieldIsolate(t1, 10, 2);
+					this->r.C = (t1 & MASK_LCWrC) >> SHFT_LCWrC;
+					this->r.L = (t1 & MASK_LCWrL) >> SHFT_LCWrL;
 					// require fetch at SECL
 					this->r.PROF = false;
 					// store decremented count in X
-					this->r.X = fieldInsert(t1, 12, 6, variant-1);
+					--t2;
+					this->r.X = (this->r.X & ~MASK_LCWrpt) | (t2 << SHFT_LCWrpt);
 			} else {
 				// save S (not the way the hardware did it)
 				t2 = this->r.S;
 				// get prior LCW addr from X value
-				this->r.S = fieldIsolate(t1, 18, 15);
+				this->r.S = (t1 & MASK_LCWrF) >> SHFT_LCWrF;
 				// B = [S], fetch prior LCW from stack
 				loadBviaS(this);
 				// restore S
 				this->r.S = t2;
 				// store prior LCW (less control bits) in X
-				this->r.X = fieldIsolate(this->r.B, 9, 39);
+				this->r.X = this->r.B & MASK_MANTISSA;
 			}
 			// restore B
 			this->r.B = this->r.A;
@@ -622,27 +623,33 @@ void b5500_execute_cm(CPU *this)
 			this->cycleCount += 4;
 			// save B in A (note that BROF is not altered)
 			this->r.A = this->r.B;
-			// construct new LCW: insert repeat count
-			t1 = fieldInsert(
-				// insert L
-				fieldInsert(
-					// insert C
-					fieldInsert(this->r.X, 33, 15, this->r.C),
-					10, 2, this->r.L),
-				12, 6, (variant ? variant-1 : 0));
+
+			// construct new LCW - keep previous F field
+			t1 = this->r.X & MASK_LCWrF;
+			// insert repeat count
 			// decrement count for first iteration
+			t1 |= (WORD48)(variant ? variant-1 : 0) << SHFT_LCWrpt;
+			// insert L
+			t1 |= (WORD48)(this->r.L) << SHFT_LCWrL;
+			// insert C
+			t1 |= (WORD48)(this->r.C) << SHFT_LCWrC;
+
+			// save current loop control word
 			// set control bits [0:2]=3
-			this->r.B = fieldInsert(this->r.X, 0, 2, 3);
+			this->r.B = this->r.X | INIT_LCW;
 			// save S (not the way the hardware did it)
 			t2 = this->r.S;
 			// get F value from X value and ++
-			this->r.S = fieldIsolate(t1, 18, 15) + 1;
+			this->r.S = (this->r.X & MASK_LCWrF) >> SHFT_LCWrF;
+			this->r.S++;
 			// [S] = B, save prior LCW in stack
 			storeBviaS(this);
 			// update F value in X
-			this->r.X = fieldInsert(t1, 18, 15, this->r.S);
+			t1 |= (this->r.S << SHFT_LCWrF);
+			this->r.X = t1;
 			// restore S
 			this->r.S = t2;
+
 			// restore B (note that BROF is still relevant)
 			this->r.B = this->r.A;
 			// invalidate A

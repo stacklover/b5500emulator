@@ -315,7 +315,7 @@ extern CENTRAL_CONTROL	*CC;
 #define	SHFT_ICWrM		0
 
 /*
- * loop control word (ony 39 bits while in X):
+ * loop control word (only 39 bits while in X):
  * 110 000 000 0<2 rL> <6 repeat> <15 rF> <15rC>
  * octet numbers         FEDCBA9876543210
  */
@@ -336,11 +336,7 @@ extern CENTRAL_CONTROL	*CC;
  */
 #define	INIT_ILCW		06000000000000000 // (c000'0000'0000) fixed bits that are set
 #define	MASK_ILCWAROF	01000000000000000 // (2000'0000'0000) saved AROF bit
-#define	MASK_ILCWrX		00007777777777777 // (007f'ffff'ffff) saved X register (0 in word mode)
-#define	MASK_ILCWrX_S	00000007777700000 // (0000'3fff'8000) saved S part in X
 #define	SHFT_ILCWAROF	45
-#define	SHFT_ILCWrX		0
-#define	SHFT_ILCWrX_S	15
 
 /*
  * initiate control word:
