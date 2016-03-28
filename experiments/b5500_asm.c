@@ -196,15 +196,34 @@ WORD48 string(char *lp, char **rp)
 	return res;
 }
 
-char *tostring(WORD48 w)
+char *word2string(WORD48 w)
 {
-	static char buf[9];
+	static char buf[33];
 	int i;
 	for (i=7; i>=0; i--) {
-		buf[i] = int2ascii[w&077];
+		buf[3*i  ] = '0'+((w>>3) & 7);
+		buf[3*i+1] = '0'+((w   ) & 7);
+		buf[3*i+2] = ' ';
+		buf[24+i] = int2ascii[w&077];
 		w>>=6;
 	}
-	buf[8]=0;
+	buf[32]=0;
+	return buf;
+}
+
+char *lcw2string(WORD48 w)
+{
+	static char buf[33];
+	if (w & MASK_LCWrC) {
+		sprintf(buf, "Loop(%05llo:%llo Rpt=%03llo Prev=%05llo)",
+			(w & MASK_LCWrC) >> SHFT_LCWrC,
+			(w & MASK_LCWrL) >> SHFT_LCWrL,
+			(w & MASK_LCWrpt) >> SHFT_LCWrpt,
+			(w & MASK_LCWrF) >> SHFT_LCWrF);
+		buf[32]=0;
+	} else {
+		buf[0]=0;
+	}
 	return buf;
 }
 
@@ -534,26 +553,41 @@ void assemble(void)
 				this->cycleLimit = 1;
 				run(this);
 				if (dotrcins) {
-					printf("  A=%016llo'%s'(%u) GH=%o%o Y=%02o M=%05o F=%05o N=%d NCSF=%u CWMF=%u\n",
-						this->r.A, tostring(this->r.A), this->r.AROF,
-						this->r.G, this->r.H,
-						this->r.Y, this->r.M,
-						this->r.F,
-						this->r.N, this->r.NCSF, this->r.CWMF);
-					printf("  B=%016llo'%s'(%u) KV=%o%o Z=%02o S=%05o R=%03o MSFF/TFFF=%u SALF=%u\n",
-						this->r.B, tostring(this->r.B), this->r.BROF,
-						this->r.K, this->r.V,
-						this->r.Z, this->r.S,
-						this->r.R,
-						this->r.MSFF, this->r.SALF);
+					if (this->r.CWMF) {
+						printf("  SI=%05o.%o.%o A=%s (%u) Y=%02o\n",
+							this->r.M, this->r.G, this->r.H,
+							word2string(this->r.A), this->r.AROF,
+							this->r.Y);
+						printf("  DI=%05o.%o.%o B=%s (%u) Z=%02o\n",
+							this->r.S, this->r.K, this->r.V,
+							word2string(this->r.B), this->r.BROF,
+							this->r.Z);
+						printf("  R=%03o N=%d F=%05o TFFF=%u SALF=%u NCSF=%u %s\n",
+							this->r.R, this->r.N, this->r.F,
+							this->r.TFFF, this->r.SALF, this->r.NCSF,
+							lcw2string(this->r.X));
+					} else {
+						printf("  A=%016llo(%u) GH=%o%o Y=%02o M=%05o F=%05o N=%d NCSF=%u\n",
+							this->r.A, this->r.AROF,
+							this->r.G, this->r.H,
+							this->r.Y, this->r.M,
+							this->r.F,
+							this->r.N, this->r.NCSF);
+						printf("  B=%016llo(%u) KV=%o%o Z=%02o S=%05o R=%03o MSFF=%u SALF=%u\n",
+							this->r.B, this->r.BROF,
+							this->r.K, this->r.V,
+							this->r.Z, this->r.S,
+							this->r.R,
+							this->r.MSFF, this->r.SALF);
+					}
 					for (wc = 01000; wc < 01040; wc++)
 						if (MAIN[wc] != MAIN[wc+0x4000]) {
-							printf("  %05o: %016llo'%s'\n",
-								wc, MAIN[wc], tostring(MAIN[wc]));
+							printf("  %05o: %s\n",
+								wc, word2string(MAIN[wc]));
 							MAIN[wc+0x4000] = MAIN[wc];
 						}
 				}
-				sleep(1);
+//				sleep(1);
 			}
 			wc = this->r.C;
 			sc = this->r.L;

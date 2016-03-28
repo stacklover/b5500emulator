@@ -315,6 +315,21 @@ extern CENTRAL_CONTROL	*CC;
 #define	SHFT_ICWrM		0
 
 /*
+ * loop control word (ony 39 bits while in X):
+ * 110 000 000 0<2 rL> <6 repeat> <15 rF> <15rC>
+ * octet numbers         FEDCBA9876543210
+ */
+#define	INIT_LCW		06000000000000000 // (c000'0000'0000) fixed bits that are set
+#define	MASK_LCWrL		00003000000000000 // (0030'0000'0000) L register
+#define	MASK_LCWrpt		00000770000000000 // (000f'c000'0000) repeat count
+#define	MASK_LCWrF		00000007777700000 // (0000'3fff'8000) F register
+#define	MASK_LCWrC		00000000000077777 // (0000'0000'7fff) C register
+#define	SHFT_LCWrL		36
+#define	SHFT_LCWrpt		30
+#define	SHFT_LCWrF		15
+#define	SHFT_LCWrC		0
+
+/*
  * interrupt loop control word:
  * 11<AROF> 000 000 <39 rX>
  * octet numbers         FEDCBA9876543210

@@ -67,19 +67,15 @@
 
 # LABEL ENTRY, START;
 
+
+	.ORG	020
 # ENTRY:@20: GO TO START;
-	.ORG	020
-	LITC	0
-	OPDC	0211
-
-# START:*:
-	.ORG	020
-
-# D[0]:= 76543210;
 	LITC	0166
 	LFU
 
 	.ORG	0206
+# START:*:
+# D[0]:= 76543210;
 	LITC	0	# index 0
 	DESC	0205	# addr of array element D[index]
 	OPDC	0265	# addr of constant 76543210
@@ -89,17 +85,27 @@
 
 # STREAM(R:=-D[0] : COUNT:=0, S:=S, D:=D);
 	NOP
+# Generate and initialize local variables for STREAM
 	LITC	0	# index 0
 	OPDC	0205	# load value at D[index]
-	CHS		# invert sign (R is MKS-1 or RCW-5)
-	MKS		# mark stack (is MKS+0 or RCW-4)
-	LITC	0	# constant 0 (COUNT is MKS+1 or RCW-3)
+	CHS		# invert sign (R will be MKS-1 or RCW-5)
+	MKS		# mark stack (is MKS+0 or will be RCW-4)
+	LITC	0	# constant 0 (COUNT is MKS+1 or will be RCW-3)
 	LITC	0204	# address of descriptor of S
-	LOD		# load descriptor (S is MKS+2 or RCW-2)
+	LOD		# load descriptor (S is MKS+2 or will be RCW-2)
 	LITC	0205	# address of descriptor of D
-	LOD		# load descriptor (D is MKS+3 or RCW-1)
+	LOD		# load descriptor (D is MKS+3 or will be RCW-1)
 	CMN		# enter character mode (is RCW+0)
 # BEGIN
+
+# Stack is now:
+#	R	=RCW-5
+#	MCW	=RCW-4
+#	COUNT	=RCW-3
+#	&S	=RCW-2
+#	&D	=RCW-1
+#	RCW
+
 # SI:= S;
 	RSA	2	# S at RCW-2
 # SI:= SI+51;
@@ -305,7 +311,7 @@
 	STC	3	# store tally in RCW-3 (COUNT)
 # COUNT(
 	CRF	3	# load repeat field from RCW-3 (COUNT)
-	BNS	7
+	BNS	7	# loop 7 times OR skip forward 7 (if COUNT=0)
 # IF SB THEN DS:= SET ELSE DS:= RESET;
 	BIT	1	# test bit in source for 1
 	JFC	2	# jump forward 2 if false

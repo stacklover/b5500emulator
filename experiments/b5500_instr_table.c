@@ -146,7 +146,7 @@ const INSTRUCTION instr[] = {
 // RDA=Recall destination address
 	{"RDA",  00004, OP_EXPR, OP_TOP6, true},
 // TRW=Transfer words
-	{"TRW",  00005, OP_NONE, OP_TOP6, true},
+	{"TRW",  00005, OP_EXPR, OP_TOP6, true},
 // SED=Set destination address
 	{"SED",  00006, OP_EXPR, OP_TOP6, true},
 // TDA=Transfer destination address
@@ -210,7 +210,7 @@ const INSTRUCTION instr[] = {
 // RCA=Recall control address
 	{"RCA",  00050, OP_EXPR, OP_TOP6, true},
 // ENS=End loop
-	{"ENS",  00051, OP_NONE, OP_TOP6, true},
+	{"ENS",  00051, OP_NONE, OP_ASIS, true},
 // BNS=Begin loop
 	{"BNS",  00052, OP_EXPR, OP_TOP6, true},
 // RSA=Recall source address
@@ -220,7 +220,7 @@ const INSTRUCTION instr[] = {
 // JRC=Jump reverse conditional
 	{"JRC",  00055, OP_EXPR, OP_TOP6, true},
 // TSA=Transfer source address
-	{"TSA",  00056, OP_NONE, OP_TOP6, true},
+	{"TSA",  00056, OP_NONE, OP_ASIS, true},
 // JRV=Jump reverse unconditional
 	{"JRV",  00057, OP_EXPR, OP_TOP6, true},
 // CEQ=Compare equal

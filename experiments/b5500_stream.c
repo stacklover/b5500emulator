@@ -213,7 +213,7 @@ void compareSourceWithDest(CPU *this, unsigned count, BIT numeric)
 						bBit += 6;
 						++this->r.K;
 					} else {
-						bBit = false;
+						bBit = 0;
 						this->r.K = 0;
 						// test Q04F to see if B may be dirty
 						if (!Q04F) {
@@ -233,7 +233,7 @@ void compareSourceWithDest(CPU *this, unsigned count, BIT numeric)
 						aBit += 6;
 						++this->r.G;
 					} else {
-						aBit = false;
+						aBit = 0;
 						this->r.G = 0;
 						++this->r.M;
 						if (count > 0) {
@@ -281,7 +281,7 @@ void fieldArithmetic(CPU *this, unsigned count, BIT adding)
 	if (this->r.Q06F) {	// Q06F => count > 0, so there's characters to add
 		this->r.Q06F = false;
 		this->r.Q04F = false; // reset Q06F and Q04F
-		TFFF = (this->r.TFFF != 0); // get TFFF as a Boolean
+		TFFF = this->r.TFFF; // get TFFF as a Boolean
 		Q03F = this->r.Q03F; // get Q03F as a Boolean
 
 		// Back down the pointers to the last characters of their respective fields
