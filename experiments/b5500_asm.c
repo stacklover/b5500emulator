@@ -597,6 +597,9 @@ void assemble(void)
 			} else {
 				sc--;
 			}
+			for (wc = 01000; wc < 01040; wc++)
+				printf("  %05o: %s\n",
+					wc, word2string(MAIN[wc]));
 		}
 		return;
 	case OP_END:
