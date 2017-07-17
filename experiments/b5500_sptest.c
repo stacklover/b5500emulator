@@ -11,6 +11,7 @@
 *   From thin air (based on the assembler).
 * 2017-07-17  R.Meyer
 *   Added "long long" qualifier to constants with long long value
+*   changed "this" to "cpu" to avoid errors when using g++
 ***********************************************************************/
 
 #include <stdio.h>
@@ -35,8 +36,8 @@ int dodmpins	 = false;	/* dump instructions after assembly */
 int dotrcmem	 = false;	/* trace memory accesses */
 int dolistsource = false;	/* list source line */
 int dotrcins	 = false;	/* trace instruction execution */
-int	dotrcmat	 = false;	/* trace math operations */
-int	emode		 = false;	/* emode math */
+int dotrcmat	 = false;	/* trace math operations */
+int emode	 = false;	/* emode math */
 
 /* variables for input file reading */
 FILE	*prd;		/* for assembly source */
@@ -51,14 +52,14 @@ unsigned wc;
 unsigned sc;
 
 CENTRAL_CONTROL cc;
-CPU *this;
+CPU *cpu;
 
-void signalInterrupt(CPU *this)
+void signalInterrupt(CPU *cpu)
 {
-	//printf("\nIRQ=$%02x\n", this->r.I);
+	//printf("\nIRQ=$%02x\n", cpu->r.I);
 }
 
-void errorl(char *msg)
+void errorl(const char *msg)
 {
 	fclose(prd);
 	exit(2);
@@ -157,13 +158,13 @@ void load_data(void)
 			a = V[j];
 			b = V[i];
 			c = comp;
-			this->r.A = a;
-			this->r.B = b;
-			this->r.AROF = true;
-			this->r.BROF = true;
-			this->r.NCSF = true;
-			singlePrecisionAdd(this, true);
-			r = this->r.B;
+			cpu->r.A = a;
+			cpu->r.B = b;
+			cpu->r.AROF = true;
+			cpu->r.BROF = true;
+			cpu->r.NCSF = true;
+			singlePrecisionAdd(cpu, true);
+			r = cpu->r.B;
 			if (r != c) {
 				printf("%02d,%02d: %016llo+%016llo->%016llo s/b %016llo\n",
 					i, j, b, a, r, c);
@@ -173,13 +174,13 @@ void load_data(void)
 			a = V[j] ^ MASK_SIGNMANT;
 			b = V[i] ^ MASK_SIGNMANT;
 			c = comp ^ MASK_SIGNMANT;
-			this->r.A = a;
-			this->r.B = b;
-			this->r.AROF = true;
-			this->r.BROF = true;
-			this->r.NCSF = true;
-			singlePrecisionAdd(this, true);
-			r = this->r.B;
+			cpu->r.A = a;
+			cpu->r.B = b;
+			cpu->r.AROF = true;
+			cpu->r.BROF = true;
+			cpu->r.NCSF = true;
+			singlePrecisionAdd(cpu, true);
+			r = cpu->r.B;
 			if (r != c) {
 				printf("%02d,%02d: %016llo+%016llo->%016llo s/b %016llo\n",
 					i, j, b, a, r, c);
@@ -215,13 +216,13 @@ void load_data(void)
 			a = V[j];
 			b = V[i];
 			c = comp;
-			this->r.A = a;
-			this->r.B = b;
-			this->r.AROF = true;
-			this->r.BROF = true;
-			this->r.NCSF = true;
-			singlePrecisionAdd(this, false);
-			r = this->r.B;
+			cpu->r.A = a;
+			cpu->r.B = b;
+			cpu->r.AROF = true;
+			cpu->r.BROF = true;
+			cpu->r.NCSF = true;
+			singlePrecisionAdd(cpu, false);
+			r = cpu->r.B;
 			if (r != c) {
 				printf("%02d,%02d: %016llo-%016llo->%016llo s/b %016llo\n",
 					i, j, b, a, r, c);
@@ -234,13 +235,13 @@ void load_data(void)
 				c = comp ^ MASK_SIGNMANT;
 			else
 				c = comp;
-			this->r.A = a;
-			this->r.B = b;
-			this->r.AROF = true;
-			this->r.BROF = true;
-			this->r.NCSF = true;
-			singlePrecisionAdd(this, false);
-			r = this->r.B;
+			cpu->r.A = a;
+			cpu->r.B = b;
+			cpu->r.AROF = true;
+			cpu->r.BROF = true;
+			cpu->r.NCSF = true;
+			singlePrecisionAdd(cpu, false);
+			r = cpu->r.B;
 			if (r != c) {
 				printf("%02d,%02d: %016llo-%016llo->%016llo s/b %016llo\n",
 					i, j, b, a, r, c);
@@ -276,13 +277,13 @@ void load_data(void)
 			a = V[j];
 			b = V[i];
 			c = comp;
-			this->r.A = a;
-			this->r.B = b;
-			this->r.AROF = true;
-			this->r.BROF = true;
-			this->r.NCSF = true;
-			singlePrecisionMultiply(this);
-			r = this->r.B;
+			cpu->r.A = a;
+			cpu->r.B = b;
+			cpu->r.AROF = true;
+			cpu->r.BROF = true;
+			cpu->r.NCSF = true;
+			singlePrecisionMultiply(cpu);
+			r = cpu->r.B;
 			if (r != c) {
 				printf("%02d,%02d: %016llo*%016llo->%016llo s/b %016llo\n",
 					i, j, b, a, r, c);
@@ -318,17 +319,17 @@ void load_data(void)
 			a = V[j];
 			b = V[i];
 			c = comp;
-			this->r.A = a;
-			this->r.B = b;
-			this->r.AROF = true;
-			this->r.BROF = true;
-			this->r.NCSF = true;
-			singlePrecisionDivide(this);
-			if (this->r.I) {
-				this->r.I = 0;
+			cpu->r.A = a;
+			cpu->r.B = b;
+			cpu->r.AROF = true;
+			cpu->r.BROF = true;
+			cpu->r.NCSF = true;
+			singlePrecisionDivide(cpu);
+			if (cpu->r.I) {
+				cpu->r.I = 0;
 				r = 02000000000000000ll;
 			} else {
-				r = this->r.B;
+				r = cpu->r.B;
 			}
 			if (r != c) {
 				printf("%02d,%02d: %016llo/%016llo->%016llo s/b %016llo\n",
@@ -365,17 +366,17 @@ void load_data(void)
 			a = V[j];
 			b = V[i];
 			c = comp;
-			this->r.A = a;
-			this->r.B = b;
-			this->r.AROF = true;
-			this->r.BROF = true;
-			this->r.NCSF = true;
-			integerDivide(this);
-			if (this->r.I) {
-				this->r.I = 0;
+			cpu->r.A = a;
+			cpu->r.B = b;
+			cpu->r.AROF = true;
+			cpu->r.BROF = true;
+			cpu->r.NCSF = true;
+			integerDivide(cpu);
+			if (cpu->r.I) {
+				cpu->r.I = 0;
 				r = 02000000000000000ll;
 			} else {
-				r = this->r.B;
+				r = cpu->r.B;
 			}
 			if (r != c) {
 				printf("%02d,%02d: %016llo/%016llo->%016llo s/b %016llo\n",
@@ -412,17 +413,17 @@ void load_data(void)
 			a = V[j];
 			b = V[i];
 			c = comp;
-			this->r.A = a;
-			this->r.B = b;
-			this->r.AROF = true;
-			this->r.BROF = true;
-			this->r.NCSF = true;
-			remainderDivide(this);
-			if (this->r.I) {
-				this->r.I = 0;
+			cpu->r.A = a;
+			cpu->r.B = b;
+			cpu->r.AROF = true;
+			cpu->r.BROF = true;
+			cpu->r.NCSF = true;
+			remainderDivide(cpu);
+			if (cpu->r.I) {
+				cpu->r.I = 0;
 				r = 02000000000000000ll;
 			} else {
-				r = this->r.B;
+				r = cpu->r.B;
 			}
 			if (r != c) {
 				printf("%02d,%02d: %016llo/%016llo->%016llo s/b %016llo\n",
@@ -479,9 +480,9 @@ int main(int argc, char *argv[])
 
 	b5500_init_shares();
 
-	this = CPUA;
-	memset(this, 0, sizeof(CPU));
-	this->id = "CPUA";
+	cpu = CPUA;
+	memset(cpu, 0, sizeof(CPU));
+	cpu->id = "CPUA";
 
 	if (emode)
 		printf("Testing in EMODE\n");

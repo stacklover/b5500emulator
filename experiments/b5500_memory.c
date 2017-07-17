@@ -11,6 +11,8 @@
 ************************************************************************
 * 2016-02-1921  R.Meyer
 *   Converted Paul's work from Javascript to C
+* 2017-07-17  R.Meyer
+*   changed "this" to "cpu" to avoid errors when using g++
 ***********************************************************************/
 
 #include <stdio.h>
@@ -26,7 +28,7 @@ void fetch(ACCESSOR *acc)
 	if (acc->MAIL) {
 		acc->MPED = false;	// no memory parity error
 		acc->MAED = true;	// memory address error
-		// no .word value is returned in this case
+		// no .word value is returned in cpu case
 	} else {
 		acc->MPED = false;	// no parity error
 		acc->MAED = false;	// no address error
@@ -47,7 +49,7 @@ void store(ACCESSOR *acc)
 	if (acc->MAIL) {
 		acc->MPED = false;	// no memory parity error
 		acc->MAED = true;	// memory address error
-		// no .word value is returned in this case
+		// no .word value is returned in cpu case
 	} else {
 		acc->MPED = false;	// no parity error
 		acc->MAED = false;	// no address error
@@ -61,19 +63,19 @@ void store(ACCESSOR *acc)
 /*
  * Common error handling routine for all memory acccesses
  */
-void accessError(CPU *this)
+void accessError(CPU *cpu)
 {
-	if (this->acc.MAED) {
+	if (cpu->acc.MAED) {
 		// set I02F: memory address/inhibit error
-		this->r.I |= 0x02;
-		signalInterrupt(this);
-	} else if (this->acc.MPED) {
+		cpu->r.I |= 0x02;
+		signalInterrupt(cpu);
+	} else if (cpu->acc.MPED) {
 		// set I01F: memory parity error
-		this->r.I |= 0x01;
-		signalInterrupt(this);
-		if (this->isP1 && !this->r.NCSF) {
+		cpu->r.I |= 0x01;
+		signalInterrupt(cpu);
+		if (cpu->isP1 && !cpu->r.NCSF) {
 			// P1 memory parity in Control State stops the proc
-			stop(this);
+			stop(cpu);
 		}
 	}
 }
@@ -84,13 +86,13 @@ void accessError(CPU *this)
  * Manual. "cEnable" determines whether C-relative addressing is permitted.
  * This offset must be in (0..1023)
  */
-void computeRelativeAddr(CPU *this, unsigned offset, BIT cEnabled)
+void computeRelativeAddr(CPU *cpu, unsigned offset, BIT cEnabled)
 {
 	if (dotrcmem)
 		printf("RelAddr(%04o,%u) -> ",
 			offset, cEnabled);
-	this->cycleCount += 2; // approximate the timing
-	if (this->r.SALF) {
+	cpu->cycleCount += 2; // approximate the timing
+	if (cpu->r.SALF) {
 		// subroutine level - check upper 3 bits of the 10 bit offset
 		switch ((offset >> 7) & 7) {
 		case 0:
@@ -100,27 +102,27 @@ void computeRelativeAddr(CPU *this, unsigned offset, BIT cEnabled)
 			// pattern 0xx xxxxxxx - R+ relative
 			// reach 0..511
 			offset &= 0x1ff;
-			this->r.M = (this->r.R<<6) + offset;
+			cpu->r.M = (cpu->r.R<<6) + offset;
 			if (dotrcmem)
-				printf("R+%o -> M=%05o\n", offset, this->r.M);
+				printf("R+%o -> M=%05o\n", offset, cpu->r.M);
 			break;
 		case 4:
 		case 5:
 			// pattern 10x xxxxxxx - F+ or (R+7)+ relative
 			// reach 0..255
 			offset &= 0xff;
-			if (this->r.MSFF) {
+			if (cpu->r.MSFF) {
 				// during function parameter loading its (R+7)+
-				this->r.M = (this->r.R<<6) + RR_MSCW;
-				loadMviaM(this); // M = [M].[18:15]
-				this->r.M += offset;
+				cpu->r.M = (cpu->r.R<<6) + RR_MSCW;
+				loadMviaM(cpu); // M = [M].[18:15]
+				cpu->r.M += offset;
 				if (dotrcmem)
-					printf("(R+7)+%o -> M=%05o\n", offset, this->r.M);
+					printf("(R+7)+%o -> M=%05o\n", offset, cpu->r.M);
 			} else {
 				// inside function its F+
-				this->r.M = this->r.F + (offset & 0xff);
+				cpu->r.M = cpu->r.F + (offset & 0xff);
 				if (dotrcmem)
-					printf("F+%o -> M=%05o\n", offset, this->r.M);
+					printf("F+%o -> M=%05o\n", offset, cpu->r.M);
 			}
 			break;
 		case 6:
@@ -130,47 +132,47 @@ void computeRelativeAddr(CPU *this, unsigned offset, BIT cEnabled)
 			if (cEnabled) {
 				// adjust C for fetch offset from
 				// syllable the instruction was in
-				this->r.M = (this->r.L ? this->r.C : this->r.C-1)
+				cpu->r.M = (cpu->r.L ? cpu->r.C : cpu->r.C-1)
 					+ offset;
 				if (dotrcmem)
-					printf("C+%o -> M=%05o\n", offset, this->r.M);
+					printf("C+%o -> M=%05o\n", offset, cpu->r.M);
 			} else {
-				this->r.M = (this->r.R<<6) + offset;
+				cpu->r.M = (cpu->r.R<<6) + offset;
 				if (dotrcmem)
-					printf("R+%o -> M=%05o\n", offset, this->r.M);
+					printf("R+%o -> M=%05o\n", offset, cpu->r.M);
 			}
 			break;
 		case 7:
 			// pattern 111 xxxxxxx - F- or (R+7)- relative
 			// reach 0..127 (negative direction)
 			offset &= 0x7f;
-			if (this->r.MSFF) {
-				this->r.M = (this->r.R<<6) + RR_MSCW;
-				loadMviaM(this); // M = [M].[18:15]
-				this->r.M -= offset;
+			if (cpu->r.MSFF) {
+				cpu->r.M = (cpu->r.R<<6) + RR_MSCW;
+				loadMviaM(cpu); // M = [M].[18:15]
+				cpu->r.M -= offset;
 				if (dotrcmem)
-					printf("(R+7)-%o -> M=%05o\n", offset, this->r.M);
+					printf("(R+7)-%o -> M=%05o\n", offset, cpu->r.M);
 			} else {
-				this->r.M = this->r.F - offset;
+				cpu->r.M = cpu->r.F - offset;
 				if (dotrcmem)
-					printf("F-%o -> M=%05o\n", offset, this->r.M);
+					printf("F-%o -> M=%05o\n", offset, cpu->r.M);
 			}
 			break;
 		} // switch
 	} else {
 		// program level - all 10 bits are offset
 		offset &= 0x3ff;
-		this->r.M = (this->r.R<<6) + offset;
+		cpu->r.M = (cpu->r.R<<6) + offset;
 		if (dotrcmem)
-			printf("R+%o,M=%05o\n", offset, this->r.M);
+			printf("R+%o,M=%05o\n", offset, cpu->r.M);
 	}
 
 	// Reset variant-mode R-relative addressing, if it was enabled
-	if (this->r.VARF) {
+	if (cpu->r.VARF) {
 		if (dotrcmem)
 			printf("Resetting VARF\n");
-		this->r.SALF = true;
-		this->r.VARF = false;
+		cpu->r.SALF = true;
+		cpu->r.VARF = false;
 	}
 }
 
@@ -179,32 +181,32 @@ void computeRelativeAddr(CPU *this, unsigned offset, BIT cEnabled)
  * the A register. Returns 1 if an interrupt is set and the syllable is
  * to be exited
  */
-BIT indexDescriptor(CPU *this)
+BIT indexDescriptor(CPU *cpu)
 {
 	WORD48	aw;	// local copy of A reg
 	BIT		interrupted = false;	// fatal error, interrupt set
 	NUM		I;	// index
 
-	adjustABFull(this);
-	aw = this->r.A;
-	num_extract(&this->r.B, &I);
+	adjustABFull(cpu);
+	aw = cpu->r.A;
+	num_extract(&cpu->r.B, &I);
 
 	// Normalize the index, if necessary
 	if (I.e < 0) {
 		// index exponent is negative
-		this->cycleCount += num_right_shift_exp(&I, 0);
+		cpu->cycleCount += num_right_shift_exp(&I, 0);
 		// round up the index
 		num_round(&I);
 	} else if (I.e > 0) {
 		// index exponent is positive
-		this->cycleCount += num_left_shift_exp(&I, 0);
+		cpu->cycleCount += num_left_shift_exp(&I, 0);
 		if (I.e != 0) {
 			// oops... integer overflow normalizing the index
 			interrupted = true;
-			if (this->r.NCSF) {
+			if (cpu->r.NCSF) {
 				// set I07/8: integer overflow
-				this->r.I = (this->r.I & IRQ_MASKL) | IRQ_INTO;
-				signalInterrupt(this);
+				cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_INTO;
+				signalInterrupt(cpu);
 			}
 		}
 	}
@@ -216,23 +218,23 @@ BIT indexDescriptor(CPU *this)
 		if (I.s && I.m) {
 			// Oops... index is negative
 			interrupted = true;
-			if (this->r.NCSF) {
+			if (cpu->r.NCSF) {
 				// set I05/8: invalid-index
-				this->r.I = (this->r.I & IRQ_MASKL) | IRQ_INDEX;
-				signalInterrupt(this);
+				cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_INDEX;
+				signalInterrupt(cpu);
 			}
 		} else if (I.m < ((aw & MASK_DDWC) >> SHFT_DDWC)) {
 			// We finally have a valid index
 			I.m = (aw + I.m) & MASK_DDADDR;
-			this->r.A = (aw & ~MASK_DDADDR) | I.m;
-			this->r.BROF = false;
+			cpu->r.A = (aw & ~MASK_DDADDR) | I.m;
+			cpu->r.BROF = false;
 		} else {
 			// Oops... index not less than size
 			interrupted = true;
-			if (this->r.NCSF) {
+			if (cpu->r.NCSF) {
 				// set I05/8: invalid-index
-				this->r.I = (this->r.I & IRQ_MASKL) | IRQ_INDEX;
-				signalInterrupt(this);
+				cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_INDEX;
+				signalInterrupt(cpu);
 			}
 		}
 	}
@@ -242,170 +244,170 @@ BIT indexDescriptor(CPU *this)
 /*
  * load registers from memory
  */
-void loadAviaS(CPU *this)
+void loadAviaS(CPU *cpu)
 {
 	if (dotrcmem)
 		printf("A=[S]");
-	this->r.E = 2;		// Just to show the world what's happening
-	this->acc.addr = this->r.S;
-	this->acc.MAIL = (this->r.S < AA_USERMEM) && this->r.NCSF;
-	fetch(&this->acc);
-	//this->cycleCount += B5500CentralControl.memReadCycles;
-	if (this->acc.MAED || this->acc.MPED) {
-		accessError(this);
+	cpu->r.E = 2;		// Just to show the world what's happening
+	cpu->acc.addr = cpu->r.S;
+	cpu->acc.MAIL = (cpu->r.S < AA_USERMEM) && cpu->r.NCSF;
+	fetch(&cpu->acc);
+	//cpu->cycleCount += B5500CentralControl.memReadCycles;
+	if (cpu->acc.MAED || cpu->acc.MPED) {
+		accessError(cpu);
 	} else {
-		this->r.A = this->acc.word;
-		this->r.AROF = true;
+		cpu->r.A = cpu->acc.word;
+		cpu->r.AROF = true;
 	}
 }
 
-void loadBviaS(CPU *this)
+void loadBviaS(CPU *cpu)
 {
 	if (dotrcmem)
 		printf("B=[S]");
-	this->r.E = 3;		// Just to show the world what's happening
-	this->acc.addr = this->r.S;
-	this->acc.MAIL = (this->r.S < AA_USERMEM) && this->r.NCSF;
-	fetch(&this->acc);
-	//this->cycleCount += B5500CentralControl.memReadCycles;
-	if (this->acc.MAED || this->acc.MPED) {
-		accessError(this);
+	cpu->r.E = 3;		// Just to show the world what's happening
+	cpu->acc.addr = cpu->r.S;
+	cpu->acc.MAIL = (cpu->r.S < AA_USERMEM) && cpu->r.NCSF;
+	fetch(&cpu->acc);
+	//cpu->cycleCount += B5500CentralControl.memReadCycles;
+	if (cpu->acc.MAED || cpu->acc.MPED) {
+		accessError(cpu);
 	} else {
-		this->r.B = this->acc.word;
-		this->r.BROF = true;
+		cpu->r.B = cpu->acc.word;
+		cpu->r.BROF = true;
 	}
 }
 
-void loadAviaM(CPU *this)
+void loadAviaM(CPU *cpu)
 {
 	if (dotrcmem)
 		printf("A=[M]");
-	this->r.E = 4;		// Just to show the world what's happening
-	this->acc.addr = this->r.M;
-	this->acc.MAIL = (this->r.M < AA_USERMEM) && this->r.NCSF;
-	fetch(&this->acc);
-	//this->cycleCount += B5500CentralControl.memReadCycles;
-	if (this->acc.MAED || this->acc.MPED) {
-		accessError(this);
+	cpu->r.E = 4;		// Just to show the world what's happening
+	cpu->acc.addr = cpu->r.M;
+	cpu->acc.MAIL = (cpu->r.M < AA_USERMEM) && cpu->r.NCSF;
+	fetch(&cpu->acc);
+	//cpu->cycleCount += B5500CentralControl.memReadCycles;
+	if (cpu->acc.MAED || cpu->acc.MPED) {
+		accessError(cpu);
 	} else {
-		this->r.A = this->acc.word;
-		this->r.AROF = true;
+		cpu->r.A = cpu->acc.word;
+		cpu->r.AROF = true;
 	}
 }
 
-void loadBviaM(CPU *this)
+void loadBviaM(CPU *cpu)
 {
 	if (dotrcmem)
 		printf("B=[M]");
-	this->r.E = 5;		// Just to show the world what's happening
-	this->acc.addr = this->r.M;
-	this->acc.MAIL = (this->r.M < AA_USERMEM) && this->r.NCSF;
-	fetch(&this->acc);
-	//this->cycleCount += B5500CentralControl.memReadCycles;
-	if (this->acc.MAED || this->acc.MPED) {
-		accessError(this);
+	cpu->r.E = 5;		// Just to show the world what's happening
+	cpu->acc.addr = cpu->r.M;
+	cpu->acc.MAIL = (cpu->r.M < AA_USERMEM) && cpu->r.NCSF;
+	fetch(&cpu->acc);
+	//cpu->cycleCount += B5500CentralControl.memReadCycles;
+	if (cpu->acc.MAED || cpu->acc.MPED) {
+		accessError(cpu);
 	} else {
-		this->r.B = this->acc.word;
-		this->r.BROF = true;
+		cpu->r.B = cpu->acc.word;
+		cpu->r.BROF = true;
 	}
 }
 
-void loadMviaM(CPU *this)
+void loadMviaM(CPU *cpu)
 {
-	// note: this is only used to get the saved F registers value from
+	// note: cpu is only used to get the saved F registers value from
 	// the saved MSCW at R+7.
 	if (dotrcmem)
 		printf("M=[M]");
-	this->r.E = 6;		// Just to show the world what's happening
-	this->acc.addr = this->r.M;
-	this->acc.MAIL = (this->r.M < AA_USERMEM) && this->r.NCSF;
-	fetch(&this->acc);
-	//this->cycleCount += B5500CentralControl.memReadCycles;
-	if (this->acc.MAED || this->acc.MPED) {
-		accessError(this);
+	cpu->r.E = 6;		// Just to show the world what's happening
+	cpu->acc.addr = cpu->r.M;
+	cpu->acc.MAIL = (cpu->r.M < AA_USERMEM) && cpu->r.NCSF;
+	fetch(&cpu->acc);
+	//cpu->cycleCount += B5500CentralControl.memReadCycles;
+	if (cpu->acc.MAED || cpu->acc.MPED) {
+		accessError(cpu);
 	} else {
-		this->r.M = (this->acc.word & MASK_MSCWrF) >> SHFT_MSCWrF;
+		cpu->r.M = (cpu->acc.word & MASK_MSCWrF) >> SHFT_MSCWrF;
 	}
 }
 
-void loadPviaC(CPU *this)
+void loadPviaC(CPU *cpu)
 {
 	if (dotrcmem)
 		printf("P=[C]");
-	this->r.E = 48;		// Just to show the world what's happening
-	this->acc.addr = this->r.C;
-	this->acc.MAIL = (this->r.C < AA_USERMEM) && this->r.NCSF;
-	fetch(&this->acc);
-	// TODO: should this not be in the else part?
-	this->r.PROF = true;
-	//this->cycleCount += B5500CentralControl.memReadCycles;
-	if (this->acc.MAED || this->acc.MPED) {
-		accessError(this);
+	cpu->r.E = 48;		// Just to show the world what's happening
+	cpu->acc.addr = cpu->r.C;
+	cpu->acc.MAIL = (cpu->r.C < AA_USERMEM) && cpu->r.NCSF;
+	fetch(&cpu->acc);
+	// TODO: should cpu not be in the else part?
+	cpu->r.PROF = true;
+	//cpu->cycleCount += B5500CentralControl.memReadCycles;
+	if (cpu->acc.MAED || cpu->acc.MPED) {
+		accessError(cpu);
 	} else {
-		this->r.P = this->acc.word;
+		cpu->r.P = cpu->acc.word;
 	}
 }
 
 /*
  * store registers to memory
  */
-void storeAviaS(CPU *this)
+void storeAviaS(CPU *cpu)
 {
 	if (dotrcmem)
 		printf("[S]=A");
-	this->r.E = 10;		// Just to show the world what's happening
-	this->acc.addr = this->r.S;
-	this->acc.MAIL = (this->r.S < AA_USERMEM) && this->r.NCSF;
-	this->acc.word = this->r.A;
-	store(&this->acc);
-	//this->cycleCount += B5500CentralControl.memReadCycles;
-	if (this->acc.MAED || this->acc.MPED) {
-		accessError(this);
+	cpu->r.E = 10;		// Just to show the world what's happening
+	cpu->acc.addr = cpu->r.S;
+	cpu->acc.MAIL = (cpu->r.S < AA_USERMEM) && cpu->r.NCSF;
+	cpu->acc.word = cpu->r.A;
+	store(&cpu->acc);
+	//cpu->cycleCount += B5500CentralControl.memReadCycles;
+	if (cpu->acc.MAED || cpu->acc.MPED) {
+		accessError(cpu);
 	}
 }
 
-void storeBviaS(CPU *this)
+void storeBviaS(CPU *cpu)
 {
 	if (dotrcmem)
 		printf("[S]=B");
-	this->r.E = 11;		// Just to show the world what's happening
-	this->acc.addr = this->r.S;
-	this->acc.MAIL = (this->r.S < AA_USERMEM) && this->r.NCSF;
-	this->acc.word = this->r.B;
-	store(&this->acc);
-	//this->cycleCount += B5500CentralControl.memReadCycles;
-	if (this->acc.MAED || this->acc.MPED) {
-		accessError(this);
+	cpu->r.E = 11;		// Just to show the world what's happening
+	cpu->acc.addr = cpu->r.S;
+	cpu->acc.MAIL = (cpu->r.S < AA_USERMEM) && cpu->r.NCSF;
+	cpu->acc.word = cpu->r.B;
+	store(&cpu->acc);
+	//cpu->cycleCount += B5500CentralControl.memReadCycles;
+	if (cpu->acc.MAED || cpu->acc.MPED) {
+		accessError(cpu);
 	}
 }
 
-void storeAviaM(CPU *this)
+void storeAviaM(CPU *cpu)
 {
 	if (dotrcmem)
 		printf("[M]=A");
-	this->r.E = 12;		// Just to show the world what's happening
-	this->acc.addr = this->r.M;
-	this->acc.MAIL = (this->r.M < AA_USERMEM) && this->r.NCSF;
-	this->acc.word = this->r.A;
-	store(&this->acc);
-	//this->cycleCount += B5500CentralControl.memReadCycles;
-	if (this->acc.MAED || this->acc.MPED) {
-		accessError(this);
+	cpu->r.E = 12;		// Just to show the world what's happening
+	cpu->acc.addr = cpu->r.M;
+	cpu->acc.MAIL = (cpu->r.M < AA_USERMEM) && cpu->r.NCSF;
+	cpu->acc.word = cpu->r.A;
+	store(&cpu->acc);
+	//cpu->cycleCount += B5500CentralControl.memReadCycles;
+	if (cpu->acc.MAED || cpu->acc.MPED) {
+		accessError(cpu);
 	}
 }
 
-void storeBviaM(CPU *this)
+void storeBviaM(CPU *cpu)
 {
 	if (dotrcmem)
 		printf("[M]=B");
-	this->r.E = 12;		// Just to show the world what's happening
-	this->acc.addr = this->r.M;
-	this->acc.MAIL = (this->r.M < AA_USERMEM) && this->r.NCSF;
-	this->acc.word = this->r.B;
-	store(&this->acc);
-	//this->cycleCount += B5500CentralControl.memReadCycles;
-	if (this->acc.MAED || this->acc.MPED) {
-		accessError(this);
+	cpu->r.E = 12;		// Just to show the world what's happening
+	cpu->acc.addr = cpu->r.M;
+	cpu->acc.MAIL = (cpu->r.M < AA_USERMEM) && cpu->r.NCSF;
+	cpu->acc.word = cpu->r.B;
+	store(&cpu->acc);
+	//cpu->cycleCount += B5500CentralControl.memReadCycles;
+	if (cpu->acc.MAED || cpu->acc.MPED) {
+		accessError(cpu);
 	}
 }
 
@@ -415,22 +417,22 @@ void storeBviaM(CPU *this)
  * integerization is conditional on the type of word in A, and if a descriptor,
  * whether it has the integer bit set
  */
-void integerStore(CPU *this, BIT conditional, BIT destructive)
+void integerStore(CPU *cpu, BIT conditional, BIT destructive)
 {
 	WORD48	aw;	// local copy of A reg
 	NUM		B;	// B mantissa
 	BIT		doStore = true;		// okay to store
 	BIT		normalize = true;	// okay to integerize
 
-	adjustABFull(this);
-	aw = this->r.A;
+	adjustABFull(cpu);
+	aw = cpu->r.A;
 	if (!(aw & MASK_FLAG)) {
 		// it's an operand
-		computeRelativeAddr(this, aw, false);
+		computeRelativeAddr(cpu, aw, false);
 	} else {
 		// it's a descriptor
-		if (presenceTest(this, aw)) {
-			this->r.M = aw & MASKMEM;
+		if (presenceTest(cpu, aw)) {
+			cpu->r.M = aw & MASKMEM;
 			if (conditional) {
 				if (!(aw & MASK_DDINT)) { // [19:1] is the integer bit
 					normalize = false;
@@ -442,36 +444,36 @@ void integerStore(CPU *this, BIT conditional, BIT destructive)
 	}
 
 	if (normalize) {
-		num_extract(&this->r.B, &B);
+		num_extract(&cpu->r.B, &B);
 
 		if (B.e < 0) {
 			// exponent is negative
-			this->cycleCount += num_right_shift_exp(&B, 0);
+			cpu->cycleCount += num_right_shift_exp(&B, 0);
 			// round up the number
 			num_round(&B);
 		} else if (B.e > 0) {
 			// exponent is positive
-			this->cycleCount += num_left_shift_exp(&B, 0);
+			cpu->cycleCount += num_left_shift_exp(&B, 0);
 			if (B.e != 0) {
 				// oops... integer overflow normalizing the mantisa
 				doStore = false;
-				if (this->r.NCSF) {
+				if (cpu->r.NCSF) {
 					// set I07/8: integer overflow
-					this->r.I = (this->r.I & IRQ_MASKL) | IRQ_INTO;
-					signalInterrupt(this);
+					cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_INTO;
+					signalInterrupt(cpu);
 				}
 			}
 			if (doStore) {
-				num_compose(&B, &this->r.B);
+				num_compose(&B, &cpu->r.B);
 			}
 		}
 	}
 
 	if (doStore) {
-		storeBviaM(this);
-		this->r.AROF = false;
+		storeBviaM(cpu);
+		cpu->r.AROF = false;
 		if (destructive) {
-			this->r.BROF = false;
+			cpu->r.BROF = false;
 		}
 	}
 }

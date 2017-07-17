@@ -11,6 +11,8 @@
 ************************************************************************
 * 2016-02-21  R.Meyer
 *   Converted Paul's work from Javascript to C
+* 2017-07-17  R.Meyer
+*   changed "this" to "cpu" to avoid errors when using g++
 ***********************************************************************/
 
 #include "b5500_common.h"
@@ -19,28 +21,28 @@
  * Ensures both TOS registers are occupied,
  * pushing up from memory as required
  */
-void adjustABFull(CPU *this)
+void adjustABFull(CPU *cpu)
 {
-	if (this->r.AROF) {
-		if (this->r.BROF) {
+	if (cpu->r.AROF) {
+		if (cpu->r.BROF) {
 			// A and B are already full, so we're done
 		} else {
 			// A is full and B is empty, so load B from [S]
-			loadBviaS(this); // B = [S]
-			--this->r.S;
+			loadBviaS(cpu); // B = [S]
+			--cpu->r.S;
 		}
 	} else {
-		if (this->r.BROF) {
+		if (cpu->r.BROF) {
 			// A is empty and B is full, so copy B to A and load B from [S]
-			this->r.A = this->r.B;
-			this->r.AROF = 1;
+			cpu->r.A = cpu->r.B;
+			cpu->r.AROF = 1;
 		} else {
 			// A and B are empty, so simply load them from [S]
-			loadAviaS(this); // A = [S]
-			--this->r.S;
+			loadAviaS(cpu); // A = [S]
+			--cpu->r.S;
 		}
-		loadBviaS(this); // B = [S]
-		--this->r.S;
+		loadBviaS(cpu); // B = [S]
+		--cpu->r.S;
 	}
 }
 
@@ -48,16 +50,16 @@ void adjustABFull(CPU *this)
  * Adjusts the A register so that it is full, popping the contents of
  * B or [S] into A, as necessary.
  */
-void adjustAFull(CPU *this)
+void adjustAFull(CPU *cpu)
 {
-	if (!this->r.AROF) {
-		if (this->r.BROF) {
-			this->r.A = this->r.B;
-			this->r.AROF = 1;
-			this->r.BROF = 0;
+	if (!cpu->r.AROF) {
+		if (cpu->r.BROF) {
+			cpu->r.A = cpu->r.B;
+			cpu->r.AROF = 1;
+			cpu->r.BROF = 0;
 		} else {
-			loadAviaS(this); // A = [S]
-			--this->r.S;
+			loadAviaS(cpu); // A = [S]
+			--cpu->r.S;
 		}
 	}
 	// else we're done -- A is already full
@@ -67,11 +69,11 @@ void adjustAFull(CPU *this)
  * Adjusts the B register so that it is full, popping the contents of
  * [S] into B, as necessary.
  */
-void adjustBFull(CPU *this)
+void adjustBFull(CPU *cpu)
 {
-	if (!this->r.BROF) {
-		loadBviaS(this); // B = [S]
-		--this->r.S;
+	if (!cpu->r.BROF) {
+		loadBviaS(cpu); // B = [S]
+		--cpu->r.S;
 	}
 	// else we're done -- B is already full
 }
@@ -80,37 +82,37 @@ void adjustBFull(CPU *this)
  * Adjusts the A and B registers so that both are empty, pushing the
  * prior contents into memory, as necessary.
  */
-void adjustABEmpty(CPU *this)
+void adjustABEmpty(CPU *cpu)
 {
 	// B occupied ?
-	if (this->r.BROF) {
+	if (cpu->r.BROF) {
 		// empty B to stack
-		if (((this->r.S >> 6) == this->r.R) && this->r.NCSF) {
+		if (((cpu->r.S >> 6) == cpu->r.R) && cpu->r.NCSF) {
 			// set I03F: stack overflow
-			this->r.I |= 0x04;
-			signalInterrupt(this);
+			cpu->r.I |= 0x04;
+			signalInterrupt(cpu);
 		} else {
-			++this->r.S;
-			storeBviaS(this); // [S] = B
+			++cpu->r.S;
+			storeBviaS(cpu); // [S] = B
 		}
 		// B is now empty
-		this->r.BROF = 0;
+		cpu->r.BROF = 0;
 	}
 	// else we're done -- B is already empty
 
 	// A occupied ?
-	if (this->r.AROF) {
+	if (cpu->r.AROF) {
 		// empty A to stack
-		if (((this->r.S >> 6) == this->r.R) && this->r.NCSF) {
+		if (((cpu->r.S >> 6) == cpu->r.R) && cpu->r.NCSF) {
 			// set I03F: stack overflow
-			this->r.I |= 0x04;
-			signalInterrupt(this);
+			cpu->r.I |= 0x04;
+			signalInterrupt(cpu);
 		} else {
-			++this->r.S;
-			storeAviaS(this); // [S] = B
+			++cpu->r.S;
+			storeAviaS(cpu); // [S] = B
 		}
 		// A is now empty
-		this->r.AROF = 0;
+		cpu->r.AROF = 0;
 	}
 	// else we're done -- A is already empty
 }
@@ -119,26 +121,26 @@ void adjustABEmpty(CPU *this)
  * Adjusts the A register so that it is empty, pushing the prior
  * contents of A into B and B into memory, as necessary.
  */
-void adjustAEmpty(CPU *this)
+void adjustAEmpty(CPU *cpu)
 {
 	// A occupied ?
-	if (this->r.AROF) {
+	if (cpu->r.AROF) {
 		// B occupied ?
-		if (this->r.BROF) {
+		if (cpu->r.BROF) {
 			// empty B to stack
-			if (((this->r.S >> 6) == this->r.R) && this->r.NCSF) {
+			if (((cpu->r.S >> 6) == cpu->r.R) && cpu->r.NCSF) {
 				// set I03F: stack overflow
-				this->r.I |= 0x04;
-				signalInterrupt(this);
+				cpu->r.I |= 0x04;
+				signalInterrupt(cpu);
 			} else {
-				++this->r.S;
-				storeBviaS(this); // [S] = B
+				++cpu->r.S;
+				storeBviaS(cpu); // [S] = B
 			}
 		}
 		// B is now empty, move A to B
-		this->r.B = this->r.A;
-		this->r.AROF = 0;
-		this->r.BROF = 1;
+		cpu->r.B = cpu->r.A;
+		cpu->r.AROF = 0;
+		cpu->r.BROF = 1;
 	}
 	// else we're done -- A is already empty
 }
@@ -147,21 +149,21 @@ void adjustAEmpty(CPU *this)
  * Adjusts the B register so that it is empty, pushing the prior
  * contents of B into memory, as necessary.
  */
-void adjustBEmpty(CPU *this)
+void adjustBEmpty(CPU *cpu)
 {
 	// B occupied ?
-	if (this->r.BROF) {
+	if (cpu->r.BROF) {
 		// empty B to stack
-		if (((this->r.S >> 6) == this->r.R) && this->r.NCSF) {
+		if (((cpu->r.S >> 6) == cpu->r.R) && cpu->r.NCSF) {
 			// set I03F: stack overflow
-			this->r.I |= 0x04;
-			signalInterrupt(this);
+			cpu->r.I |= 0x04;
+			signalInterrupt(cpu);
 		} else {
-			++this->r.S;
-			storeBviaS(this); // [S] = B
+			++cpu->r.S;
+			storeBviaS(cpu); // [S] = B
 		}
 		// B is now empty
-		this->r.BROF = 0;
+		cpu->r.BROF = 0;
 	}
 	// else we're done -- B is already empty
 }
@@ -169,34 +171,34 @@ void adjustBEmpty(CPU *this)
 /*
  * Exchanges the two top-of-stack values
  */
-void exchangeTOS(CPU *this)
+void exchangeTOS(CPU *cpu)
 {
 	WORD48 temp;
 
-	if (this->r.AROF) {
-		if (this->r.BROF) {
+	if (cpu->r.AROF) {
+		if (cpu->r.BROF) {
 			// A and B are full, so simply exchange them
-			temp = this->r.A;
-			this->r.A = this->r.B;
-			this->r.B = temp;
+			temp = cpu->r.A;
+			cpu->r.A = cpu->r.B;
+			cpu->r.B = temp;
 		} else {
 			// A is full and B is empty, so push A to B and load A from [S]
-			this->r.B = this->r.A;
-			this->r.BROF = 1;
-			loadAviaS(this); // A = [S]
-			--this->r.S;
+			cpu->r.B = cpu->r.A;
+			cpu->r.BROF = 1;
+			loadAviaS(cpu); // A = [S]
+			--cpu->r.S;
 		}
 	} else {
-		if (this->r.BROF) {
+		if (cpu->r.BROF) {
 			// A is empty and B is full, so load A from [S]
-			loadAviaS(this); // A = [S]
-			--this->r.S;
+			loadAviaS(cpu); // A = [S]
+			--cpu->r.S;
 		} else {
 			// A and B are empty, so simply load them in reverse order
-			loadBviaS(this); // B = [S]
-			--this->r.S;
-			loadAviaS(this); // A = [S]
-			--this->r.S;
+			loadBviaS(cpu); // B = [S]
+			--cpu->r.S;
+			loadAviaS(cpu); // A = [S]
+			--cpu->r.S;
 		}
 	}
 }

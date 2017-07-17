@@ -13,6 +13,7 @@
 *   Converted Paul's work from Javascript to C
 * 2017-07-17  R.Meyer
 *   Added "long long" qualifier to constants with long long value
+*   changed "this" to "cpu" to avoid errors when using g++
 ***********************************************************************/
 
 #include "b5500_common.h"
@@ -20,14 +21,14 @@
 /***********************************************************
 *  Character Mode Syllables                                *
 ***********************************************************/
-void b5500_execute_cm(CPU *this)
+void b5500_execute_cm(CPU *cpu)
 {
 	WORD12	opcode;
 	WORD12	variant;
 	WORD48	t1, t2;
 	BIT		noSECL;
 
-	opcode = this->r.T; 
+	opcode = cpu->r.T; 
 	do {
 		variant = opcode >> 6;
 		// force off by default (set by CRF)
@@ -35,187 +36,187 @@ void b5500_execute_cm(CPU *this)
 
 		switch (opcode & 077) {
 		case 000:	// XX00: CMX, EXC: Exit character mode
-			if (this->r.BROF) {
+			if (cpu->r.BROF) {
 				// store destination string
-				storeBviaS(this);
+				storeBviaS(cpu);
 			}
-			this->r.S = this->r.F;
+			cpu->r.S = cpu->r.F;
 			// B = [S], fetch the RCW
-			loadBviaS(this);
+			loadBviaS(cpu);
 			// 0=exit, 1=exit inline
-			exitSubroutine(this, variant & 1);
-			this->r.AROF = this->r.BROF = false;
-			this->r.X = 0;
-			this->r.M = 0;
-			this->r.N = 0;
-			this->r.CWMF = 0;
+			exitSubroutine(cpu, variant & 1);
+			cpu->r.AROF = cpu->r.BROF = false;
+			cpu->r.X = 0;
+			cpu->r.M = 0;
+			cpu->r.N = 0;
+			cpu->r.CWMF = 0;
 			break;
 
 		case 002:	// XX02: BSD=Skip bit destination
-			this->cycleCount += variant;
-			t1 = this->r.K*6 + this->r.V + variant;
+			cpu->cycleCount += variant;
+			t1 = cpu->r.K*6 + cpu->r.V + variant;
 			while (t1 >= 48) {
-				if (this->r.BROF) {
+				if (cpu->r.BROF) {
 					// skipped off initial word, so
 					// [S] = B
-					storeBviaS(this);
+					storeBviaS(cpu);
 					// invalidate B
-					this->r.BROF = false;
+					cpu->r.BROF = false;
 				}
-				++this->r.S;
+				++cpu->r.S;
 				t1 -= 48;
 			}
-			this->r.V = t1 % 6;
-			this->r.K = t1 / 6;
+			cpu->r.V = t1 % 6;
+			cpu->r.K = t1 / 6;
 			break;
 
 		case 003:	// XX03: BSS=Skip bit source
-			this->cycleCount += variant;
-			t1 = this->r.G*6 + this->r.H + variant;
+			cpu->cycleCount += variant;
+			t1 = cpu->r.G*6 + cpu->r.H + variant;
 			while (t1 >= 48) {
 				// skipped off initial word, so
-				++this->r.M;
+				++cpu->r.M;
 				// invalidate A
-				this->r.AROF = false;
+				cpu->r.AROF = false;
 				t1 -= 48;
 			}
-			this->r.H = t1 % 6;
-			this->r.G = t1 / 6;
+			cpu->r.H = t1 % 6;
+			cpu->r.G = t1 / 6;
 			break;
 
 		case 004:	// XX04: RDA=Recall destination address
-			this->cycleCount += variant;
-			if (this->r.BROF) {
+			cpu->cycleCount += variant;
+			if (cpu->r.BROF) {
 				// [S] = B
-				storeBviaS(this);
-				this->r.BROF = false;
+				storeBviaS(cpu);
+				cpu->r.BROF = false;
 			}
-			this->r.V = 0;
-			this->r.S = this->r.F - variant;
+			cpu->r.V = 0;
+			cpu->r.S = cpu->r.F - variant;
 			// B = [S]
-			loadBviaS(this);
-			this->r.BROF = false;
-			t1 = this->r.B;
-			this->r.S = t1 & MASKMEM;
+			loadBviaS(cpu);
+			cpu->r.BROF = false;
+			t1 = cpu->r.B;
+			cpu->r.S = t1 & MASKMEM;
 			if (OPERAND(t1)) {
 				// if it's an operand,
 				// set K from [30:3]
-				this->r.K = (t1 >> 15) & 7;
+				cpu->r.K = (t1 >> 15) & 7;
 			} else {
 				// otherwise, force K to zero and
-				this->r.K = 0;
+				cpu->r.K = 0;
 				// just take the side effect of any p-bit interrupt
-				presenceTest(this, t1);
+				presenceTest(cpu, t1);
 			}
 			break;
 
 		case 005:	// XX05: TRW=Transfer words
-			if (this->r.BROF) {
+			if (cpu->r.BROF) {
 				// [S] = B
-				storeBviaS(this);
-				this->r.BROF = false;
+				storeBviaS(cpu);
+				cpu->r.BROF = false;
 			}
-			if (this->r.G || this->r.H) {
-				this->r.G = this->r.H = 0;
-				++this->r.M;
-				this->r.AROF = false;
+			if (cpu->r.G || cpu->r.H) {
+				cpu->r.G = cpu->r.H = 0;
+				++cpu->r.M;
+				cpu->r.AROF = false;
 			}
-			if (this->r.K || this->r.V) {
-				this->r.K = this->r.V = 0;
-				++this->r.S;
+			if (cpu->r.K || cpu->r.V) {
+				cpu->r.K = cpu->r.V = 0;
+				++cpu->r.S;
 			}
 			if (variant) {
 				// count > 0
-				if (!this->r.AROF) {
+				if (!cpu->r.AROF) {
 					// A = [M]
-					loadAviaM(this);
+					loadAviaM(cpu);
 				}
 				do {
 					// [S] = A
-					storeAviaS(this);
-					++this->r.S;
-					++this->r.M;
+					storeAviaS(cpu);
+					++cpu->r.S;
+					++cpu->r.M;
 					if (--variant) {
 						// A = [M]
-						loadAviaM(this);
+						loadAviaM(cpu);
 					} else {
 						break;
 					}
 				} while (true);
 			}
-			this->r.AROF = false;
+			cpu->r.AROF = false;
 			break;
 
 		case 006:	// XX06: SED=Set destination address
-			this->cycleCount += variant;
-			if (this->r.BROF) {
+			cpu->cycleCount += variant;
+			if (cpu->r.BROF) {
 				// [S] = B
-				storeBviaS(this);
-				this->r.BROF = false;
+				storeBviaS(cpu);
+				cpu->r.BROF = false;
 			}
-			this->r.S = this->r.F - variant;
-			this->r.K = this->r.V = 0;
+			cpu->r.S = cpu->r.F - variant;
+			cpu->r.K = cpu->r.V = 0;
 			break;
 
 		case 007:	// XX07: TDA=Transfer destination address
-			this->cycleCount += 6;
-			streamAdjustDestChar(this);
-			if (this->r.BROF) {
+			cpu->cycleCount += 6;
+			streamAdjustDestChar(cpu);
+			if (cpu->r.BROF) {
 				// [S] = B, store B at dest addresss
-				storeBviaS(this);
+				storeBviaS(cpu);
 			}
 			// save M (not the way the hardware did it)
-			t1 = this->r.M;
+			t1 = cpu->r.M;
 			// save G (ditto)
-			t2 = this->r.G;
+			t2 = cpu->r.G;
 			// copy dest address to source address
-			this->r.M = this->r.S;
-			this->r.G = this->r.K;
+			cpu->r.M = cpu->r.S;
+			cpu->r.G = cpu->r.K;
 			// save B
-			this->r.A = this->r.B;
-			this->r.AROF = this->r.BROF;
-			if (!this->r.AROF) {
+			cpu->r.A = cpu->r.B;
+			cpu->r.AROF = cpu->r.BROF;
+			if (!cpu->r.AROF) {
 				// A = [M], load A from source address
-				loadAviaM(this);
+				loadAviaM(cpu);
 			}
 			for (variant = 3; variant > 0; --variant) {
-				this->r.Y = fieldIsolate(this->r.A, this->r.G*6, 6);
-				this->r.B = (this->r.B << 6) | this->r.Y;
+				cpu->r.Y = fieldIsolate(cpu->r.A, cpu->r.G*6, 6);
+				cpu->r.B = (cpu->r.B << 6) | cpu->r.Y;
 				// make sure B is not exceeding 48 bits
-				this->r.B &= 07777777777777777ll;
-				if (this->r.G < 7) {
-					++this->r.G;
+				cpu->r.B &= 07777777777777777ll;
+				if (cpu->r.G < 7) {
+					++cpu->r.G;
 				} else {
-					this->r.G = 0;
-					++this->r.M;
+					cpu->r.G = 0;
+					++cpu->r.M;
 					// A = [M]
-					loadAviaM(this);
+					loadAviaM(cpu);
 				}
 			}
-			this->r.S = this->r.B & MASKMEM;
-			this->r.K = (this->r.B >> 15) & 7;
+			cpu->r.S = cpu->r.B & MASKMEM;
+			cpu->r.K = (cpu->r.B >> 15) & 7;
 			// restore M & G
-			this->r.M = t1;
-			this->r.G = t2;
+			cpu->r.M = t1;
+			cpu->r.G = t2;
 			// invalidate A & B
-			this->r.AROF = this->r.BROF = false;
+			cpu->r.AROF = cpu->r.BROF = false;
 			break;
 
 		case 011:	// XX11: Control State ops
 			switch (variant) {
 			case 024:	// 2411: ZPI=Conditional Halt
-				if (this->r.US14X) {
+				if (cpu->r.US14X) {
 					// STOP OPERATOR switch on
-					stop(this);
+					stop(cpu);
 				}
 				break;
 
 			case 030:	// 3011: SFI=Store for Interrupt
-				storeForInterrupt(this, false, false);
+				storeForInterrupt(cpu, false, false);
 				break;
 
 			case 034:	// 3411: SFT=Store for Test
-				storeForInterrupt(this, false, true);
+				storeForInterrupt(cpu, false, true);
 				break;
 
 			default:	// Anything else is a no-op
@@ -224,617 +225,617 @@ void b5500_execute_cm(CPU *this)
 			break;
 
 		case 012:	// XX12: TBN=Transfer blanks for non-numeric
-			streamBlankForNonNumeric(this, variant);
+			streamBlankForNonNumeric(cpu, variant);
 			break;
 
 		case 014:	// XX14: SDA=Store destination address
-			this->cycleCount += variant;
-			streamAdjustDestChar(this);
+			cpu->cycleCount += variant;
+			streamAdjustDestChar(cpu);
 			// save B
-			this->r.A = this->r.B;
-			this->r.AROF = this->r.BROF;
-			this->r.B = ((WORD48)this->r.K << 15) | this->r.S;
+			cpu->r.A = cpu->r.B;
+			cpu->r.AROF = cpu->r.BROF;
+			cpu->r.B = ((WORD48)cpu->r.K << 15) | cpu->r.S;
 			// save S (not the way the hardware did it)
-			t1 = this->r.S;
-			this->r.S = this->r.F - variant;
+			t1 = cpu->r.S;
+			cpu->r.S = cpu->r.F - variant;
 			// [S] = B
-			storeBviaS(this);
+			storeBviaS(cpu);
 			// restore S
-			this->r.S = t1;
+			cpu->r.S = t1;
 			// restore B from A
-			this->r.B = this->r.A;
-			this->r.BROF = this->r.AROF;
+			cpu->r.B = cpu->r.A;
+			cpu->r.BROF = cpu->r.AROF;
 			// invalidate A
-			this->r.AROF = false;
+			cpu->r.AROF = false;
 			break;
 
 		case 015:	// XX15: SSA=Store source address
-			this->cycleCount += variant;
-			streamAdjustSourceChar(this);
+			cpu->cycleCount += variant;
+			streamAdjustSourceChar(cpu);
 			// save B
-			this->r.A = this->r.B;
-			this->r.AROF = this->r.BROF;
-			this->r.B = ((WORD48)this->r.G << 15) | this->r.M;
+			cpu->r.A = cpu->r.B;
+			cpu->r.AROF = cpu->r.BROF;
+			cpu->r.B = ((WORD48)cpu->r.G << 15) | cpu->r.M;
 			// save M (not the way the hardware did it)
-			t1 = this->r.M;
-			this->r.M = this->r.F - variant;
+			t1 = cpu->r.M;
+			cpu->r.M = cpu->r.F - variant;
 			// [M] = B
-			storeBviaM(this);
+			storeBviaM(cpu);
 			// restore M
-			this->r.M = t1;
+			cpu->r.M = t1;
 			// restore B from A
-			this->r.B = this->r.A;
-			this->r.BROF = this->r.AROF;
+			cpu->r.B = cpu->r.A;
+			cpu->r.BROF = cpu->r.AROF;
 			// invalidate A
-			this->r.AROF = false;
+			cpu->r.AROF = false;
 			break;
 
 		case 016:	// XX16: SFD=Skip forward destination
-			this->cycleCount += (variant >> 3) + (variant & 7);
-			streamAdjustDestChar(this);
-			if (this->r.BROF && ((this->r.K + variant) >= 8)) {
+			cpu->cycleCount += (variant >> 3) + (variant & 7);
+			streamAdjustDestChar(cpu);
+			if (cpu->r.BROF && ((cpu->r.K + variant) >= 8)) {
 				// will skip off the current word,
 				// so store and invalidate B
-				storeBviaS(this);
-				this->r.BROF = false;
+				storeBviaS(cpu);
+				cpu->r.BROF = false;
 			}
-			t1 = (this->r.S << 3) + this->r.K + variant;
-			this->r.S = t1 >> 3;
-			this->r.K = t1 & 7;
+			t1 = (cpu->r.S << 3) + cpu->r.K + variant;
+			cpu->r.S = t1 >> 3;
+			cpu->r.K = t1 & 7;
 			break;
 
 		case 017:	// XX17: SRD=Skip reverse destination
-			this->cycleCount += (variant >> 3) + (variant & 7);
-			streamAdjustDestChar(this);
-			if (this->r.BROF && (this->r.K < variant)) {
+			cpu->cycleCount += (variant >> 3) + (variant & 7);
+			streamAdjustDestChar(cpu);
+			if (cpu->r.BROF && (cpu->r.K < variant)) {
 				// will skip off the current word,
 				// so store and invalidate B
-				storeBviaS(this);
-				this->r.BROF = false;
+				storeBviaS(cpu);
+				cpu->r.BROF = false;
 			}
-			t1 = (this->r.S << 3) + this->r.K - variant;
-			this->r.S = t1 >> 3;
-			this->r.K = t1 & 7;
+			t1 = (cpu->r.S << 3) + cpu->r.K - variant;
+			cpu->r.S = t1 >> 3;
+			cpu->r.K = t1 & 7;
 			break;
 
 		case 022:	// XX22: SES=Set source address
-			this->cycleCount += variant;
-			this->r.M = this->r.F - variant;
-			this->r.G = this->r.H = 0;
-			this->r.AROF = false;
+			cpu->cycleCount += variant;
+			cpu->r.M = cpu->r.F - variant;
+			cpu->r.G = cpu->r.H = 0;
+			cpu->r.AROF = false;
 			break;
 
 		case 024:	// XX24: TEQ=Test for equal
-			streamAdjustSourceChar(this);
-			if (!this->r.AROF) {
+			streamAdjustSourceChar(cpu);
+			if (!cpu->r.AROF) {
 				// A = [M]
-				loadAviaM(this);
+				loadAviaM(cpu);
 			}
-			t1 = fieldIsolate(this->r.A, this->r.G*6, 6);
-			this->r.TFFF = (t1 == variant ? true : false);
+			t1 = fieldIsolate(cpu->r.A, cpu->r.G*6, 6);
+			cpu->r.TFFF = (t1 == variant ? true : false);
 			break;
 
 		case 025:	// XX25: TNE=Test for not equal
-			streamAdjustSourceChar(this);
-			if (!this->r.AROF) {
+			streamAdjustSourceChar(cpu);
+			if (!cpu->r.AROF) {
 				// A = [M]
-				loadAviaM(this);
+				loadAviaM(cpu);
 			}
-			t1 = fieldIsolate(this->r.A, this->r.G*6, 6);
-			this->r.TFFF = (t1 != variant ? true : false);
+			t1 = fieldIsolate(cpu->r.A, cpu->r.G*6, 6);
+			cpu->r.TFFF = (t1 != variant ? true : false);
 			break;
 
 		case 026:	// XX26: TEG=Test for equal or greater
-			streamAdjustSourceChar(this);
-			if (!this->r.AROF) {
+			streamAdjustSourceChar(cpu);
+			if (!cpu->r.AROF) {
 				// A = [M]
-				loadAviaM(this);
+				loadAviaM(cpu);
 			}
-			t1 = collation[fieldIsolate(this->r.A, this->r.G*6, 6)];
+			t1 = collation[fieldIsolate(cpu->r.A, cpu->r.G*6, 6)];
 			t2 = collation[variant];
-			this->r.TFFF = (t1 >= t2 ? true : false);
+			cpu->r.TFFF = (t1 >= t2 ? true : false);
 			break;
 
 		case 027:	// XX27: TGR=Test for greater
-			streamAdjustSourceChar(this);
-			if (!this->r.AROF) {
+			streamAdjustSourceChar(cpu);
+			if (!cpu->r.AROF) {
 				// A = [M]
-				loadAviaM(this);
+				loadAviaM(cpu);
 			}
-			t1 = collation[fieldIsolate(this->r.A, this->r.G*6, 6)];
+			t1 = collation[fieldIsolate(cpu->r.A, cpu->r.G*6, 6)];
 			t2 = collation[variant];
-			this->r.TFFF = (t1 > t2 ? true : false);
+			cpu->r.TFFF = (t1 > t2 ? true : false);
 			break;
 
 		case 030:	// XX30: SRS=Skip reverse source
-			this->cycleCount += (variant >> 3) + (variant & 7);
-			streamAdjustSourceChar(this);
-			if (this->r.G < variant) {
+			cpu->cycleCount += (variant >> 3) + (variant & 7);
+			streamAdjustSourceChar(cpu);
+			if (cpu->r.G < variant) {
 				// will skip off the current word
-				this->r.AROF = 0;
+				cpu->r.AROF = 0;
 			}
-			t1 = this->r.M*8 + this->r.G - variant;
-			this->r.M = t1 >> 3;
-			this->r.G = t1 & 7;
+			t1 = cpu->r.M*8 + cpu->r.G - variant;
+			cpu->r.M = t1 >> 3;
+			cpu->r.G = t1 & 7;
 			break;
 
 		case 031:	// XX31: SFS=Skip forward source
-			this->cycleCount += (variant >> 3) + (variant & 7);
-			streamAdjustSourceChar(this);
-			if (this->r.G + variant >= 8) {
+			cpu->cycleCount += (variant >> 3) + (variant & 7);
+			streamAdjustSourceChar(cpu);
+			if (cpu->r.G + variant >= 8) {
 				// will skip off the current word
-				this->r.AROF = false;
+				cpu->r.AROF = false;
 			}
-			t1 = this->r.M*8 + this->r.G + variant;
-			this->r.M = t1 >> 3;
-			this->r.G = t1 & 7;
+			t1 = cpu->r.M*8 + cpu->r.G + variant;
+			cpu->r.M = t1 >> 3;
+			cpu->r.G = t1 & 7;
 			break;
 
 		case 032:	// XX32: xxx=Field subtract (aux)
-			fieldArithmetic(this, variant, false);
+			fieldArithmetic(cpu, variant, false);
 			break;
 
 		case 033:	// XX33: xxx=Field add (aux)
-			fieldArithmetic(this, variant, true);
+			fieldArithmetic(cpu, variant, true);
 			break;
 
 		case 034:	// XX34: TEL=Test for equal or less
-			streamAdjustSourceChar(this);
-			if (!this->r.AROF) {
+			streamAdjustSourceChar(cpu);
+			if (!cpu->r.AROF) {
 				// A = [M]
-				loadAviaM(this);
+				loadAviaM(cpu);
 			}
-			t1 = collation[fieldIsolate(this->r.A, this->r.G*6, 6)];
+			t1 = collation[fieldIsolate(cpu->r.A, cpu->r.G*6, 6)];
 			t2 = collation[variant];
-			this->r.TFFF = (t1 <= t2 ? true : false);
+			cpu->r.TFFF = (t1 <= t2 ? true : false);
 			break;
 
 		case 035:	// XX35: TLS=Test for less
-			streamAdjustSourceChar(this);
-			if (!this->r.AROF) {
+			streamAdjustSourceChar(cpu);
+			if (!cpu->r.AROF) {
 				// A = [M]
-				loadAviaM(this);
+				loadAviaM(cpu);
 			}
-			t1 = collation[fieldIsolate(this->r.A, this->r.G*6, 6)];
+			t1 = collation[fieldIsolate(cpu->r.A, cpu->r.G*6, 6)];
 			t2 = collation[variant];
-			this->r.TFFF = (t1 < t2 ? true : false);
+			cpu->r.TFFF = (t1 < t2 ? true : false);
 			break;
 
 		case 036:	// XX36: TAN=Test for alphanumeric
-			streamAdjustSourceChar(this);
-			if (!this->r.AROF) {
+			streamAdjustSourceChar(cpu);
+			if (!cpu->r.AROF) {
 				// A = [M]
-				loadAviaM(this);
+				loadAviaM(cpu);
 			}
-			this->r.Y = t1 = fieldIsolate(this->r.A, this->r.G*6, 6);
-			this->r.Z = variant;	// for display only
+			cpu->r.Y = t1 = fieldIsolate(cpu->r.A, cpu->r.G*6, 6);
+			cpu->r.Z = variant;	// for display only
 			if (collation[t1] > collation[variant]) {
-				this->r.TFFF = t1 == 0x20 ? false : (t1 == 0x3C ? false : true);
+				cpu->r.TFFF = t1 == 0x20 ? false : (t1 == 0x3C ? false : true);
 				// alphanumeric unless | or !
 			} else {
 				// alphanumeric if equal
-				this->r.Q03F = true;
+				cpu->r.Q03F = true;
 				// set Q03F (display only)
-				this->r.TFFF = (t1 == variant ? true : false);
+				cpu->r.TFFF = (t1 == variant ? true : false);
 			}
 			break;
 
 		case 037:	// XX37: BIT=Test bit
-			if (!this->r.AROF) {
+			if (!cpu->r.AROF) {
 				// A = [M]
-				loadAviaM(this);
+				loadAviaM(cpu);
 			}
-			this->r.Y = fieldIsolate(this->r.A, this->r.G*6, 6);
-			t1 = this->r.Y >> (5-this->r.H);
-			this->r.TFFF = (t1 & 1) == (variant & 1) ? true : false;
+			cpu->r.Y = fieldIsolate(cpu->r.A, cpu->r.G*6, 6);
+			t1 = cpu->r.Y >> (5-cpu->r.H);
+			cpu->r.TFFF = (t1 & 1) == (variant & 1) ? true : false;
 			break;
 
 		case 040:	// XX40: INC=Increase TALLY
 			if (variant) {
-				this->r.R = (this->r.R + variant) & 63;
+				cpu->r.R = (cpu->r.R + variant) & 63;
 			}
 			// else it's a character-mode no-op
 			break;
 
 		case 041:	// XX41: STC=Store TALLY
-			this->cycleCount += variant;
+			cpu->cycleCount += variant;
 			// save B
-			this->r.A = this->r.B;
+			cpu->r.A = cpu->r.B;
 			// invalidate A
-			this->r.AROF = false;
+			cpu->r.AROF = false;
 			// save RCW address in B (why??)
-			this->r.B = this->r.F;
-			if (this->r.BROF) {
+			cpu->r.B = cpu->r.F;
+			if (cpu->r.BROF) {
 				// [S] = A, save original B contents
-				storeAviaS(this);
-				this->r.BROF = false;
+				storeAviaS(cpu);
+				cpu->r.BROF = false;
 			}
 			// move saved F address to A (why??)
-			this->r.A = this->r.B;
+			cpu->r.A = cpu->r.B;
 			// copy the TALLY value to B
-			this->r.B = this->r.R;
+			cpu->r.B = cpu->r.R;
 			// save S (not the way the hardware did it)
-			t1 = this->r.S;
-			this->r.S = this->r.F - variant;
+			t1 = cpu->r.S;
+			cpu->r.S = cpu->r.F - variant;
 			// [S] = B, store the TALLY value
-			storeBviaS(this);
+			storeBviaS(cpu);
 			// restore F address from A (why??)
-			this->r.B = this->r.A;
+			cpu->r.B = cpu->r.A;
 			// restore S
-			this->r.S = t1;
+			cpu->r.S = t1;
 			// invalidate B
-			this->r.BROF = false;
+			cpu->r.BROF = false;
 			break;
 
 		case 042:	// XX42: SEC=Set TALLY
-			this->r.R = variant;
+			cpu->r.R = variant;
 			break;
 
 		case 043:	// XX43: CRF=Call repeat field
-			this->cycleCount += variant;
+			cpu->cycleCount += variant;
 			// save B in A
-			this->r.A = this->r.B;
-			this->r.AROF = this->r.BROF;
+			cpu->r.A = cpu->r.B;
+			cpu->r.AROF = cpu->r.BROF;
 			// save S (not the way the hardware did it)
-			t1 = this->r.S;
+			t1 = cpu->r.S;
 			// compute parameter address
-			this->r.S = this->r.F - variant;
+			cpu->r.S = cpu->r.F - variant;
 			// B = [S]
-			loadBviaS(this);
+			loadBviaS(cpu);
 			// dynamic repeat count is low-order 6 bits
-			variant = this->r.B & 63;
+			variant = cpu->r.B & 63;
 			// restore S
-			this->r.S = t1;
+			cpu->r.S = t1;
 			// restore B from A
-			this->r.B = this->r.A;
-			this->r.BROF = this->r.AROF;
+			cpu->r.B = cpu->r.A;
+			cpu->r.BROF = cpu->r.AROF;
 			// invalidate A
-			this->r.AROF = 0;
-			if (!this->r.PROF) {
+			cpu->r.AROF = 0;
+			if (!cpu->r.PROF) {
 				// fetch the program word, if necessary
-				loadPviaC(this);
+				loadPviaC(cpu);
 			}
-			opcode = fieldIsolate(this->r.P, this->r.L*12, 12);
+			opcode = fieldIsolate(cpu->r.P, cpu->r.L*12, 12);
 			if (variant) {
 				// if repeat count from parameter > 0,
 				// apply it to the next syllable
-				this->r.T = opcode = (opcode & 00077) + (variant << 6);
+				cpu->r.T = opcode = (opcode & 00077) + (variant << 6);
 			} else {
 				// otherwise, construct JFW (XX47) using repeat
 				// count from next syl (whew!)
-				this->r.T = opcode = (opcode & 07700) + 047;
+				cpu->r.T = opcode = (opcode & 07700) + 047;
 			}
 
 			// Since we are bypassing normal SECL behavior,
 			// bump the instruction pointer here.
 			// >>> override normal instruction fetch <<<
 			noSECL = 1;
-			this->r.PROF = false;
-			if (this->r.L < 3) {
-				++this->r.L;
+			cpu->r.PROF = false;
+			if (cpu->r.L < 3) {
+				++cpu->r.L;
 			} else {
-				this->r.L = 0;
-				++this->r.C;
+				cpu->r.L = 0;
+				++cpu->r.C;
 			}
 			break;
 
 		case 044:	// XX44: JNC=Jump out of loop conditional
-			if (!this->r.TFFF) {
-				jumpOutOfLoop(this, variant);
+			if (!cpu->r.TFFF) {
+				jumpOutOfLoop(cpu, variant);
 			}
 			break;
 
 		case 045:	// XX45: JFC=Jump forward conditional
-			if (!this->r.TFFF) {
+			if (!cpu->r.TFFF) {
 				// conditional on TFFF
-				this->cycleCount += (variant >> 2) + (variant & 3);
-				jumpSyllables(this, variant);
+				cpu->cycleCount += (variant >> 2) + (variant & 3);
+				jumpSyllables(cpu, variant);
 			}
 			break;
 
 		case 046:	// XX46: JNS=Jump out of loop
-			jumpOutOfLoop(this, variant);
+			jumpOutOfLoop(cpu, variant);
 			break;
 
 		case 047:	// XX47: JFW=Jump forward unconditional
-			this->cycleCount += (variant >> 2) + (variant & 3);
-			jumpSyllables(this, variant);
+			cpu->cycleCount += (variant >> 2) + (variant & 3);
+			jumpSyllables(cpu, variant);
 			break;
 
 		case 050:	// XX50: RCA=Recall control address
-			this->cycleCount += variant;
+			cpu->cycleCount += variant;
 			// save B in A
-			this->r.A = this->r.B;
-			this->r.AROF = this->r.BROF;
+			cpu->r.A = cpu->r.B;
+			cpu->r.AROF = cpu->r.BROF;
 			// save S (not the way the hardware did it)
-			t1 = this->r.S;
-			this->r.S = this->r.F - variant;
+			t1 = cpu->r.S;
+			cpu->r.S = cpu->r.F - variant;
 			// B = [S]
-			loadBviaS(this);
-			this->r.S = t1;
-			t2 = this->r.B;
+			loadBviaS(cpu);
+			cpu->r.S = t1;
+			t2 = cpu->r.B;
 			if (DESCRIPTOR(t2)) {
 				// if it's a descriptor,
-				if (presenceTest(this, t2)) {
+				if (presenceTest(cpu, t2)) {
 					// if present, initiate a fetch to P
 					// get the word address,
-					this->r.C = this->r.B & MASKMEM;
+					cpu->r.C = cpu->r.B & MASKMEM;
 					// force L to zero and
-					this->r.L = 0;
+					cpu->r.L = 0;
 					// require fetch at SECL
-					this->r.PROF = false;
+					cpu->r.PROF = false;
 				}
 			} else {
-				this->r.C = t2 & MASKMEM;
+				cpu->r.C = t2 & MASKMEM;
 				t1 = (t2 >> 36) & 3;
 				if (t1 < 3) {
 					// if not a descriptor, increment the address
-					this->r.L = t1+1;
+					cpu->r.L = t1+1;
 				} else {
-					this->r.L = 0;
-					++this->r.C;
+					cpu->r.L = 0;
+					++cpu->r.C;
 				}
 				// require fetch at SECL
-				this->r.PROF = false;
+				cpu->r.PROF = false;
 			}
 			// restore B
-			this->r.B = this->r.A;
-			this->r.BROF = this->r.AROF;
+			cpu->r.B = cpu->r.A;
+			cpu->r.BROF = cpu->r.AROF;
 			// invalidate A
-			this->r.AROF = false;
+			cpu->r.AROF = false;
 			break;
 
 		case 051:	// XX51: ENS=End loop
-			this->cycleCount += 4;
+			cpu->cycleCount += 4;
 			// save B in A
-			this->r.A = this->r.B;
-			this->r.AROF = this->r.BROF;
-			t1 = this->r.X;
+			cpu->r.A = cpu->r.B;
+			cpu->r.AROF = cpu->r.BROF;
+			t1 = cpu->r.X;
 			// get repeat count
 			t2 = (t1 & MASK_LCWrpt) >> SHFT_LCWrpt;
 			// loop count exhausted?
 			if (t2) {
 					// no, restore C, L, and P to loop again
-					this->r.C = (t1 & MASK_LCWrC) >> SHFT_LCWrC;
-					this->r.L = (t1 & MASK_LCWrL) >> SHFT_LCWrL;
+					cpu->r.C = (t1 & MASK_LCWrC) >> SHFT_LCWrC;
+					cpu->r.L = (t1 & MASK_LCWrL) >> SHFT_LCWrL;
 					// require fetch at SECL
-					this->r.PROF = false;
+					cpu->r.PROF = false;
 					// store decremented count in X
 					--t2;
-					this->r.X = (this->r.X & ~MASK_LCWrpt) | (t2 << SHFT_LCWrpt);
+					cpu->r.X = (cpu->r.X & ~MASK_LCWrpt) | (t2 << SHFT_LCWrpt);
 			} else {
 				// save S (not the way the hardware did it)
-				t2 = this->r.S;
+				t2 = cpu->r.S;
 				// get prior LCW addr from X value
-				this->r.S = (t1 & MASK_LCWrF) >> SHFT_LCWrF;
+				cpu->r.S = (t1 & MASK_LCWrF) >> SHFT_LCWrF;
 				// B = [S], fetch prior LCW from stack
-				loadBviaS(this);
+				loadBviaS(cpu);
 				// restore S
-				this->r.S = t2;
+				cpu->r.S = t2;
 				// store prior LCW (less control bits) in X
-				this->r.X = this->r.B & MASK_MANTISSA;
+				cpu->r.X = cpu->r.B & MASK_MANTISSA;
 			}
 			// restore B
-			this->r.B = this->r.A;
-			this->r.BROF = this->r.AROF;
+			cpu->r.B = cpu->r.A;
+			cpu->r.BROF = cpu->r.AROF;
 			// invalidate A
-			this->r.AROF = false;
+			cpu->r.AROF = false;
 			break;
 
 		case 052:	// XX52: BNS=Begin loop
-			this->cycleCount += 4;
+			cpu->cycleCount += 4;
 			// save B in A (note that BROF is not altered)
-			this->r.A = this->r.B;
+			cpu->r.A = cpu->r.B;
 
 			// construct new LCW - keep previous F field
-			t1 = this->r.X & MASK_LCWrF;
+			t1 = cpu->r.X & MASK_LCWrF;
 			// insert repeat count
 			// decrement count for first iteration
 			t1 |= (WORD48)(variant ? variant-1 : 0) << SHFT_LCWrpt;
 			// insert L
-			t1 |= (WORD48)(this->r.L) << SHFT_LCWrL;
+			t1 |= (WORD48)(cpu->r.L) << SHFT_LCWrL;
 			// insert C
-			t1 |= (WORD48)(this->r.C) << SHFT_LCWrC;
+			t1 |= (WORD48)(cpu->r.C) << SHFT_LCWrC;
 
 			// save current loop control word
 			// set control bits [0:2]=3
-			this->r.B = this->r.X | INIT_LCW;
+			cpu->r.B = cpu->r.X | INIT_LCW;
 			// save S (not the way the hardware did it)
-			t2 = this->r.S;
+			t2 = cpu->r.S;
 			// get F value from X value and ++
-			this->r.S = (this->r.X & MASK_LCWrF) >> SHFT_LCWrF;
-			this->r.S++;
+			cpu->r.S = (cpu->r.X & MASK_LCWrF) >> SHFT_LCWrF;
+			cpu->r.S++;
 			// [S] = B, save prior LCW in stack
-			storeBviaS(this);
+			storeBviaS(cpu);
 			// update F value in X
-			t1 |= (this->r.S << SHFT_LCWrF);
-			this->r.X = t1;
+			t1 |= (cpu->r.S << SHFT_LCWrF);
+			cpu->r.X = t1;
 			// restore S
-			this->r.S = t2;
+			cpu->r.S = t2;
 
 			// restore B (note that BROF is still relevant)
-			this->r.B = this->r.A;
+			cpu->r.B = cpu->r.A;
 			// invalidate A
-			this->r.AROF = false;
+			cpu->r.AROF = false;
 			break;
 
 		case 053:	// XX53: RSA=Recall source address
-			this->cycleCount += variant;
+			cpu->cycleCount += variant;
 			// save B
-			this->r.A = this->r.B;
-			this->r.AROF = this->r.BROF;
-			this->r.H = 0;
-			this->r.M = this->r.F - variant;
+			cpu->r.A = cpu->r.B;
+			cpu->r.AROF = cpu->r.BROF;
+			cpu->r.H = 0;
+			cpu->r.M = cpu->r.F - variant;
 			// B = [M]
-			loadBviaM(this);
-			t1 = this->r.B;
-			this->r.M = t1 & MASKMEM;
+			loadBviaM(cpu);
+			t1 = cpu->r.B;
+			cpu->r.M = t1 & MASKMEM;
 			if (OPERAND(t1)) {
 				// if it's an operand,
 				// set G from [30:3]
-				this->r.G = (t1 >> 15) & 7;
+				cpu->r.G = (t1 >> 15) & 7;
 			} else {
 				// otherwise, force G to zero and
-				this->r.G = 0;
+				cpu->r.G = 0;
 				// just take the side effect of any p-bit interrupt
-				presenceTest(this, t1);
+				presenceTest(cpu, t1);
 			}
 			// restore B from A
-			this->r.B = this->r.A;
-			this->r.BROF = this->r.AROF;
+			cpu->r.B = cpu->r.A;
+			cpu->r.BROF = cpu->r.AROF;
 			// invalidate A
-			this->r.AROF = false;
+			cpu->r.AROF = false;
 			break;
 
 		case 054:	// XX54: SCA=Store control address
-			this->cycleCount += variant;
+			cpu->cycleCount += variant;
 			// save B
-			this->r.A = this->r.B;
-			this->r.AROF = this->r.BROF;
+			cpu->r.A = cpu->r.B;
+			cpu->r.AROF = cpu->r.BROF;
 			// save S (not the way the hardware did it)
-			t2 = this->r.S;
+			t2 = cpu->r.S;
 			// compute store address
-			this->r.S = this->r.F - variant;
-			this->r.B = this->r.C |
-				((WORD48)this->r.F << 15) |
-				((WORD48)this->r.L << 36);
+			cpu->r.S = cpu->r.F - variant;
+			cpu->r.B = cpu->r.C |
+				((WORD48)cpu->r.F << 15) |
+				((WORD48)cpu->r.L << 36);
 			// [S] = B
-			storeBviaS(this);
+			storeBviaS(cpu);
 			// restore S
-			this->r.S = t2;
+			cpu->r.S = t2;
 			// restore B from A
-			this->r.B = this->r.A;
-			this->r.BROF = this->r.AROF;
+			cpu->r.B = cpu->r.A;
+			cpu->r.BROF = cpu->r.AROF;
 			// invalidate A
-			this->r.AROF = false;
+			cpu->r.AROF = false;
 			break;
 
 		case 055:	// XX55: JRC=Jump reverse conditional
-			if (!this->r.TFFF) {
+			if (!cpu->r.TFFF) {
 				// conditional on TFFF
-				this->cycleCount += (variant >> 2) + (variant & 3);
-				jumpSyllables(this, -variant);
+				cpu->cycleCount += (variant >> 2) + (variant & 3);
+				jumpSyllables(cpu, -variant);
 			}
 			break;
 
 		case 056:	// XX56: TSA=Transfer source address
-			streamAdjustSourceChar(this);
-			if (this->r.BROF) {
+			streamAdjustSourceChar(cpu);
+			if (cpu->r.BROF) {
 				// [S] = B, store B at dest addresss
-				storeBviaS(this);
-				this->r.BROF = false;
+				storeBviaS(cpu);
+				cpu->r.BROF = false;
 			}
-			if (!this->r.AROF) {
+			if (!cpu->r.AROF) {
 				// A = [M], load A from source address
-				loadAviaM(this);
+				loadAviaM(cpu);
 			}
 			for (variant = 3; variant > 0; --variant) {
-				this->r.Y = fieldIsolate(this->r.A, this->r.G*6, 6);
-				this->r.B = (this->r.B << 6) + this->r.Y;
+				cpu->r.Y = fieldIsolate(cpu->r.A, cpu->r.G*6, 6);
+				cpu->r.B = (cpu->r.B << 6) + cpu->r.Y;
 				// make sure B is not exceeding 48 bits
-				this->r.B &= 07777777777777777ll;
-				if (this->r.G < 7) {
-					++this->r.G;
+				cpu->r.B &= 07777777777777777ll;
+				if (cpu->r.G < 7) {
+					++cpu->r.G;
 				} else {
-					this->r.G = 0;
-					++this->r.M;
+					cpu->r.G = 0;
+					++cpu->r.M;
 					// A = [M]
-					loadAviaM(this);
+					loadAviaM(cpu);
 				}
 			}
-			this->r.M = this->r.B & MASKMEM;
-			this->r.G = (this->r.B >> 15) & 7;
+			cpu->r.M = cpu->r.B & MASKMEM;
+			cpu->r.G = (cpu->r.B >> 15) & 7;
 			// invalidate A
-			this->r.AROF = false;
+			cpu->r.AROF = false;
 			break;
 
 		case 057:	// XX57: JRV=Jump reverse unconditional
-			this->cycleCount += (variant >> 2) + (variant & 3);
-			jumpSyllables(this, -variant);
+			cpu->cycleCount += (variant >> 2) + (variant & 3);
+			jumpSyllables(cpu, -variant);
 			break;
 
 		case 060:	// XX60: CEQ=Compare equal
-			compareSourceWithDest(this, variant, false);
-			this->r.H = this->r.V = 0;
+			compareSourceWithDest(cpu, variant, false);
+			cpu->r.H = cpu->r.V = 0;
 			// if !Q03F, S=D
-			this->r.TFFF = this->r.Q03F ? false : true;
+			cpu->r.TFFF = cpu->r.Q03F ? false : true;
 			break;
 
 		case 061:	// XX61: CNE=Compare not equal
-			compareSourceWithDest(this, variant, false);
-			this->r.H = this->r.V = 0;
+			compareSourceWithDest(cpu, variant, false);
+			cpu->r.H = cpu->r.V = 0;
 			// if Q03F, S!=D
-			this->r.TFFF = this->r.Q03F ? true : false;
+			cpu->r.TFFF = cpu->r.Q03F ? true : false;
 			break;
 
 		case 062:	// XX62: CEG=Compare greater or equal
-			compareSourceWithDest(this, variant, false);
-			this->r.H = this->r.V = 0;
+			compareSourceWithDest(cpu, variant, false);
+			cpu->r.H = cpu->r.V = 0;
 			// if Q03F&TFFF, S>D; if !Q03F, S=D
-			this->r.TFFF = this->r.Q03F ? this->r.TFFF : true;
+			cpu->r.TFFF = cpu->r.Q03F ? cpu->r.TFFF : true;
 			break;
 
 		case 063:	// XX63: CGR=Compare greater
-			compareSourceWithDest(this, variant, false);
-			this->r.H = this->r.V = 0;
+			compareSourceWithDest(cpu, variant, false);
+			cpu->r.H = cpu->r.V = 0;
 			// if Q03F&TFFF, S>D
-			this->r.TFFF = this->r.Q03F ? this->r.TFFF : false;
+			cpu->r.TFFF = cpu->r.Q03F ? cpu->r.TFFF : false;
 			break;
 
 		case 064:	// XX64: BIS=Set bit
-			streamBitsToDest(this, variant, 07777777777777777ll);
+			streamBitsToDest(cpu, variant, 07777777777777777ll);
 			break;
 
 		case 065:	// XX65: BIR=Reset bit
-			streamBitsToDest(this, variant, 0);
+			streamBitsToDest(cpu, variant, 0);
 			break;
 
 		case 066:	// XX66: OCV=Output convert
-			streamOutputConvert(this, variant);
+			streamOutputConvert(cpu, variant);
 			break;
 
 		case 067:	// XX67: ICV=Input convert
-			streamInputConvert(this, variant);
+			streamInputConvert(cpu, variant);
 			break;
 
 		case 070:	// XX70: CEL=Compare equal or less
-			compareSourceWithDest(this, variant, false);
-			this->r.H = this->r.V = 0;
+			compareSourceWithDest(cpu, variant, false);
+			cpu->r.H = cpu->r.V = 0;
 			// if Q03F&!TFFF, S<D; if !Q03F, S=D
-			this->r.TFFF = this->r.Q03F ? !this->r.TFFF : true;
+			cpu->r.TFFF = cpu->r.Q03F ? !cpu->r.TFFF : true;
 			break;
 
 		case 071:	// XX71: CLS=Compare less
-			compareSourceWithDest(this, variant, false);
-			this->r.H = this->r.V = 0;
+			compareSourceWithDest(cpu, variant, false);
+			cpu->r.H = cpu->r.V = 0;
 			// if Q03F&!TFFF, S<D
-			this->r.TFFF = this->r.Q03F ? !this->r.TFFF : false;
+			cpu->r.TFFF = cpu->r.Q03F ? !cpu->r.TFFF : false;
 			break;
 
 		case 072:	// XX72: FSU=Field subtract
-			fieldArithmetic(this, variant, false);
+			fieldArithmetic(cpu, variant, false);
 			break;
 
 		case 073:	// XX73: FAD=Field add
-			fieldArithmetic(this, variant, true);
+			fieldArithmetic(cpu, variant, true);
 			break;
 
 		case 074:	// XX74: TRP=Transfer program characters
-			streamProgramToDest(this, variant);
+			streamProgramToDest(cpu, variant);
 			break;
 
 		case 075:	// XX75: TRN=Transfer source numerics
 			// initialize for negative sign test
-			this->r.TFFF = false;
-			streamNumericToDest(this, variant, false);
+			cpu->r.TFFF = false;
+			streamNumericToDest(cpu, variant, false);
 			break;
 
 		case 076:	// XX76: TRZ=Transfer source zones
-			streamNumericToDest(this, variant, true);
+			streamNumericToDest(cpu, variant, true);
 			break;
 
 		case 077:	// XX77: TRS=Transfer source characters
-			streamCharacterToDest(this, variant);
+			streamCharacterToDest(cpu, variant);
 			break;
 
 		default:	// everything else is a no-op

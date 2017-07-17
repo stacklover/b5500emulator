@@ -454,8 +454,8 @@ extern void storeAviaM(CPU *);
 extern void storeBviaM(CPU *);
 extern void storeAviaS(CPU *);
 extern void storeBviaS(CPU *);
-extern void integerStore(CPU *this, BIT conditional, BIT destructive);
-extern BIT indexDescriptor(CPU *this);
+extern void integerStore(CPU *, BIT conditional, BIT destructive);
+extern BIT indexDescriptor(CPU *);
 
 /* jumps & calls */
 extern void jumpSyllables(CPU *, int count);
@@ -463,8 +463,8 @@ extern void jumpWords(CPU *, int count);
 extern void jumpOutOfLoop(CPU *, int count);
 extern WORD48 buildMSCW(CPU *);
 extern void applyMSCW(CPU *, WORD48 mscw);
-extern WORD48 buildRCW(CPU *this, BIT descriptorCall);
-extern BIT applyRCW(CPU *this, WORD48 word, BIT in_line);
+extern WORD48 buildRCW(CPU *, BIT descriptorCall);
+extern BIT applyRCW(CPU *, WORD48 word, BIT in_line);
 extern void operandCall(CPU *);
 extern void descriptorCall(CPU *);
 extern void enterSubroutine(CPU *, BIT descriptorCall);
@@ -582,5 +582,6 @@ extern int dotrcmem;	// trace memory accesses
 extern int dotrcins;	// trace instruction and IRQs
 extern int dotrcmat;	// trace math operations
 extern int emode;	// emode math
+extern const INSTRUCTION instruction_table[];
 
 #endif /* B5500_COMMON_H */

@@ -11,19 +11,21 @@
 ************************************************************************
 * 2016-02-1921  R.Meyer
 *   Converted Paul's work from Javascript to C
+* 2017-07-17  R.Meyer
+*   changed "this" to "cpu" to avoid errors when using g++
 ***********************************************************************/
 
 #include "b5500_common.h"
 
-void doublePrecisionAdd(CPU *this, BIT add)
+void doublePrecisionAdd(CPU *cpu, BIT add)
 {
 }
 
-void doublePrecisionMultiply(CPU *this)
+void doublePrecisionMultiply(CPU *cpu)
 {
 }
 
-void doublePrecisionDivide(CPU *this)
+void doublePrecisionDivide(CPU *cpu)
 {
 }
 

@@ -13,7 +13,7 @@
 
 #include "b5500_common.h"
 
-const INSTRUCTION instr[] = {
+const INSTRUCTION instruction_table[] = {
 //
 // pseudo instructions
 //
@@ -256,5 +256,6 @@ const INSTRUCTION instr[] = {
 // TRS=Transfer source characters
 	{"TRS",  00077, OP_EXPR, OP_TOP6, true},
 // end of table
-	{0, 0, 0, 0}
+	{0, 0, OP_NONE, OP_NONE},
 };
+

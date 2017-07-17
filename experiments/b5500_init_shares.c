@@ -13,6 +13,8 @@
 *   from thin air.
 * 2016-03-01  R.Meyer
 *   added Central Control and message queues
+* 2017-07-17  R.Meyer
+*   added proper casts to return values of shmat
 ***********************************************************************/
 
 #include <stdio.h>
@@ -83,22 +85,22 @@ void b5500_init_shares(void)
 		exit(2);
 	}
 
-	MAIN = shmat(shm_main, NULL, 0);
+	MAIN = (WORD48*)shmat(shm_main, NULL, 0);
 	if ((int)MAIN == -1) {
 		perror("shmat MAIN");
 		exit(2);
 	}
-	CPUA = shmat(shm_cpua, NULL, 0);
+	CPUA = (CPU *)shmat(shm_cpua, NULL, 0);
 	if ((int)CPUA == -1) {
 		perror("shmat CPUA");
 		exit(2);
 	}
-	CPUB = shmat(shm_cpub, NULL, 0);
+	CPUB = (CPU *)shmat(shm_cpub, NULL, 0);
 	if ((int)CPUB == -1) {
 		perror("shmat CPUB");
 		exit(2);
 	}
-	CC = shmat(shm_cc, NULL, 0);
+	CC = (CENTRAL_CONTROL*)shmat(shm_cc, NULL, 0);
 	if ((int)CC == -1) {
 		perror("shmat CC");
 		exit(2);

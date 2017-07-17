@@ -11,7 +11,11 @@
 #***********************************************************************
 # 2016-02-13  R.Meyer
 #   from thin air.
+# 2017-07-17  R.Meyer
+#   changes for cross compilation
 #**********************************************************************/
+
+ALL = 		b5500_view.exe b5500_asm.exe b5500_sptest.exe
 
 OBJTEST =	b5500_test.o \
 		b5500_sp_compare.o \
@@ -43,19 +47,31 @@ OBJSPTEST =	b5500_sptest.o \
 
 INC =		b5500_common.h
 
-all:	b5500_view.exe b5500_asm.exe b5500_sptest.exe
+CFLAGS		= -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64 -pipe -Os \
+		  -D_THREAD_SAFE -D_REENTRANT -Wall
+
+LFLAGS		= -lfltk_images -lfltk -lpng -lz -ljpeg  -lXext -lXft \
+		  -lfontconfig -lXinerama -lpthread -ldl -lm -lX11
+
+all: $(ALL)
 
 b5500_test.exe:  $(OBJTEST) Makefile
-	gcc -Wall -o b5500_test.exe $(OBJTEST) 
+	@echo "*** Linking $@..."
+	$(CXX) $(LFLAGS) -o b5500_test.exe $(OBJTEST) 
 
 b5500_view.exe:  $(OBJVIEW) Makefile
-	gcc -Wall -o b5500_view.exe $(OBJVIEW) 
+	@echo "*** Linking $@..."
+	$(CXX) $(LFLAGS) -o b5500_view.exe $(OBJVIEW) 
 
 b5500_asm.exe:  $(OBJASM) Makefile
-	gcc -Wall -o b5500_asm.exe $(OBJASM) 
+	@echo "*** Linking $@..."
+	$(CXX) $(LFLAGS) -o b5500_asm.exe $(OBJASM) 
 
 b5500_sptest.exe:  $(OBJSPTEST) Makefile
-	gcc -Wall -o b5500_sptest.exe $(OBJSPTEST) 
+	@echo "*** Linking $@..."
+	$(CXX) $(LFLAGS) -o b5500_sptest.exe $(OBJSPTEST) 
 
 %.o: %.c $(INC) Makefile
-	gcc -Wall -c -o $@ $<
+	@echo "*** Compiling $<..."
+	$(CXX) $(CFLAGS) -c $< -o $@
+

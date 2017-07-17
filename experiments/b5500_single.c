@@ -11,6 +11,8 @@
 ************************************************************************
 * 2016-02-1921  R.Meyer
 *   Converted Paul's work from Javascript to C
+* 2017-07-17  R.Meyer
+*   changed "this" to "cpu" to avoid errors when using g++
 ***********************************************************************/
 
 #include <stdio.h>
@@ -224,18 +226,18 @@ void num_right_shift_cnt(NUM *n, int cnt)
  *  0 if B=A
  * +1 if B>A
 */
-int singlePrecisionCompare(CPU *this)
+int singlePrecisionCompare(CPU *cpu)
 {
 	NUM		A;	// extracted A register
 	NUM		B;	// extracted B register
 
-    this->cycleCount += 4;	// estimate some general overhead
-    adjustABFull(this);
-    this->r.AROF = 0;		// A is unconditionally marked empty
+    cpu->cycleCount += 4;	// estimate some general overhead
+    adjustABFull(cpu);
+    cpu->r.AROF = 0;		// A is unconditionally marked empty
 
 	// extract the numbers
-	num_extract(&this->r.A, &A);
-	num_extract(&this->r.B, &B);
+	num_extract(&cpu->r.A, &A);
+	num_extract(&cpu->r.B, &B);
 
 #if DEBUG
 	if (dotrcmat) {
@@ -248,9 +250,9 @@ int singlePrecisionCompare(CPU *this)
 	// If the exponents are unequal, normalize the larger until the high-order
 	// octade is non-zero or the exponents are equal.
 	if (A.e > B.e) {
-		this->cycleCount += num_left_shift_exp(&A, B.e);
+		cpu->cycleCount += num_left_shift_exp(&A, B.e);
 	} else if (A.e < B.e) {
-		this->cycleCount += num_left_shift_exp(&B, A.e);
+		cpu->cycleCount += num_left_shift_exp(&B, A.e);
 	}
 
 #if DEBUG
@@ -288,18 +290,18 @@ int singlePrecisionCompare(CPU *this)
 //   should really implement the X register to be 100% correct,
 //   right now we use a 9 bit extension which should be good enough for
 //   rounding purposes :)
-void singlePrecisionAdd(CPU *this, BIT add)
+void singlePrecisionAdd(CPU *cpu, BIT add)
 {
 	NUM		A;	// extracted A register
 	NUM		B;	// extracted B register
 
-    this->cycleCount += 2;	// estimate some general overhead
-    adjustABFull(this);
-    this->r.AROF = 0;		// A is unconditionally marked empty
+    cpu->cycleCount += 2;	// estimate some general overhead
+    adjustABFull(cpu);
+    cpu->r.AROF = 0;		// A is unconditionally marked empty
 
 	// extract the numbers
-	num_extract(&this->r.A, &A);
-	num_extract(&this->r.B, &B);
+	num_extract(&cpu->r.A, &A);
+	num_extract(&cpu->r.B, &B);
 
 #if DEBUG
 	if (dotrcmat) {
@@ -316,12 +318,12 @@ void singlePrecisionAdd(CPU *this, BIT add)
 	// trivial cases
 	if (A.m == 0) {
 		// result is already in B
-		this->r.B &= MASK_NUMBER;
+		cpu->r.B &= MASK_NUMBER;
 		return;
 	}
 	if (B.m == 0) {
 		// result is in A
-		num_compose(&A, &this->r.B);
+		num_compose(&A, &cpu->r.B);
 		return;
 	}
 
@@ -329,21 +331,21 @@ void singlePrecisionAdd(CPU *this, BIT add)
 	// until they are in alignment
 	if (A.e > B.e) {
 		// Normalize A for 39 bits (13 octades)
-		this->cycleCount += num_left_shift_exp(&A, B.e);
+		cpu->cycleCount += num_left_shift_exp(&A, B.e);
 		// Scale B until its exponent matches (mantissa may go to zero)
-		this->cycleCount += num_right_shift_exp(&B, A.e);
+		cpu->cycleCount += num_right_shift_exp(&B, A.e);
 		// for display only
-		this->r.X = B.x;
+		cpu->r.X = B.x;
 	} else if (A.e < B.e) {
 		// Normalize B for 39 bits (13 octades)
-		this->cycleCount += num_left_shift_exp(&B, A.e);
+		cpu->cycleCount += num_left_shift_exp(&B, A.e);
 		// Scale A until its exponent matches (mantissa may go to zero)
-		this->cycleCount += num_right_shift_exp(&A, B.e);
+		cpu->cycleCount += num_right_shift_exp(&A, B.e);
 		// for display only
-		this->r.X = A.x;
+		cpu->r.X = A.x;
 	}
 
-	// At this point, the exponents are aligned,
+	// At cpu point, the exponents are aligned,
 	// so do the actual 48-bit additions of mantissas (and extensions)
 #if DEBUG
 	if (dotrcmat) {
@@ -368,7 +370,7 @@ void singlePrecisionAdd(CPU *this, BIT add)
 		if (B.m & MASK_MANTCARRY) {
 			num_right_shift_cnt(&B, 1);
 			// for display only
-			this->r.X = B.x;
+			cpu->r.X = B.x;
 		}
 	} else {
 		// we must subtract and will do it unsigned, so:
@@ -425,25 +427,25 @@ void singlePrecisionAdd(CPU *this, BIT add)
 	// Check for exponent overflow
 	if (B.e > 63) {
 		B.e &= 63;
-		if (this->r.NCSF) {
+		if (cpu->r.NCSF) {
 			// signal overflow here
 			// set I05/6/8: exponent-overflow
-			this->r.I = (this->r.I & IRQ_MASKL) | IRQ_EXPO;
-			signalInterrupt(this);
+			cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_EXPO;
+			signalInterrupt(cpu);
 		}
 	}
 	// underflow cannot happen here
 
-	num_compose(&B, &this->r.B);
+	num_compose(&B, &cpu->r.B);
 	// for display only
-	this->r.X = B.x;
+	cpu->r.X = B.x;
 }
 
 /* Multiplies the contents of the A register to the B register, leaving the
  * result in B and invalidating A. A double-precision mantissa is developed and
  * then normalized and rounded
  */
-void singlePrecisionMultiply(CPU *this)
+void singlePrecisionMultiply(CPU *cpu)
 {
 	NUM			A;	// extracted A register
 	NUM			B;	// extracted B register
@@ -451,13 +453,13 @@ void singlePrecisionMultiply(CPU *this)
 	unsigned	d;	// current multiplier & shifting digit (octal)
 	int			n;	// local copy of N (octade counter)
 
-    this->cycleCount += 2;	// estimate some general overhead
-    adjustABFull(this);
-    this->r.AROF = 0;		// A is unconditionally marked empty
+    cpu->cycleCount += 2;	// estimate some general overhead
+    adjustABFull(cpu);
+    cpu->r.AROF = 0;		// A is unconditionally marked empty
 
 	// extract the numbers
-	num_extract(&this->r.A, &A);
-	num_extract(&this->r.B, &B);
+	num_extract(&cpu->r.A, &A);
+	num_extract(&cpu->r.B, &B);
 
 #if DEBUG
 	if (dotrcmat) {
@@ -470,7 +472,7 @@ void singlePrecisionMultiply(CPU *this)
 	// trivial case, either operand is zero
 	if ((A.m == 0) || (B.m == 0)) {
 		// if A or B mantissa is zero
-		this->r.B = 0;
+		cpu->r.B = 0;
 		return;
 	}
 
@@ -478,12 +480,12 @@ void singlePrecisionMultiply(CPU *this)
 	// Otherwise, normalize both operands
 	if ((A.e == 0) && (B.e == 0)) {
 		// integer multiply operation: set Q05F
-		this->r.Q05F = true;
+		cpu->r.Q05F = true;
 	} else {
 		// Normalize A for 39 bits (13 octades)
-		this->cycleCount += num_left_shift_exp(&A, -63);
+		cpu->cycleCount += num_left_shift_exp(&A, -63);
 		// Normalize B for 39 bits (13 octades)
-		this->cycleCount += num_left_shift_exp(&B, -63);
+		cpu->cycleCount += num_left_shift_exp(&B, -63);
 	}
 
 #if DEBUG
@@ -510,7 +512,7 @@ void singlePrecisionMultiply(CPU *this)
 		}
 #endif
 		while (d > 0) {
-			this->cycleCount++;
+			cpu->cycleCount++;
 			// develop the partial product
 			B.m += A.m;
 			d--;
@@ -527,7 +529,7 @@ void singlePrecisionMultiply(CPU *this)
 #endif
 
 	// Normalize the result
-	if (this->r.Q05F && (B.m == 0)) {
+	if (cpu->r.Q05F && (B.m == 0)) {
 		// if it's integer multiply (Q05F) with integer result
 		// just use the low-order 39 bits
 		B.m = B.x;
@@ -553,9 +555,9 @@ void singlePrecisionMultiply(CPU *this)
 	}
 
 	// Round the result
-	this->r.Q05F = false;
+	cpu->r.Q05F = false;
 	// required by specs due to the way rounding addition worked
-	this->r.A = 0;
+	cpu->r.A = 0;
 
 	// Normalize and round as necessary
 	if (emode)
@@ -578,30 +580,30 @@ void singlePrecisionMultiply(CPU *this)
 
 exit1:
 	if (B.m == 0) {
-		// don't see how this could be necessary here, but
+		// don't see how cpu could be necessary here, but
 		// the TM says to do it anyway
-		this->r.B = 0;
+		cpu->r.B = 0;
 	} else {
 		// Check for exponent under/overflow
 		if (B.e > 63) {
 			B.e &= 63;
-			if (this->r.NCSF) {
+			if (cpu->r.NCSF) {
 				// set I05/6/8: exponent-overflow
-				this->r.I = (this->r.I & IRQ_MASKL) | IRQ_EXPO;
-				signalInterrupt(this);
+				cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_EXPO;
+				signalInterrupt(cpu);
 			}
 		} else if (B.e < -63) {
 			// mod the exponent
 			B.e = -((-B.e) & 63);
-			if (this->r.NCSF) {
+			if (cpu->r.NCSF) {
 				// set I06/8: exponent-underflow
-				this->r.I = (this->r.I & IRQ_MASKL) | IRQ_EXPU;
-				signalInterrupt(this);
+				cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_EXPU;
+				signalInterrupt(cpu);
 			}
 		}
 	}
-	num_compose(&B, &this->r.B);
-	this->r.X = B.x;
+	num_compose(&B, &cpu->r.B);
+	cpu->r.X = B.x;
 }
 
 /*
@@ -609,20 +611,20 @@ exit1:
  * result in B and invalidating A. A 14-octade mantissa is developed and
  * then normalized and rounded
  */
-void singlePrecisionDivide(CPU *this)
+void singlePrecisionDivide(CPU *cpu)
 {
 	NUM			A;	// extracted A register
 	NUM			B;	// extracted B register
 	unsigned	q;	// current quotient digit (octal)
 	int		n=0;	// local copy of N (octade counter)
 
-    this->cycleCount += 2;	// estimate some general overhead
-    adjustABFull(this);
-    this->r.AROF = 0;		// A is unconditionally marked empty
+    cpu->cycleCount += 2;	// estimate some general overhead
+    adjustABFull(cpu);
+    cpu->r.AROF = 0;		// A is unconditionally marked empty
 
 	// extract the numbers
-	num_extract(&this->r.A, &A);
-	num_extract(&this->r.B, &B);
+	num_extract(&cpu->r.A, &A);
+	num_extract(&cpu->r.B, &B);
 
 #if DEBUG
 	if (dotrcmat) {
@@ -636,25 +638,25 @@ void singlePrecisionDivide(CPU *this)
 	if (A.m == 0) {
 		// if A mantissa is zero
 		// and we're in Normal State
-		if (this->r.NCSF) {
+		if (cpu->r.NCSF) {
 			// set I05/7/8: divide by zero
-			this->r.I = (this->r.I & IRQ_MASKL) | IRQ_DIVZ;
-			signalInterrupt(this);
+			cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_DIVZ;
+			signalInterrupt(cpu);
 		}
 		return;
 	}
 	// if B is zero...
 	if (B.m == 0) {
 		// ...result is all zeroes
-		this->r.A = this->r.B = 0;
+		cpu->r.A = cpu->r.B = 0;
 		return;
 	}
 
 	// otherwise, may the octades always be in your favor
 	// Normalize A for 39 bits (13 octades)
-	this->cycleCount += num_left_shift_exp(&A, -63);
+	cpu->cycleCount += num_left_shift_exp(&A, -63);
 	// Normalize B for 39 bits (13 octades)
-	this->cycleCount += num_left_shift_exp(&B, -63);
+	cpu->cycleCount += num_left_shift_exp(&B, -63);
 
 	B.s ^= A.s;	// positive if signs are same, negative if different
 
@@ -669,7 +671,7 @@ void singlePrecisionDivide(CPU *this)
 	// Now we step through the development of the quotient one octade at a time,
 	// tallying the shifts in n until the high-order octade of xx is non-zero (i.e.,
 	// normalized). The divisor is in ma and the dividend (which becomes the
-	// remainder) is in mb. Since the operands are normalized, this will take
+	// remainder) is in mb. Since the operands are normalized, cpu will take
 	// either 13 or 14 shifts. We do the xx shift at the top of the loop so that
 	// the 14th (rounding) digit will be available in q at the end. The initial
 	// shift has no effect, as it operates using zero values for xx and q.
@@ -700,15 +702,15 @@ void singlePrecisionDivide(CPU *this)
 	B.m = B.x;
 
 	// just estimate the average number of divide clocks
-	this->cycleCount += n*3;
+	cpu->cycleCount += n*3;
 
 	B.e -= A.e - 1;			// compute the exponent, accounting for the shifts
 
 	// Round the result (it's already normalized)
-	this->r.A = 0;	// required by specs due to the way rounding addition worked
+	cpu->r.A = 0;	// required by specs due to the way rounding addition worked
 	B.x = 0;
 	if (q >= 4) {	// if high-order bit of last quotient digit is 1
-		this->r.Q01F = true;	// set Q01F (for display purposes only)
+		cpu->r.Q01F = true;	// set Q01F (for display purposes only)
 		B.x = MASK_MANTHBIT;	// round up the result
 	}
 
@@ -739,24 +741,24 @@ void singlePrecisionDivide(CPU *this)
 	// Check for exponent under/overflow
 	if (B.e > 63) {
 		B.e &= 63;
-		if (this->r.NCSF) {
+		if (cpu->r.NCSF) {
 			// set I05/6/8: exponent-overflow
-			this->r.I = (this->r.I & IRQ_MASKL) | IRQ_EXPO;
-			signalInterrupt(this);
+			cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_EXPO;
+			signalInterrupt(cpu);
 		}
 	} else if (B.e < -63) {
 		// mod the exponent
 		B.e = -((-B.e) & 63);
-		if (this->r.NCSF) {
+		if (cpu->r.NCSF) {
 			// set I06/8: exponent-underflow
-			this->r.I = (this->r.I & IRQ_MASKL) | IRQ_EXPU;
-			signalInterrupt(this);
+			cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_EXPU;
+			signalInterrupt(cpu);
 		}
 	}
 
 exit1:
-	num_compose(&B, &this->r.B);
-	this->r.X = B.x;
+	num_compose(&B, &cpu->r.B);
+	cpu->r.X = B.x;
 }
 
 /*
@@ -764,20 +766,20 @@ exit1:
  * integerized result in B and invalidating A. If the result cannot be expressed
  * as an integer, the Integer-Overflow interrupt is set
  */
-void integerDivide(CPU *this)
+void integerDivide(CPU *cpu)
 {
 	NUM			A;	// extracted A register
 	NUM			B;	// extracted B register
 	unsigned q=0;	// current quotient digit (octal)
 	int		n=0;	// local copy of N (octade counter)
 
-    this->cycleCount += 4;	// estimate some general overhead
-    adjustABFull(this);
-    this->r.AROF = 0;		// A is unconditionally marked empty
+    cpu->cycleCount += 4;	// estimate some general overhead
+    adjustABFull(cpu);
+    cpu->r.AROF = 0;		// A is unconditionally marked empty
 
 	// extract the numbers
-	num_extract(&this->r.A, &A);
-	num_extract(&this->r.B, &B);
+	num_extract(&cpu->r.A, &A);
+	num_extract(&cpu->r.B, &B);
 
 #if DEBUG
 	if (dotrcmat) {
@@ -791,29 +793,29 @@ void integerDivide(CPU *this)
 	if (A.m == 0) {
 		// if A mantissa is zero
 		// and we're in Normal State
-		if (this->r.NCSF) {
+		if (cpu->r.NCSF) {
 			// set I05/7/8: divide by zero
-			this->r.I = (this->r.I & IRQ_MASKL) | IRQ_DIVZ;
-			signalInterrupt(this);
+			cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_DIVZ;
+			signalInterrupt(cpu);
 		}
 		return;
 	}
 	// if B is zero...
 	if (B.m == 0) {
 		// ...result is all zeroes
-		this->r.A = this->r.B = 0;
+		cpu->r.A = cpu->r.B = 0;
 		return;
 	}
 
 	// Normalize A for 39 bits (13 octades)
-	this->cycleCount += num_left_shift_exp(&A, -63);
+	cpu->cycleCount += num_left_shift_exp(&A, -63);
 	// Normalize B for 39 bits (13 octades)
-	this->cycleCount += num_left_shift_exp(&B, -63);
+	cpu->cycleCount += num_left_shift_exp(&B, -63);
 
 	if (A.e > B.e) {
 		// if divisor has greater magnitude
 		// quotient is < 1, so set result to zero
-		this->r.A = this->r.B = 0;
+		cpu->r.A = cpu->r.B = 0;
 		return;
 	}
 
@@ -835,7 +837,7 @@ void integerDivide(CPU *this)
 	B.x = 0;
 	do {
 		// just estimate the average number of clocks
-		this->cycleCount += 3;
+		cpu->cycleCount += 3;
 		// initialize the quotient digit
 		q = 0;
 		while (B.m >= A.m) {
@@ -879,18 +881,18 @@ void integerDivide(CPU *this)
 		// integer result developed
 		B.e = 0;
 	} else {
-		if (this->r.NCSF) {
+		if (cpu->r.NCSF) {
 			// integer overflow result
 			// set I07/8: integer-overflow
-			this->r.I = (this->r.I & IRQ_MASKL) | IRQ_INTO;
-			signalInterrupt(this);
+			cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_INTO;
+			signalInterrupt(cpu);
 		}
 		B.e = (B.e-A.e) & 63;
 	}
 
-	this->r.A = 0;
-	num_compose(&B, &this->r.B);
-	this->r.X = B.x;
+	cpu->r.A = 0;
+	num_compose(&B, &cpu->r.B);
+	cpu->r.X = B.x;
 }
 
 /*
@@ -899,7 +901,7 @@ void integerDivide(CPU *this)
  * of the dividend (B register value). If the quotient cannot be expressed as an
  * integer, the Integer-Overflow interrupt is set
  */
-void remainderDivide(CPU *this)
+void remainderDivide(CPU *cpu)
 {
 	NUM			A;	// extracted A register
 	NUM			B;	// extracted B register
@@ -907,13 +909,13 @@ void remainderDivide(CPU *this)
 	int		n=0;	// local copy of N (octade counter)
 	BIT			af;	// A was float number
 
-    this->cycleCount += 4;	// estimate some general overhead
-    adjustABFull(this);
-    this->r.AROF = 0;		// A is unconditionally marked empty
+    cpu->cycleCount += 4;	// estimate some general overhead
+    adjustABFull(cpu);
+    cpu->r.AROF = 0;		// A is unconditionally marked empty
 
 	// extract the numbers
-	num_extract(&this->r.A, &A);
-	num_extract(&this->r.B, &B);
+	num_extract(&cpu->r.A, &A);
+	num_extract(&cpu->r.B, &B);
 
 #if DEBUG
 	if (dotrcmat) {
@@ -929,34 +931,34 @@ void remainderDivide(CPU *this)
 	if (A.m == 0) {
 		// if A mantissa is zero
 		// and we're in Normal State
-		if (this->r.NCSF) {
+		if (cpu->r.NCSF) {
 			// set I05/7/8: divide by zero
-			this->r.I = (this->r.I & IRQ_MASKL) | IRQ_DIVZ;
-			signalInterrupt(this);
+			cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_DIVZ;
+			signalInterrupt(cpu);
 		}
 		return;
 	}
 	// if B is zero...
 	if (B.m == 0) {
 		// ...result is all zeroes
-		this->r.A = this->r.B = 0;
+		cpu->r.A = cpu->r.B = 0;
 		return;
 	}
 
 	// Normalize A for 39 bits (13 octades)
-	this->cycleCount += num_left_shift_exp(&A, -63);
+	cpu->cycleCount += num_left_shift_exp(&A, -63);
 	// Normalize B for 39 bits (13 octades)
-	this->cycleCount += num_left_shift_exp(&B, -63);
+	cpu->cycleCount += num_left_shift_exp(&B, -63);
 
 	if (A.e > B.e) {
 		// if divisor has greater magnitude
 		// quotient is < 1, so set A to zero and
-		this->r.A = 0;
+		cpu->r.A = 0;
 		// EMODE: normalize B before returning
 		if (emode)
 			goto normalize;
 		// B5500: the result is original B (less the flag bit)
-		this->r.B &= MASK_NUMBER;
+		cpu->r.B &= MASK_NUMBER;
 		return;
 	}
 
@@ -978,7 +980,7 @@ void remainderDivide(CPU *this)
 	B.x = 0;
 	do {
 		// just estimate the average number of clocks
-		this->cycleCount += 3;
+		cpu->cycleCount += 3;
 		// initialize the quotient digit
 		q = 0;
 		while (B.m >= A.m) {
@@ -1020,10 +1022,10 @@ void remainderDivide(CPU *this)
 	if (B.e < -63) {
 		// if so, exponent is mod 64
 		B.e = -(-B.e & 63);
-		if (this->r.NCSF) {
+		if (cpu->r.NCSF) {
 			// set I06/8: exponent-underflow
-			this->r.I = (this->r.I & IRQ_MASKL) | IRQ_EXPU;
-			signalInterrupt(this);
+			cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_EXPU;
+			signalInterrupt(cpu);
 		}
 	} else if (A.e == B.e) {
 		// integer result developed
@@ -1036,11 +1038,11 @@ void remainderDivide(CPU *this)
 			B.e %= 64;
 		}
 	} else {
-		if (this->r.NCSF) {
+		if (cpu->r.NCSF) {
 			// integer overflow result
 			// set I07/8: integer-overflow
-			this->r.I = (this->r.I & IRQ_MASKL) | IRQ_INTO;
-			signalInterrupt(this);
+			cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_INTO;
+			signalInterrupt(cpu);
 		}
 		// result in B will be all zeroes
 		B.m = 0;
@@ -1063,7 +1065,7 @@ normalize:
 			num_right_shift_exp(&B, 0);
 	}
 
-	this->r.A = 0;
-	num_compose(&B, &this->r.B);
-	this->r.X = B.x;
+	cpu->r.A = 0;
+	num_compose(&B, &cpu->r.B);
+	cpu->r.X = B.x;
 }

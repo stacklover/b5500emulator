@@ -11,6 +11,7 @@
 *   From thin air (based on my Pascal P5 assembler).
 * 2017-07-17  R.Meyer
 *   Added "long long" qualifier to constants with long long value
+*   changed "this" to "cpu" to avoid errors when using g++
 ***********************************************************************/
 
 #include <stdio.h>
@@ -21,8 +22,6 @@
 #include <unistd.h>
 #include <ctype.h>
 #include "b5500_common.h"
-
-extern const INSTRUCTION instr[];
 
 #define MAXLABEL	100	/* total possible labels in intermediate */
 #define MAXLINELENGTH	80	/* maximum input line length */
@@ -58,11 +57,11 @@ int	pass2;
 LABELREC labeltab[MAXLABEL];
 
 CENTRAL_CONTROL cc;
-CPU *this;
+CPU *cpu;
 
-void signalInterrupt(CPU *this)
+void signalInterrupt(CPU *cpu)
 {
-	printf("\nIRQ=$%02x\n", this->r.I);
+	printf("\nIRQ=$%02x\n", cpu->r.I);
 }
 
 void init(void)
@@ -83,7 +82,7 @@ void init(void)
 	eof = false;
 }
 
-void errorl(char *msg)
+void errorl(const char *msg)
 {
 	fputs(linebuf, stdout);
 	printf("\n*** Program load error: [%d] %s\n", iline, msg);
@@ -91,7 +90,7 @@ void errorl(char *msg)
 	exit(2);
 }
 
-void setlabel(int x, int value)
+void setlabel(int x, unsigned value)
 {
 	if (pass2) {
 		if (labeltab[x].st != defined)
@@ -109,7 +108,7 @@ void setlabel(int x, int value)
 
 int getlabel(int x)	/* search in label table */
 {
-	int q;
+	int q = 0;
 	switch (labeltab[x].st) {
 	case entered:
 		q = labeltab[x].val;
@@ -175,7 +174,7 @@ void getlin(void) /* get next line */
 	}
 }
 
-const char int2ascii[64] =
+const char int2ascii[64+1] =
 	"0123456789#@?:>}"
 	"+ABCDEFGHI.[&(<~"
 	"xJKLMNOPQR$*-);{"
@@ -288,7 +287,7 @@ int parselabel(void)
 void printinstr(ADDR15 wc, WORD2 sc, BIT symbolic, BIT cwmf)
 {
 	const INSTRUCTION *ip;
-	WORD12 code;
+	WORD12 code = 0;
 
 	switch (sc) {
 	case 0:	code = (MAIN[wc] >> 36) & 0xfff; break;
@@ -299,7 +298,7 @@ void printinstr(ADDR15 wc, WORD2 sc, BIT symbolic, BIT cwmf)
 	printf("%04o", code);
 	if (symbolic) {
 		// search instruction table
-		ip = instr;
+		ip = instruction_table;
 		while (ip->name != 0) {
 			switch (ip->outtype) {
 			case OP_ASIS:
@@ -337,73 +336,73 @@ void printinstr(ADDR15 wc, WORD2 sc, BIT symbolic, BIT cwmf)
 	}
 }
 
-int verifyreg(char *regname, long long c)
+int verifyreg(char *regname, unsigned long long c)
 {
-	if (strcmp(regname, "AROF") == 0) { if (this->r.AROF == c) return true;	} else
-	if (strcmp(regname, "BROF") == 0) { if (this->r.BROF == c) return true;	} else
-	if (strcmp(regname, "PROF") == 0) { if (this->r.PROF == c) return true;	} else
-	if (strcmp(regname, "TROF") == 0) { if (this->r.TROF == c) return true;	} else
-	if (strcmp(regname, "MSFF") == 0) { if (this->r.MSFF == c) return true;	} else
-	if (strcmp(regname, "SALF") == 0) { if (this->r.SALF == c) return true;	} else
-	if (strcmp(regname, "NCSF") == 0) { if (this->r.NCSF == c) return true;	} else
-	if (strcmp(regname, "CWMF") == 0) { if (this->r.CWMF == c) return true;	} else
-	if (strcmp(regname, "isP1") == 0) { if (this->isP1 == c) return true;	} else
-	if (strcmp(regname, "A") == 0) { if (this->r.A == c) return true; } else
-	if (strcmp(regname, "B") == 0) { if (this->r.B == c) return true; } else
-	if (strcmp(regname, "C") == 0) { if (this->r.C == c) return true; } else
-	if (strcmp(regname, "E") == 0) { if (this->r.E == c) return true; } else
-	if (strcmp(regname, "F") == 0) { if (this->r.F == c) return true; } else
-	if (strcmp(regname, "G") == 0) { if (this->r.G == c) return true; } else
-	if (strcmp(regname, "H") == 0) { if (this->r.H == c) return true; } else
-	if (strcmp(regname, "I") == 0) { if (this->r.I == c) return true; } else
-	if (strcmp(regname, "J") == 0) { if (this->r.J == c) return true; } else
-	if (strcmp(regname, "K") == 0) { if (this->r.K == c) return true; } else
-	if (strcmp(regname, "L") == 0) { if (this->r.L == c) return true; } else
-	if (strcmp(regname, "M") == 0) { if (this->r.M == c) return true; } else
-	if (strcmp(regname, "N") == 0) { if (this->r.N == c) return true; } else
-	if (strcmp(regname, "P") == 0) { if (this->r.P == c) return true; } else
-	if (strcmp(regname, "R") == 0) { if (this->r.R == c) return true; } else
-	if (strcmp(regname, "S") == 0) { if (this->r.S == c) return true; } else
-	if (strcmp(regname, "T") == 0) { if (this->r.T == c) return true; } else
-	if (strcmp(regname, "V") == 0) { if (this->r.V == c) return true; } else
-	if (strcmp(regname, "X") == 0) { if (this->r.X == c) return true; } else
-	if (strcmp(regname, "Y") == 0) { if (this->r.Y == c) return true; } else
-	if (strcmp(regname, "Z") == 0) { if (this->r.Z == c) return true; }
+	if (strcmp(regname, "AROF") == 0) { if (cpu->r.AROF == c) return true;	} else
+	if (strcmp(regname, "BROF") == 0) { if (cpu->r.BROF == c) return true;	} else
+	if (strcmp(regname, "PROF") == 0) { if (cpu->r.PROF == c) return true;	} else
+	if (strcmp(regname, "TROF") == 0) { if (cpu->r.TROF == c) return true;	} else
+	if (strcmp(regname, "MSFF") == 0) { if (cpu->r.MSFF == c) return true;	} else
+	if (strcmp(regname, "SALF") == 0) { if (cpu->r.SALF == c) return true;	} else
+	if (strcmp(regname, "NCSF") == 0) { if (cpu->r.NCSF == c) return true;	} else
+	if (strcmp(regname, "CWMF") == 0) { if (cpu->r.CWMF == c) return true;	} else
+	if (strcmp(regname, "isP1") == 0) { if (cpu->isP1 == c) return true;	} else
+	if (strcmp(regname, "A") == 0) { if (cpu->r.A == c) return true; } else
+	if (strcmp(regname, "B") == 0) { if (cpu->r.B == c) return true; } else
+	if (strcmp(regname, "C") == 0) { if (cpu->r.C == c) return true; } else
+	if (strcmp(regname, "E") == 0) { if (cpu->r.E == c) return true; } else
+	if (strcmp(regname, "F") == 0) { if (cpu->r.F == c) return true; } else
+	if (strcmp(regname, "G") == 0) { if (cpu->r.G == c) return true; } else
+	if (strcmp(regname, "H") == 0) { if (cpu->r.H == c) return true; } else
+	if (strcmp(regname, "I") == 0) { if (cpu->r.I == c) return true; } else
+	if (strcmp(regname, "J") == 0) { if (cpu->r.J == c) return true; } else
+	if (strcmp(regname, "K") == 0) { if (cpu->r.K == c) return true; } else
+	if (strcmp(regname, "L") == 0) { if (cpu->r.L == c) return true; } else
+	if (strcmp(regname, "M") == 0) { if (cpu->r.M == c) return true; } else
+	if (strcmp(regname, "N") == 0) { if (cpu->r.N == c) return true; } else
+	if (strcmp(regname, "P") == 0) { if (cpu->r.P == c) return true; } else
+	if (strcmp(regname, "R") == 0) { if (cpu->r.R == c) return true; } else
+	if (strcmp(regname, "S") == 0) { if (cpu->r.S == c) return true; } else
+	if (strcmp(regname, "T") == 0) { if (cpu->r.T == c) return true; } else
+	if (strcmp(regname, "V") == 0) { if (cpu->r.V == c) return true; } else
+	if (strcmp(regname, "X") == 0) { if (cpu->r.X == c) return true; } else
+	if (strcmp(regname, "Y") == 0) { if (cpu->r.Y == c) return true; } else
+	if (strcmp(regname, "Z") == 0) { if (cpu->r.Z == c) return true; }
 	return false;
 }
 
 void setreg(char *regname, long long c)
 {
-	if (strcmp(regname, "AROF") == 0) { this->r.AROF = c; } else
-	if (strcmp(regname, "BROF") == 0) { this->r.BROF = c; } else
-	if (strcmp(regname, "PROF") == 0) { this->r.PROF = c; } else
-	if (strcmp(regname, "TROF") == 0) { this->r.TROF = c; } else
-	if (strcmp(regname, "MSFF") == 0) { this->r.MSFF = c; } else
-	if (strcmp(regname, "SALF") == 0) { this->r.SALF = c; } else
-	if (strcmp(regname, "NCSF") == 0) { this->r.NCSF = c; } else
-	if (strcmp(regname, "CWMF") == 0) { this->r.CWMF = c; } else
-	if (strcmp(regname, "isP1") == 0) { this->isP1 = c; } else
-	if (strcmp(regname, "A") == 0) { this->r.A = c;	} else
-	if (strcmp(regname, "B") == 0) { this->r.B = c;	} else
-	if (strcmp(regname, "C") == 0) { this->r.C = c;	} else
-	if (strcmp(regname, "E") == 0) { this->r.E = c;	} else
-	if (strcmp(regname, "F") == 0) { this->r.F = c;	} else
-	if (strcmp(regname, "G") == 0) { this->r.G = c;	} else
-	if (strcmp(regname, "H") == 0) { this->r.H = c;	} else
-	if (strcmp(regname, "I") == 0) { this->r.I = c;	} else
-	if (strcmp(regname, "J") == 0) { this->r.J = c;	} else
-	if (strcmp(regname, "K") == 0) { this->r.K = c;	} else
-	if (strcmp(regname, "L") == 0) { this->r.L = c;	} else
-	if (strcmp(regname, "M") == 0) { this->r.M = c;	} else
-	if (strcmp(regname, "N") == 0) { this->r.N = c;	} else
-	if (strcmp(regname, "P") == 0) { this->r.P = c;	} else
-	if (strcmp(regname, "R") == 0) { this->r.R = c;	} else
-	if (strcmp(regname, "S") == 0) { this->r.S = c;	} else
-	if (strcmp(regname, "T") == 0) { this->r.T = c;	} else
-	if (strcmp(regname, "V") == 0) { this->r.V = c;	} else
-	if (strcmp(regname, "X") == 0) { this->r.X = c;	} else
-	if (strcmp(regname, "Y") == 0) { this->r.Y = c;	} else
-	if (strcmp(regname, "Z") == 0) { this->r.Z = c;	}
+	if (strcmp(regname, "AROF") == 0) { cpu->r.AROF = c; } else
+	if (strcmp(regname, "BROF") == 0) { cpu->r.BROF = c; } else
+	if (strcmp(regname, "PROF") == 0) { cpu->r.PROF = c; } else
+	if (strcmp(regname, "TROF") == 0) { cpu->r.TROF = c; } else
+	if (strcmp(regname, "MSFF") == 0) { cpu->r.MSFF = c; } else
+	if (strcmp(regname, "SALF") == 0) { cpu->r.SALF = c; } else
+	if (strcmp(regname, "NCSF") == 0) { cpu->r.NCSF = c; } else
+	if (strcmp(regname, "CWMF") == 0) { cpu->r.CWMF = c; } else
+	if (strcmp(regname, "isP1") == 0) { cpu->isP1 = c; } else
+	if (strcmp(regname, "A") == 0) { cpu->r.A = c;	} else
+	if (strcmp(regname, "B") == 0) { cpu->r.B = c;	} else
+	if (strcmp(regname, "C") == 0) { cpu->r.C = c;	} else
+	if (strcmp(regname, "E") == 0) { cpu->r.E = c;	} else
+	if (strcmp(regname, "F") == 0) { cpu->r.F = c;	} else
+	if (strcmp(regname, "G") == 0) { cpu->r.G = c;	} else
+	if (strcmp(regname, "H") == 0) { cpu->r.H = c;	} else
+	if (strcmp(regname, "I") == 0) { cpu->r.I = c;	} else
+	if (strcmp(regname, "J") == 0) { cpu->r.J = c;	} else
+	if (strcmp(regname, "K") == 0) { cpu->r.K = c;	} else
+	if (strcmp(regname, "L") == 0) { cpu->r.L = c;	} else
+	if (strcmp(regname, "M") == 0) { cpu->r.M = c;	} else
+	if (strcmp(regname, "N") == 0) { cpu->r.N = c;	} else
+	if (strcmp(regname, "P") == 0) { cpu->r.P = c;	} else
+	if (strcmp(regname, "R") == 0) { cpu->r.R = c;	} else
+	if (strcmp(regname, "S") == 0) { cpu->r.S = c;	} else
+	if (strcmp(regname, "T") == 0) { cpu->r.T = c;	} else
+	if (strcmp(regname, "V") == 0) { cpu->r.V = c;	} else
+	if (strcmp(regname, "X") == 0) { cpu->r.X = c;	} else
+	if (strcmp(regname, "Y") == 0) { cpu->r.Y = c;	} else
+	if (strcmp(regname, "Z") == 0) { cpu->r.Z = c;	}
 }
 
 void assemble(void);
@@ -464,7 +463,7 @@ void assemble(void)
 	getname(opname, sizeof opname);
 
 	/* search for instruction in table */
-	ip = instr;
+	ip = instruction_table;
 	while (ip->name != 0 && strcmp(opname, ip->name) != 0)
 		ip++;
 	if (ip->name == 0)
@@ -508,40 +507,40 @@ void assemble(void)
 		if (pass2) {
 			if (dolistsource)
 				fputs(linebuf, stdout);
-			this->r.C = wc;
-			this->r.L = sc;
-			loadPviaC(this);	// load the program word to P
-			switch (this->r.L) {
+			cpu->r.C = wc;
+			cpu->r.L = sc;
+			loadPviaC(cpu);	// load the program word to P
+			switch (cpu->r.L) {
 			case 0:
-				this->r.T = (this->r.P >> 36) & 0xfff;
-				this->r.L = 1;
+				cpu->r.T = (cpu->r.P >> 36) & 0xfff;
+				cpu->r.L = 1;
 				break;
 			case 1:
-				this->r.T = (this->r.P >> 24) & 0xfff;
-				this->r.L = 2;
+				cpu->r.T = (cpu->r.P >> 24) & 0xfff;
+				cpu->r.L = 2;
 				break;
 			case 2:
-				this->r.T = (this->r.P >> 12) & 0xfff;
-				this->r.L = 3;
+				cpu->r.T = (cpu->r.P >> 12) & 0xfff;
+				cpu->r.L = 3;
 				break;
 			case 3:
-				this->r.T = (this->r.P >> 0) & 0xfff;
-				this->r.L = 0;
-				this->r.C++;
-				this->r.PROF = false;
+				cpu->r.T = (cpu->r.P >> 0) & 0xfff;
+				cpu->r.L = 0;
+				cpu->r.C++;
+				cpu->r.PROF = false;
 				break;
 			}
-			this->r.TROF = true;
+			cpu->r.TROF = true;
 
-			this->r.US14X = true;
-			start(this);
-//printf("runn: C=%05o L=%o T=%04o\n", this->r.C, this->r.L, this->r.T);
-			while (this->busy) {
+			cpu->r.US14X = true;
+			start(cpu);
+//printf("runn: C=%05o L=%o T=%04o\n", cpu->r.C, cpu->r.L, cpu->r.T);
+			while (cpu->busy) {
 				if (dotrcins) {
 					ADDR15 c;
 					WORD2 l;
-					c = this->r.C;
-					l = this->r.L;
+					c = cpu->r.C;
+					l = cpu->r.L;
 					if (l == 0) {
 						l = 3;
 						c--;
@@ -549,38 +548,38 @@ void assemble(void)
 						l--;
 					}
 					printf("%05o:%o ", c, l);
-					printinstr(c, l, true, this->r.CWMF);
+					printinstr(c, l, true, cpu->r.CWMF);
 					printf("\n");
 				}
-				this->cycleLimit = 1;
-				run(this);
+				cpu->cycleLimit = 1;
+				run(cpu);
 				if (dotrcins) {
-					if (this->r.CWMF) {
+					if (cpu->r.CWMF) {
 						printf("  SI=%05o.%o.%o A=%s (%u) Y=%02o\n",
-							this->r.M, this->r.G, this->r.H,
-							word2string(this->r.A), this->r.AROF,
-							this->r.Y);
+							cpu->r.M, cpu->r.G, cpu->r.H,
+							word2string(cpu->r.A), cpu->r.AROF,
+							cpu->r.Y);
 						printf("  DI=%05o.%o.%o B=%s (%u) Z=%02o\n",
-							this->r.S, this->r.K, this->r.V,
-							word2string(this->r.B), this->r.BROF,
-							this->r.Z);
+							cpu->r.S, cpu->r.K, cpu->r.V,
+							word2string(cpu->r.B), cpu->r.BROF,
+							cpu->r.Z);
 						printf("  R=%03o N=%d F=%05o TFFF=%u SALF=%u NCSF=%u %s\n",
-							this->r.R, this->r.N, this->r.F,
-							this->r.TFFF, this->r.SALF, this->r.NCSF,
-							lcw2string(this->r.X));
+							cpu->r.R, cpu->r.N, cpu->r.F,
+							cpu->r.TFFF, cpu->r.SALF, cpu->r.NCSF,
+							lcw2string(cpu->r.X));
 					} else {
 						printf("  A=%016llo(%u) GH=%o%o Y=%02o M=%05o F=%05o N=%d NCSF=%u\n",
-							this->r.A, this->r.AROF,
-							this->r.G, this->r.H,
-							this->r.Y, this->r.M,
-							this->r.F,
-							this->r.N, this->r.NCSF);
+							cpu->r.A, cpu->r.AROF,
+							cpu->r.G, cpu->r.H,
+							cpu->r.Y, cpu->r.M,
+							cpu->r.F,
+							cpu->r.N, cpu->r.NCSF);
 						printf("  B=%016llo(%u) KV=%o%o Z=%02o S=%05o R=%03o MSFF=%u SALF=%u\n",
-							this->r.B, this->r.BROF,
-							this->r.K, this->r.V,
-							this->r.Z, this->r.S,
-							this->r.R,
-							this->r.MSFF, this->r.SALF);
+							cpu->r.B, cpu->r.BROF,
+							cpu->r.K, cpu->r.V,
+							cpu->r.Z, cpu->r.S,
+							cpu->r.R,
+							cpu->r.MSFF, cpu->r.SALF);
 					}
 					for (wc = 01000; wc < 01040; wc++)
 						if (MAIN[wc] != MAIN[wc+0x4000]) {
@@ -591,8 +590,8 @@ void assemble(void)
 				}
 //				sleep(1);
 			}
-			wc = this->r.C;
-			sc = this->r.L;
+			wc = cpu->r.C;
+			sc = cpu->r.L;
 			if (sc == 0) {
 				sc = 3;
 				wc--;
@@ -723,11 +722,11 @@ int main(int argc, char *argv[])
 	b5500_init_shares();
 
 	memset(MAIN, 0, MAXMEM*sizeof(WORD48));
-	this = CPUA;
-	memset(this, 0, sizeof(CPU));
-	this->id = "CPUA";
-	//this->isP1 = true;
-	start(this);
+	cpu = CPUA;
+	memset(cpu, 0, sizeof(CPU));
+	cpu->id = "CPUA";
+	//cpu->isP1 = true;
+	start(cpu);
 
 	printf("Pass 1\n");
 	pass2 = false;
