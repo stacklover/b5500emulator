@@ -168,7 +168,7 @@ void load_data(void)
 			if (r != c) {
 				printf("%02d,%02d: %016llo+%016llo->%016llo s/b %016llo\n",
 					i, j, b, a, r, c);
-				errorl("stop");
+				//errorl("stop");
 			}
 			// now do the math for --
 			a = V[j] ^ MASK_SIGNMANT;
@@ -184,7 +184,7 @@ void load_data(void)
 			if (r != c) {
 				printf("%02d,%02d: %016llo+%016llo->%016llo s/b %016llo\n",
 					i, j, b, a, r, c);
-				errorl("stop");
+				//errorl("stop");
 			}
 		}
 	}
@@ -226,7 +226,7 @@ void load_data(void)
 			if (r != c) {
 				printf("%02d,%02d: %016llo-%016llo->%016llo s/b %016llo\n",
 					i, j, b, a, r, c);
-				errorl("stop");
+				//errorl("stop");
 			}
 			// now do the math for --
 			a = V[j] ^ MASK_SIGNMANT;
@@ -245,7 +245,7 @@ void load_data(void)
 			if (r != c) {
 				printf("%02d,%02d: %016llo-%016llo->%016llo s/b %016llo\n",
 					i, j, b, a, r, c);
-				errorl("stop");
+				//errorl("stop");
 			}
 		}
 	}
@@ -287,7 +287,7 @@ void load_data(void)
 			if (r != c) {
 				printf("%02d,%02d: %016llo*%016llo->%016llo s/b %016llo\n",
 					i, j, b, a, r, c);
-				errorl("stop");
+				//errorl("stop");
 			}
 		}
 	}
@@ -334,7 +334,7 @@ void load_data(void)
 			if (r != c) {
 				printf("%02d,%02d: %016llo/%016llo->%016llo s/b %016llo\n",
 					i, j, b, a, r, c);
-				errorl("stop");
+				//errorl("stop");
 			}
 		}
 	}
@@ -381,7 +381,7 @@ void load_data(void)
 			if (r != c) {
 				printf("%02d,%02d: %016llo/%016llo->%016llo s/b %016llo\n",
 					i, j, b, a, r, c);
-				errorl("stop");
+				//errorl("stop");
 			}
 		}
 	}
@@ -428,7 +428,7 @@ void load_data(void)
 			if (r != c) {
 				printf("%02d,%02d: %016llo/%016llo->%016llo s/b %016llo\n",
 					i, j, b, a, r, c);
-				errorl("stop");
+				//errorl("stop");
 			}
 		}
 	}
