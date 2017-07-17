@@ -9,6 +9,8 @@
 ************************************************************************
 * 2016-03-12  R.Meyer
 *   From thin air (based on the assembler).
+* 2017-07-17  R.Meyer
+*   Added "long long" qualifier to constants with long long value
 ***********************************************************************/
 
 #include <stdio.h>
@@ -324,7 +326,7 @@ void load_data(void)
 			singlePrecisionDivide(this);
 			if (this->r.I) {
 				this->r.I = 0;
-				r = 02000000000000000;
+				r = 02000000000000000ll;
 			} else {
 				r = this->r.B;
 			}
@@ -371,7 +373,7 @@ void load_data(void)
 			integerDivide(this);
 			if (this->r.I) {
 				this->r.I = 0;
-				r = 02000000000000000;
+				r = 02000000000000000ll;
 			} else {
 				r = this->r.B;
 			}
@@ -418,7 +420,7 @@ void load_data(void)
 			remainderDivide(this);
 			if (this->r.I) {
 				this->r.I = 0;
-				r = 02000000000000000;
+				r = 02000000000000000ll;
 			} else {
 				r = this->r.B;
 			}

@@ -9,6 +9,8 @@
 ************************************************************************
 * 2016-02-29  R.Meyer
 *   From thin air (based on my Pascal P5 assembler).
+* 2017-07-17  R.Meyer
+*   Added "long long" qualifier to constants with long long value
 ***********************************************************************/
 
 #include <stdio.h>
@@ -30,8 +32,8 @@ int dodmpins	 = false;	/* dump instructions after assembly */
 int dotrcmem	 = false;	/* trace memory accesses */
 int dolistsource = false;	/* list source line */
 int dotrcins	 = false;	/* trace instruction execution */
-int	dotrcmat	 = false;	/* trace math operations */
-int	emode	 = false;	/* emode math */
+int dotrcmat	 = false;	/* trace math operations */
+int emode	 = false;	/* emode math */
 
 typedef enum labelst {entered=0, defined} LABELST;
 typedef struct labelrec {
@@ -136,19 +138,19 @@ void storesyllable(WORD12 v)
 {
 	switch (sc) {
 	case 0:
-		MAIN[wc] = (MAIN[wc] & 0x000fffffffff) | ((WORD48)v << 36);
+		MAIN[wc] = (MAIN[wc] & 0x000fffffffffll) | ((WORD48)v << 36);
 		sc = 1;
 		break;
 	case 1:
-		MAIN[wc] = (MAIN[wc] & 0xfff000ffffff) | ((WORD48)v << 24);
+		MAIN[wc] = (MAIN[wc] & 0xfff000ffffffll) | ((WORD48)v << 24);
 		sc = 2;
 		break;
 	case 2:
-		MAIN[wc] = (MAIN[wc] & 0xffffff000fff) | ((WORD48)v << 12);
+		MAIN[wc] = (MAIN[wc] & 0xffffff000fffll) | ((WORD48)v << 12);
 		sc = 3;
 		break;
 	case 3:
-		MAIN[wc] = (MAIN[wc] & 0xfffffffff000) | ((WORD48)v << 0);
+		MAIN[wc] = (MAIN[wc] & 0xfffffffff000ll) | ((WORD48)v << 0);
 		sc = 0;
 		wc++;
 		break;

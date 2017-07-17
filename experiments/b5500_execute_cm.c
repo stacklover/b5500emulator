@@ -11,6 +11,8 @@
 ************************************************************************
 * 2016-03-19  R.Meyer
 *   Converted Paul's work from Javascript to C
+* 2017-07-17  R.Meyer
+*   Added "long long" qualifier to constants with long long value
 ***********************************************************************/
 
 #include "b5500_common.h"
@@ -180,7 +182,7 @@ void b5500_execute_cm(CPU *this)
 				this->r.Y = fieldIsolate(this->r.A, this->r.G*6, 6);
 				this->r.B = (this->r.B << 6) | this->r.Y;
 				// make sure B is not exceeding 48 bits
-				this->r.B &= 07777777777777777;
+				this->r.B &= 07777777777777777ll;
 				if (this->r.G < 7) {
 					++this->r.G;
 				} else {
@@ -730,7 +732,7 @@ void b5500_execute_cm(CPU *this)
 				this->r.Y = fieldIsolate(this->r.A, this->r.G*6, 6);
 				this->r.B = (this->r.B << 6) + this->r.Y;
 				// make sure B is not exceeding 48 bits
-				this->r.B &= 07777777777777777;
+				this->r.B &= 07777777777777777ll;
 				if (this->r.G < 7) {
 					++this->r.G;
 				} else {
@@ -780,7 +782,7 @@ void b5500_execute_cm(CPU *this)
 			break;
 
 		case 064:	// XX64: BIS=Set bit
-			streamBitsToDest(this, variant, 07777777777777777);
+			streamBitsToDest(this, variant, 07777777777777777ll);
 			break;
 
 		case 065:	// XX65: BIR=Reset bit
