@@ -1,25 +1,25 @@
 /***********************************************************************
 * b5500emulator
 ************************************************************************
-* Copyright (c) 2016, Reinhard Meyer, DL5UY
+* Copyright (c)	2016, Reinhard Meyer, DL5UY
 * Licensed under the MIT License,
-*       see LICENSE
-* based on (C) work by Nigel Williams and Paul Kimpel
+*	see LICENSE
+* based	on (C) work by Nigel Williams and Paul Kimpel
 * see: https://github.com/pkimpel/retro-b5500
 ************************************************************************
-* execute one character mode instruction
+* execute one character	mode instruction
 ************************************************************************
 * 2016-03-19  R.Meyer
 *   Converted Paul's work from Javascript to C
 * 2017-07-17  R.Meyer
-*   Added "long long" qualifier to constants with long long value
+*   Added "long	long" qualifier	to constants with long long value
 *   changed "this" to "cpu" to avoid errors when using g++
 ***********************************************************************/
 
 #include "b5500_common.h"
 
 /***********************************************************
-*  Character Mode Syllables                                *
+*  Character Mode Syllables				   *
 ***********************************************************/
 void b5500_execute_cm(CPU *cpu)
 {
@@ -28,14 +28,14 @@ void b5500_execute_cm(CPU *cpu)
 	WORD48	t1, t2;
 	BIT		noSECL;
 
-	opcode = cpu->r.T; 
+	opcode = cpu->r.T;
 	do {
-		variant = opcode >> 6;
-		// force off by default (set by CRF)
+		variant	= opcode >> 6;
+		// force off by	default	(set by	CRF)
 		noSECL = 0;
 
 		switch (opcode & 077) {
-		case 000:	// XX00: CMX, EXC: Exit character mode
+		case 000:	// XX00: CMX, EXC: Exit	character mode
 			if (cpu->r.BROF) {
 				// store destination string
 				storeBviaS(cpu);
@@ -53,8 +53,8 @@ void b5500_execute_cm(CPU *cpu)
 			break;
 
 		case 002:	// XX02: BSD=Skip bit destination
-			cpu->cycleCount += variant;
-			t1 = cpu->r.K*6 + cpu->r.V + variant;
+			cpu->cycleCount	+= variant;
+			t1 = cpu->r.K*6	+ cpu->r.V + variant;
 			while (t1 >= 48) {
 				if (cpu->r.BROF) {
 					// skipped off initial word, so
@@ -66,13 +66,13 @@ void b5500_execute_cm(CPU *cpu)
 				++cpu->r.S;
 				t1 -= 48;
 			}
-			cpu->r.V = t1 % 6;
-			cpu->r.K = t1 / 6;
+			cpu->r.V = t1 %	6;
+			cpu->r.K = t1 /	6;
 			break;
 
 		case 003:	// XX03: BSS=Skip bit source
-			cpu->cycleCount += variant;
-			t1 = cpu->r.G*6 + cpu->r.H + variant;
+			cpu->cycleCount	+= variant;
+			t1 = cpu->r.G*6	+ cpu->r.H + variant;
 			while (t1 >= 48) {
 				// skipped off initial word, so
 				++cpu->r.M;
@@ -80,12 +80,12 @@ void b5500_execute_cm(CPU *cpu)
 				cpu->r.AROF = false;
 				t1 -= 48;
 			}
-			cpu->r.H = t1 % 6;
-			cpu->r.G = t1 / 6;
+			cpu->r.H = t1 %	6;
+			cpu->r.G = t1 /	6;
 			break;
 
-		case 004:	// XX04: RDA=Recall destination address
-			cpu->cycleCount += variant;
+		case 004:	// XX04: RDA=Recall destination	address
+			cpu->cycleCount	+= variant;
 			if (cpu->r.BROF) {
 				// [S] = B
 				storeBviaS(cpu);
@@ -97,15 +97,15 @@ void b5500_execute_cm(CPU *cpu)
 			loadBviaS(cpu);
 			cpu->r.BROF = false;
 			t1 = cpu->r.B;
-			cpu->r.S = t1 & MASKMEM;
+			cpu->r.S = t1 &	MASKMEM;
 			if (OPERAND(t1)) {
 				// if it's an operand,
 				// set K from [30:3]
-				cpu->r.K = (t1 >> 15) & 7;
+				cpu->r.K = (t1 >> 15) &	7;
 			} else {
 				// otherwise, force K to zero and
 				cpu->r.K = 0;
-				// just take the side effect of any p-bit interrupt
+				// just	take the side effect of	any p-bit interrupt
 				presenceTest(cpu, t1);
 			}
 			break;
@@ -116,12 +116,12 @@ void b5500_execute_cm(CPU *cpu)
 				storeBviaS(cpu);
 				cpu->r.BROF = false;
 			}
-			if (cpu->r.G || cpu->r.H) {
+			if (cpu->r.G ||	cpu->r.H) {
 				cpu->r.G = cpu->r.H = 0;
 				++cpu->r.M;
 				cpu->r.AROF = false;
 			}
-			if (cpu->r.K || cpu->r.V) {
+			if (cpu->r.K ||	cpu->r.V) {
 				cpu->r.K = cpu->r.V = 0;
 				++cpu->r.S;
 			}
@@ -142,13 +142,13 @@ void b5500_execute_cm(CPU *cpu)
 					} else {
 						break;
 					}
-				} while (true);
+				} while	(true);
 			}
 			cpu->r.AROF = false;
 			break;
 
 		case 006:	// XX06: SED=Set destination address
-			cpu->cycleCount += variant;
+			cpu->cycleCount	+= variant;
 			if (cpu->r.BROF) {
 				// [S] = B
 				storeBviaS(cpu);
@@ -159,30 +159,30 @@ void b5500_execute_cm(CPU *cpu)
 			break;
 
 		case 007:	// XX07: TDA=Transfer destination address
-			cpu->cycleCount += 6;
+			cpu->cycleCount	+= 6;
 			streamAdjustDestChar(cpu);
 			if (cpu->r.BROF) {
 				// [S] = B, store B at dest addresss
 				storeBviaS(cpu);
 			}
-			// save M (not the way the hardware did it)
+			// save	M (not the way the hardware did	it)
 			t1 = cpu->r.M;
-			// save G (ditto)
+			// save	G (ditto)
 			t2 = cpu->r.G;
-			// copy dest address to source address
+			// copy	dest address to	source address
 			cpu->r.M = cpu->r.S;
 			cpu->r.G = cpu->r.K;
-			// save B
+			// save	B
 			cpu->r.A = cpu->r.B;
 			cpu->r.AROF = cpu->r.BROF;
 			if (!cpu->r.AROF) {
-				// A = [M], load A from source address
+				// A = [M], load A from	source address
 				loadAviaM(cpu);
 			}
 			for (variant = 3; variant > 0; --variant) {
 				cpu->r.Y = fieldIsolate(cpu->r.A, cpu->r.G*6, 6);
-				cpu->r.B = (cpu->r.B << 6) | cpu->r.Y;
-				// make sure B is not exceeding 48 bits
+				cpu->r.B = (cpu->r.B <<	6) | cpu->r.Y;
+				// make	sure B is not exceeding	48 bits
 				cpu->r.B &= 07777777777777777ll;
 				if (cpu->r.G < 7) {
 					++cpu->r.G;
@@ -194,11 +194,11 @@ void b5500_execute_cm(CPU *cpu)
 				}
 			}
 			cpu->r.S = cpu->r.B & MASKMEM;
-			cpu->r.K = (cpu->r.B >> 15) & 7;
+			cpu->r.K = (cpu->r.B >>	15) & 7;
 			// restore M & G
 			cpu->r.M = t1;
 			cpu->r.G = t2;
-			// invalidate A & B
+			// invalidate A	& B
 			cpu->r.AROF = cpu->r.BROF = false;
 			break;
 
@@ -206,7 +206,7 @@ void b5500_execute_cm(CPU *cpu)
 			switch (variant) {
 			case 024:	// 2411: ZPI=Conditional Halt
 				if (cpu->r.US14X) {
-					// STOP OPERATOR switch on
+					// STOP	OPERATOR switch	on
 					stop(cpu);
 				}
 				break;
@@ -221,7 +221,7 @@ void b5500_execute_cm(CPU *cpu)
 
 			default:	// Anything else is a no-op
 				break;
-			} // end switch for XX11 ops
+			} // end switch	for XX11 ops
 			break;
 
 		case 012:	// XX12: TBN=Transfer blanks for non-numeric
@@ -229,13 +229,13 @@ void b5500_execute_cm(CPU *cpu)
 			break;
 
 		case 014:	// XX14: SDA=Store destination address
-			cpu->cycleCount += variant;
+			cpu->cycleCount	+= variant;
 			streamAdjustDestChar(cpu);
-			// save B
+			// save	B
 			cpu->r.A = cpu->r.B;
 			cpu->r.AROF = cpu->r.BROF;
-			cpu->r.B = ((WORD48)cpu->r.K << 15) | cpu->r.S;
-			// save S (not the way the hardware did it)
+			cpu->r.B = ((WORD48)cpu->r.K <<	15) | cpu->r.S;
+			// save	S (not the way the hardware did	it)
 			t1 = cpu->r.S;
 			cpu->r.S = cpu->r.F - variant;
 			// [S] = B
@@ -250,13 +250,13 @@ void b5500_execute_cm(CPU *cpu)
 			break;
 
 		case 015:	// XX15: SSA=Store source address
-			cpu->cycleCount += variant;
+			cpu->cycleCount	+= variant;
 			streamAdjustSourceChar(cpu);
-			// save B
+			// save	B
 			cpu->r.A = cpu->r.B;
 			cpu->r.AROF = cpu->r.BROF;
-			cpu->r.B = ((WORD48)cpu->r.G << 15) | cpu->r.M;
-			// save M (not the way the hardware did it)
+			cpu->r.B = ((WORD48)cpu->r.G <<	15) | cpu->r.M;
+			// save	M (not the way the hardware did	it)
 			t1 = cpu->r.M;
 			cpu->r.M = cpu->r.F - variant;
 			// [M] = B
@@ -271,35 +271,35 @@ void b5500_execute_cm(CPU *cpu)
 			break;
 
 		case 016:	// XX16: SFD=Skip forward destination
-			cpu->cycleCount += (variant >> 3) + (variant & 7);
+			cpu->cycleCount	+= (variant >> 3) + (variant & 7);
 			streamAdjustDestChar(cpu);
-			if (cpu->r.BROF && ((cpu->r.K + variant) >= 8)) {
-				// will skip off the current word,
-				// so store and invalidate B
+			if (cpu->r.BROF	&& ((cpu->r.K +	variant) >= 8))	{
+				// will	skip off the current word,
+				// so store and	invalidate B
 				storeBviaS(cpu);
 				cpu->r.BROF = false;
 			}
-			t1 = (cpu->r.S << 3) + cpu->r.K + variant;
+			t1 = (cpu->r.S << 3) + cpu->r.K	+ variant;
 			cpu->r.S = t1 >> 3;
-			cpu->r.K = t1 & 7;
+			cpu->r.K = t1 &	7;
 			break;
 
 		case 017:	// XX17: SRD=Skip reverse destination
-			cpu->cycleCount += (variant >> 3) + (variant & 7);
+			cpu->cycleCount	+= (variant >> 3) + (variant & 7);
 			streamAdjustDestChar(cpu);
-			if (cpu->r.BROF && (cpu->r.K < variant)) {
-				// will skip off the current word,
-				// so store and invalidate B
+			if (cpu->r.BROF	&& (cpu->r.K < variant)) {
+				// will	skip off the current word,
+				// so store and	invalidate B
 				storeBviaS(cpu);
 				cpu->r.BROF = false;
 			}
-			t1 = (cpu->r.S << 3) + cpu->r.K - variant;
+			t1 = (cpu->r.S << 3) + cpu->r.K	- variant;
 			cpu->r.S = t1 >> 3;
-			cpu->r.K = t1 & 7;
+			cpu->r.K = t1 &	7;
 			break;
 
-		case 022:	// XX22: SES=Set source address
-			cpu->cycleCount += variant;
+		case 022:	// XX22: SES=Set source	address
+			cpu->cycleCount	+= variant;
 			cpu->r.M = cpu->r.F - variant;
 			cpu->r.G = cpu->r.H = 0;
 			cpu->r.AROF = false;
@@ -311,7 +311,7 @@ void b5500_execute_cm(CPU *cpu)
 				// A = [M]
 				loadAviaM(cpu);
 			}
-			t1 = fieldIsolate(cpu->r.A, cpu->r.G*6, 6);
+			t1 = fieldIsolate(cpu->r.A, cpu->r.G*6,	6);
 			cpu->r.TFFF = (t1 == variant ? true : false);
 			break;
 
@@ -321,7 +321,7 @@ void b5500_execute_cm(CPU *cpu)
 				// A = [M]
 				loadAviaM(cpu);
 			}
-			t1 = fieldIsolate(cpu->r.A, cpu->r.G*6, 6);
+			t1 = fieldIsolate(cpu->r.A, cpu->r.G*6,	6);
 			cpu->r.TFFF = (t1 != variant ? true : false);
 			break;
 
@@ -333,7 +333,7 @@ void b5500_execute_cm(CPU *cpu)
 			}
 			t1 = collation[fieldIsolate(cpu->r.A, cpu->r.G*6, 6)];
 			t2 = collation[variant];
-			cpu->r.TFFF = (t1 >= t2 ? true : false);
+			cpu->r.TFFF = (t1 >= t2	? true : false);
 			break;
 
 		case 027:	// XX27: TGR=Test for greater
@@ -344,31 +344,31 @@ void b5500_execute_cm(CPU *cpu)
 			}
 			t1 = collation[fieldIsolate(cpu->r.A, cpu->r.G*6, 6)];
 			t2 = collation[variant];
-			cpu->r.TFFF = (t1 > t2 ? true : false);
+			cpu->r.TFFF = (t1 > t2 ? true :	false);
 			break;
 
 		case 030:	// XX30: SRS=Skip reverse source
-			cpu->cycleCount += (variant >> 3) + (variant & 7);
+			cpu->cycleCount	+= (variant >> 3) + (variant & 7);
 			streamAdjustSourceChar(cpu);
-			if (cpu->r.G < variant) {
-				// will skip off the current word
+			if (cpu->r.G < variant)	{
+				// will	skip off the current word
 				cpu->r.AROF = 0;
 			}
-			t1 = cpu->r.M*8 + cpu->r.G - variant;
+			t1 = cpu->r.M*8	+ cpu->r.G - variant;
 			cpu->r.M = t1 >> 3;
-			cpu->r.G = t1 & 7;
+			cpu->r.G = t1 &	7;
 			break;
 
 		case 031:	// XX31: SFS=Skip forward source
-			cpu->cycleCount += (variant >> 3) + (variant & 7);
+			cpu->cycleCount	+= (variant >> 3) + (variant & 7);
 			streamAdjustSourceChar(cpu);
 			if (cpu->r.G + variant >= 8) {
-				// will skip off the current word
+				// will	skip off the current word
 				cpu->r.AROF = false;
 			}
-			t1 = cpu->r.M*8 + cpu->r.G + variant;
+			t1 = cpu->r.M*8	+ cpu->r.G + variant;
 			cpu->r.M = t1 >> 3;
-			cpu->r.G = t1 & 7;
+			cpu->r.G = t1 &	7;
 			break;
 
 		case 032:	// XX32: xxx=Field subtract (aux)
@@ -387,7 +387,7 @@ void b5500_execute_cm(CPU *cpu)
 			}
 			t1 = collation[fieldIsolate(cpu->r.A, cpu->r.G*6, 6)];
 			t2 = collation[variant];
-			cpu->r.TFFF = (t1 <= t2 ? true : false);
+			cpu->r.TFFF = (t1 <= t2	? true : false);
 			break;
 
 		case 035:	// XX35: TLS=Test for less
@@ -398,7 +398,7 @@ void b5500_execute_cm(CPU *cpu)
 			}
 			t1 = collation[fieldIsolate(cpu->r.A, cpu->r.G*6, 6)];
 			t2 = collation[variant];
-			cpu->r.TFFF = (t1 < t2 ? true : false);
+			cpu->r.TFFF = (t1 < t2 ? true :	false);
 			break;
 
 		case 036:	// XX36: TAN=Test for alphanumeric
@@ -407,13 +407,13 @@ void b5500_execute_cm(CPU *cpu)
 				// A = [M]
 				loadAviaM(cpu);
 			}
-			cpu->r.Y = t1 = fieldIsolate(cpu->r.A, cpu->r.G*6, 6);
+			cpu->r.Y = t1 =	fieldIsolate(cpu->r.A, cpu->r.G*6, 6);
 			cpu->r.Z = variant;	// for display only
-			if (collation[t1] > collation[variant]) {
+			if (collation[t1] > collation[variant])	{
 				cpu->r.TFFF = t1 == 0x20 ? false : (t1 == 0x3C ? false : true);
-				// alphanumeric unless | or !
+				// alphanumeric	unless | or !
 			} else {
-				// alphanumeric if equal
+				// alphanumeric	if equal
 				cpu->r.Q03F = true;
 				// set Q03F (display only)
 				cpu->r.TFFF = (t1 == variant ? true : false);
@@ -427,34 +427,34 @@ void b5500_execute_cm(CPU *cpu)
 			}
 			cpu->r.Y = fieldIsolate(cpu->r.A, cpu->r.G*6, 6);
 			t1 = cpu->r.Y >> (5-cpu->r.H);
-			cpu->r.TFFF = (t1 & 1) == (variant & 1) ? true : false;
+			cpu->r.TFFF = (t1 & 1) == (variant & 1)	? true : false;
 			break;
 
 		case 040:	// XX40: INC=Increase TALLY
 			if (variant) {
-				cpu->r.R = (cpu->r.R + variant) & 63;
+				cpu->r.R = (cpu->r.R + variant)	& 63;
 			}
-			// else it's a character-mode no-op
+			// else	it's a character-mode no-op
 			break;
 
 		case 041:	// XX41: STC=Store TALLY
-			cpu->cycleCount += variant;
-			// save B
+			cpu->cycleCount	+= variant;
+			// save	B
 			cpu->r.A = cpu->r.B;
 			// invalidate A
 			cpu->r.AROF = false;
-			// save RCW address in B (why??)
+			// save	RCW address in B (why??)
 			cpu->r.B = cpu->r.F;
 			if (cpu->r.BROF) {
 				// [S] = A, save original B contents
 				storeAviaS(cpu);
 				cpu->r.BROF = false;
 			}
-			// move saved F address to A (why??)
+			// move	saved F	address	to A (why??)
 			cpu->r.A = cpu->r.B;
-			// copy the TALLY value to B
+			// copy	the TALLY value	to B
 			cpu->r.B = cpu->r.R;
-			// save S (not the way the hardware did it)
+			// save	S (not the way the hardware did	it)
 			t1 = cpu->r.S;
 			cpu->r.S = cpu->r.F - variant;
 			// [S] = B, store the TALLY value
@@ -472,18 +472,18 @@ void b5500_execute_cm(CPU *cpu)
 			break;
 
 		case 043:	// XX43: CRF=Call repeat field
-			cpu->cycleCount += variant;
-			// save B in A
+			cpu->cycleCount	+= variant;
+			// save	B in A
 			cpu->r.A = cpu->r.B;
 			cpu->r.AROF = cpu->r.BROF;
-			// save S (not the way the hardware did it)
+			// save	S (not the way the hardware did	it)
 			t1 = cpu->r.S;
 			// compute parameter address
 			cpu->r.S = cpu->r.F - variant;
 			// B = [S]
 			loadBviaS(cpu);
-			// dynamic repeat count is low-order 6 bits
-			variant = cpu->r.B & 63;
+			// dynamic repeat count	is low-order 6 bits
+			variant	= cpu->r.B & 63;
 			// restore S
 			cpu->r.S = t1;
 			// restore B from A
@@ -495,20 +495,20 @@ void b5500_execute_cm(CPU *cpu)
 				// fetch the program word, if necessary
 				loadPviaC(cpu);
 			}
-			opcode = fieldIsolate(cpu->r.P, cpu->r.L*12, 12);
+			opcode = fieldIsolate(cpu->r.P,	cpu->r.L*12, 12);
 			if (variant) {
-				// if repeat count from parameter > 0,
-				// apply it to the next syllable
-				cpu->r.T = opcode = (opcode & 00077) + (variant << 6);
+				// if repeat count from	parameter > 0,
+				// apply it to the next	syllable
+				cpu->r.T = opcode = (opcode & 00077) + (variant	<< 6);
 			} else {
-				// otherwise, construct JFW (XX47) using repeat
+				// otherwise, construct	JFW (XX47) using repeat
 				// count from next syl (whew!)
 				cpu->r.T = opcode = (opcode & 07700) + 047;
 			}
 
-			// Since we are bypassing normal SECL behavior,
-			// bump the instruction pointer here.
-			// >>> override normal instruction fetch <<<
+			// Since we are	bypassing normal SECL behavior,
+			// bump	the instruction	pointer	here.
+			// >>> override	normal instruction fetch <<<
 			noSECL = 1;
 			cpu->r.PROF = false;
 			if (cpu->r.L < 3) {
@@ -528,7 +528,7 @@ void b5500_execute_cm(CPU *cpu)
 		case 045:	// XX45: JFC=Jump forward conditional
 			if (!cpu->r.TFFF) {
 				// conditional on TFFF
-				cpu->cycleCount += (variant >> 2) + (variant & 3);
+				cpu->cycleCount	+= (variant >> 2) + (variant & 3);
 				jumpSyllables(cpu, variant);
 			}
 			break;
@@ -538,16 +538,16 @@ void b5500_execute_cm(CPU *cpu)
 			break;
 
 		case 047:	// XX47: JFW=Jump forward unconditional
-			cpu->cycleCount += (variant >> 2) + (variant & 3);
+			cpu->cycleCount	+= (variant >> 2) + (variant & 3);
 			jumpSyllables(cpu, variant);
 			break;
 
 		case 050:	// XX50: RCA=Recall control address
-			cpu->cycleCount += variant;
-			// save B in A
+			cpu->cycleCount	+= variant;
+			// save	B in A
 			cpu->r.A = cpu->r.B;
 			cpu->r.AROF = cpu->r.BROF;
-			// save S (not the way the hardware did it)
+			// save	S (not the way the hardware did	it)
 			t1 = cpu->r.S;
 			cpu->r.S = cpu->r.F - variant;
 			// B = [S]
@@ -557,8 +557,8 @@ void b5500_execute_cm(CPU *cpu)
 			if (DESCRIPTOR(t2)) {
 				// if it's a descriptor,
 				if (presenceTest(cpu, t2)) {
-					// if present, initiate a fetch to P
-					// get the word address,
+					// if present, initiate	a fetch	to P
+					// get the word	address,
 					cpu->r.C = cpu->r.B & MASKMEM;
 					// force L to zero and
 					cpu->r.L = 0;
@@ -566,10 +566,10 @@ void b5500_execute_cm(CPU *cpu)
 					cpu->r.PROF = false;
 				}
 			} else {
-				cpu->r.C = t2 & MASKMEM;
-				t1 = (t2 >> 36) & 3;
+				cpu->r.C = t2 &	MASKMEM;
+				t1 = (t2 >> 36)	& 3;
 				if (t1 < 3) {
-					// if not a descriptor, increment the address
+					// if not a descriptor,	increment the address
 					cpu->r.L = t1+1;
 				} else {
 					cpu->r.L = 0;
@@ -586,29 +586,29 @@ void b5500_execute_cm(CPU *cpu)
 			break;
 
 		case 051:	// XX51: ENS=End loop
-			cpu->cycleCount += 4;
-			// save B in A
+			cpu->cycleCount	+= 4;
+			// save	B in A
 			cpu->r.A = cpu->r.B;
 			cpu->r.AROF = cpu->r.BROF;
 			t1 = cpu->r.X;
 			// get repeat count
-			t2 = (t1 & MASK_LCWrpt) >> SHFT_LCWrpt;
-			// loop count exhausted?
-			if (t2) {
+			t2 = (t1 & MASK_LCWrpt)	>> SHFT_LCWrpt;
+			// loop	count exhausted?
+			if (t2)	{
 					// no, restore C, L, and P to loop again
-					cpu->r.C = (t1 & MASK_LCWrC) >> SHFT_LCWrC;
-					cpu->r.L = (t1 & MASK_LCWrL) >> SHFT_LCWrL;
+					cpu->r.C = (t1 & MASK_LCWrC) >>	SHFT_LCWrC;
+					cpu->r.L = (t1 & MASK_LCWrL) >>	SHFT_LCWrL;
 					// require fetch at SECL
 					cpu->r.PROF = false;
 					// store decremented count in X
 					--t2;
 					cpu->r.X = (cpu->r.X & ~MASK_LCWrpt) | (t2 << SHFT_LCWrpt);
 			} else {
-				// save S (not the way the hardware did it)
+				// save	S (not the way the hardware did	it)
 				t2 = cpu->r.S;
 				// get prior LCW addr from X value
-				cpu->r.S = (t1 & MASK_LCWrF) >> SHFT_LCWrF;
-				// B = [S], fetch prior LCW from stack
+				cpu->r.S = (t1 & MASK_LCWrF) >>	SHFT_LCWrF;
+				// B = [S], fetch prior	LCW from stack
 				loadBviaS(cpu);
 				// restore S
 				cpu->r.S = t2;
@@ -623,45 +623,45 @@ void b5500_execute_cm(CPU *cpu)
 			break;
 
 		case 052:	// XX52: BNS=Begin loop
-			cpu->cycleCount += 4;
-			// save B in A (note that BROF is not altered)
+			cpu->cycleCount	+= 4;
+			// save	B in A (note that BROF is not altered)
 			cpu->r.A = cpu->r.B;
 
 			// construct new LCW - keep previous F field
-			t1 = cpu->r.X & MASK_LCWrF;
+			t1 = cpu->r.X &	MASK_LCWrF;
 			// insert repeat count
 			// decrement count for first iteration
-			t1 |= (WORD48)(variant ? variant-1 : 0) << SHFT_LCWrpt;
+			t1 |= (WORD48)(variant ? variant-1 : 0)	<< SHFT_LCWrpt;
 			// insert L
 			t1 |= (WORD48)(cpu->r.L) << SHFT_LCWrL;
 			// insert C
 			t1 |= (WORD48)(cpu->r.C) << SHFT_LCWrC;
 
-			// save current loop control word
+			// save	current	loop control word
 			// set control bits [0:2]=3
 			cpu->r.B = cpu->r.X | INIT_LCW;
-			// save S (not the way the hardware did it)
+			// save	S (not the way the hardware did	it)
 			t2 = cpu->r.S;
-			// get F value from X value and ++
+			// get F value from X value and	++
 			cpu->r.S = (cpu->r.X & MASK_LCWrF) >> SHFT_LCWrF;
 			cpu->r.S++;
 			// [S] = B, save prior LCW in stack
 			storeBviaS(cpu);
 			// update F value in X
-			t1 |= (cpu->r.S << SHFT_LCWrF);
+			t1 |= (cpu->r.S	<< SHFT_LCWrF);
 			cpu->r.X = t1;
 			// restore S
 			cpu->r.S = t2;
 
-			// restore B (note that BROF is still relevant)
+			// restore B (note that	BROF is	still relevant)
 			cpu->r.B = cpu->r.A;
 			// invalidate A
 			cpu->r.AROF = false;
 			break;
 
 		case 053:	// XX53: RSA=Recall source address
-			cpu->cycleCount += variant;
-			// save B
+			cpu->cycleCount	+= variant;
+			// save	B
 			cpu->r.A = cpu->r.B;
 			cpu->r.AROF = cpu->r.BROF;
 			cpu->r.H = 0;
@@ -669,15 +669,15 @@ void b5500_execute_cm(CPU *cpu)
 			// B = [M]
 			loadBviaM(cpu);
 			t1 = cpu->r.B;
-			cpu->r.M = t1 & MASKMEM;
+			cpu->r.M = t1 &	MASKMEM;
 			if (OPERAND(t1)) {
 				// if it's an operand,
 				// set G from [30:3]
-				cpu->r.G = (t1 >> 15) & 7;
+				cpu->r.G = (t1 >> 15) &	7;
 			} else {
 				// otherwise, force G to zero and
 				cpu->r.G = 0;
-				// just take the side effect of any p-bit interrupt
+				// just	take the side effect of	any p-bit interrupt
 				presenceTest(cpu, t1);
 			}
 			// restore B from A
@@ -688,11 +688,11 @@ void b5500_execute_cm(CPU *cpu)
 			break;
 
 		case 054:	// XX54: SCA=Store control address
-			cpu->cycleCount += variant;
-			// save B
+			cpu->cycleCount	+= variant;
+			// save	B
 			cpu->r.A = cpu->r.B;
 			cpu->r.AROF = cpu->r.BROF;
-			// save S (not the way the hardware did it)
+			// save	S (not the way the hardware did	it)
 			t2 = cpu->r.S;
 			// compute store address
 			cpu->r.S = cpu->r.F - variant;
@@ -713,7 +713,7 @@ void b5500_execute_cm(CPU *cpu)
 		case 055:	// XX55: JRC=Jump reverse conditional
 			if (!cpu->r.TFFF) {
 				// conditional on TFFF
-				cpu->cycleCount += (variant >> 2) + (variant & 3);
+				cpu->cycleCount	+= (variant >> 2) + (variant & 3);
 				jumpSyllables(cpu, -variant);
 			}
 			break;
@@ -726,13 +726,13 @@ void b5500_execute_cm(CPU *cpu)
 				cpu->r.BROF = false;
 			}
 			if (!cpu->r.AROF) {
-				// A = [M], load A from source address
+				// A = [M], load A from	source address
 				loadAviaM(cpu);
 			}
 			for (variant = 3; variant > 0; --variant) {
 				cpu->r.Y = fieldIsolate(cpu->r.A, cpu->r.G*6, 6);
-				cpu->r.B = (cpu->r.B << 6) + cpu->r.Y;
-				// make sure B is not exceeding 48 bits
+				cpu->r.B = (cpu->r.B <<	6) + cpu->r.Y;
+				// make	sure B is not exceeding	48 bits
 				cpu->r.B &= 07777777777777777ll;
 				if (cpu->r.G < 7) {
 					++cpu->r.G;
@@ -744,13 +744,13 @@ void b5500_execute_cm(CPU *cpu)
 				}
 			}
 			cpu->r.M = cpu->r.B & MASKMEM;
-			cpu->r.G = (cpu->r.B >> 15) & 7;
+			cpu->r.G = (cpu->r.B >>	15) & 7;
 			// invalidate A
 			cpu->r.AROF = false;
 			break;
 
 		case 057:	// XX57: JRV=Jump reverse unconditional
-			cpu->cycleCount += (variant >> 2) + (variant & 3);
+			cpu->cycleCount	+= (variant >> 2) + (variant & 3);
 			jumpSyllables(cpu, -variant);
 			break;
 
@@ -768,18 +768,18 @@ void b5500_execute_cm(CPU *cpu)
 			cpu->r.TFFF = cpu->r.Q03F ? true : false;
 			break;
 
-		case 062:	// XX62: CEG=Compare greater or equal
+		case 062:	// XX62: CEG=Compare greater or	equal
 			compareSourceWithDest(cpu, variant, false);
 			cpu->r.H = cpu->r.V = 0;
-			// if Q03F&TFFF, S>D; if !Q03F, S=D
-			cpu->r.TFFF = cpu->r.Q03F ? cpu->r.TFFF : true;
+			// if Q03F&TFFF, S>D; if !Q03F,	S=D
+			cpu->r.TFFF = cpu->r.Q03F ? cpu->r.TFFF	: true;
 			break;
 
 		case 063:	// XX63: CGR=Compare greater
 			compareSourceWithDest(cpu, variant, false);
 			cpu->r.H = cpu->r.V = 0;
 			// if Q03F&TFFF, S>D
-			cpu->r.TFFF = cpu->r.Q03F ? cpu->r.TFFF : false;
+			cpu->r.TFFF = cpu->r.Q03F ? cpu->r.TFFF	: false;
 			break;
 
 		case 064:	// XX64: BIS=Set bit
@@ -795,7 +795,7 @@ void b5500_execute_cm(CPU *cpu)
 			break;
 
 		case 067:	// XX67: ICV=Input convert
-			streamInputConvert(cpu, variant);
+			streamInputConvert(cpu,	variant);
 			break;
 
 		case 070:	// XX70: CEL=Compare equal or less
@@ -825,7 +825,7 @@ void b5500_execute_cm(CPU *cpu)
 			break;
 
 		case 075:	// XX75: TRN=Transfer source numerics
-			// initialize for negative sign test
+			// initialize for negative sign	test
 			cpu->r.TFFF = false;
 			streamNumericToDest(cpu, variant, false);
 			break;
@@ -838,9 +838,9 @@ void b5500_execute_cm(CPU *cpu)
 			streamCharacterToDest(cpu, variant);
 			break;
 
-		default:	// everything else is a no-op
+		default:	// everything else is a	no-op
 			break;
 
-		} // end switch for character mode operators
-	} while (noSECL);
+		} // end switch	for character mode operators
+	} while	(noSECL);
 }

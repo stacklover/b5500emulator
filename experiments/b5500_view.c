@@ -1,10 +1,10 @@
 /***********************************************************************
 * b5500emulator
 ************************************************************************
-* Copyright (c) 2016, Reinhard Meyer, DL5UY
+* Copyright (c)	2016, Reinhard Meyer, DL5UY
 * Licensed under the MIT License,
-*       see LICENSE
-* based on work by Nigel Williams and Paul Kimpel
+*	see LICENSE
+* based	on work	by Nigel Williams and Paul Kimpel
 * see: https://github.com/pkimpel/retro-b5500
 ************************************************************************
 * viewer program for CPU state
@@ -21,7 +21,7 @@
 #include <unistd.h>
 #include "b5500_common.h"
 
-int main(int argc, char *argv[])
+int main(int argc, char	*argv[])
 {
 	b5500_init_shares();
 

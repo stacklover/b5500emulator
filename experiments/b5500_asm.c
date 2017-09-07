@@ -1,16 +1,16 @@
 /***********************************************************************
 * b5500emulator
 ************************************************************************
-* Copyright (c) 2016, Reinhard Meyer, DL5UY
+* Copyright (c)	2016, Reinhard Meyer, DL5UY
 * Licensed under the MIT License,
-*       see LICENSE
+*	see LICENSE
 ************************************************************************
-* b5500 assembler
+* b5500	assembler
 ************************************************************************
 * 2016-02-29  R.Meyer
 *   From thin air (based on my Pascal P5 assembler).
 * 2017-07-17  R.Meyer
-*   Added "long long" qualifier to constants with long long value
+*   Added "long	long" qualifier	to constants with long long value
 *   changed "this" to "cpu" to avoid errors when using g++
 ***********************************************************************/
 
@@ -23,26 +23,26 @@
 #include <ctype.h>
 #include "b5500_common.h"
 
-#define MAXLABEL	100	/* total possible labels in intermediate */
-#define MAXLINELENGTH	80	/* maximum input line length */
+#define	MAXLABEL	100	/* total possible labels in intermediate */
+#define	MAXLINELENGTH	80	/* maximum input line length */
 
-/* debug flags: turn these on for various dumps and traces */
-int dodmpins	 = false;	/* dump instructions after assembly */
-int dotrcmem	 = false;	/* trace memory accesses */
-int dolistsource = false;	/* list source line */
+/* debug flags:	turn these on for various dumps	and traces */
+int dodmpins	 = false;	/* dump	instructions after assembly */
+int dotrcmem	 = false;	/* trace memory	accesses */
+int dolistsource = false;	/* list	source line */
 int dotrcins	 = false;	/* trace instruction execution */
 int dotrcmat	 = false;	/* trace math operations */
 int emode	 = false;	/* emode math */
 
-typedef enum labelst {entered=0, defined} LABELST;
-typedef struct labelrec {
+typedef	enum labelst {entered=0, defined} LABELST;
+typedef	struct labelrec	{
 	unsigned val;
 	LABELST	st;
 } LABELREC;
 
 /* variables for input file reading */
-FILE	*prd;		/* for assembly source */
-int	iline;		/* line number of intermediate file */
+FILE	*prd;		/* for assembly	source */
+int	iline;		/* line	number of intermediate file */
 char	linebuf[MAXLINELENGTH];
 char	*linep;
 int	eof;
@@ -52,16 +52,16 @@ char	regname[20];
 unsigned wc;
 unsigned sc;
 
-/* variables of code generator */
+/* variables of	code generator */
 int	pass2;
 LABELREC labeltab[MAXLABEL];
 
-CENTRAL_CONTROL cc;
+CENTRAL_CONTROL	cc;
 CPU *cpu;
 
 void signalInterrupt(CPU *cpu)
 {
-	printf("\nIRQ=$%02x\n", cpu->r.I);
+	printf("\nIRQ=$%02x\n",	cpu->r.I);
 }
 
 void init(void)
@@ -73,7 +73,7 @@ void init(void)
 
 	if (pass2 == false) {
 		for (i=0; i<MAXLABEL; i++) {
-			labeltab[i].val = -1;
+			labeltab[i].val	= -1;
 			labeltab[i].st = entered;
 		}
 	} else {
@@ -95,24 +95,24 @@ void setlabel(int x, unsigned value)
 	if (pass2) {
 		if (labeltab[x].st != defined)
 			errorl("pass2: label not defined");
-		/* check whether we get the same value */
+		/* check whether we get	the same value */
 		if (labeltab[x].val != value)
 			errorl("pass2: label has different value");
 	} else {
 		if (labeltab[x].st == defined)
 			errorl("duplicated label");
-	        labeltab[x].st  = defined;
-        	labeltab[x].val = value;
+		labeltab[x].st	= defined;
+		labeltab[x].val	= value;
 	}
 }
 
 int getlabel(int x)	/* search in label table */
 {
-	int q = 0;
-	switch (labeltab[x].st) {
+	int q =	0;
+	switch (labeltab[x].st)	{
 	case entered:
 		q = labeltab[x].val;
-		labeltab[x].val = wc;
+		labeltab[x].val	= wc;
 		break;
 	case defined:
 		q = labeltab[x].val;
@@ -124,7 +124,7 @@ int getlabel(int x)	/* search in label table */
 void getname(char *name, int maxlen)
 {
 	int i=0;
-	memset(name, 0, maxlen);
+	memset(name, 0,	maxlen);
 	while (isalnum((int)*linep) || (*linep=='.')) {
 		if (i >= maxlen)
 			linep++;
@@ -167,7 +167,7 @@ void storeword(WORD48 v)
 
 void getlin(void) /* get next line */
 {
-	if (fgets(linebuf, sizeof linebuf, prd) == NULL) {
+	if (fgets(linebuf, sizeof linebuf, prd)	== NULL) {
 		eof = true;
 		linebuf[0] = 0;
 		return;
@@ -180,7 +180,7 @@ const char int2ascii[64+1] =
 	"xJKLMNOPQR$*-);{"
 	" /STUVWXYZ,%!=]\"";
 
-WORD48 string(char *lp, char **rp)
+WORD48 string(char *lp,	char **rp)
 {
 	WORD48	res = 0;
 	char *p;
@@ -188,7 +188,7 @@ WORD48 string(char *lp, char **rp)
 	while (*lp != '"') {
 		p = strchr(int2ascii, *lp);
 		if (p)
-			res = (res << 6) | (p - int2ascii);
+			res = (res << 6) | (p -	int2ascii);
 		else
 			res = (res << 6) | (014);
 		lp++;
@@ -201,8 +201,8 @@ char *word2string(WORD48 w)
 {
 	static char buf[33];
 	int i;
-	for (i=7; i>=0; i--) {
-		buf[3*i  ] = '0'+((w>>3) & 7);
+	for (i=7; i>=0;	i--) {
+		buf[3*i	 ] = '0'+((w>>3) & 7);
 		buf[3*i+1] = '0'+((w   ) & 7);
 		buf[3*i+2] = ' ';
 		buf[24+i] = int2ascii[w&077];
@@ -212,10 +212,10 @@ char *word2string(WORD48 w)
 	return buf;
 }
 
-char *lcw2string(WORD48 w)
+char *lcw2string(WORD48	w)
 {
 	static char buf[33];
-	if (w & MASK_LCWrC) {
+	if (w &	MASK_LCWrC) {
 		sprintf(buf, "Loop(%05llo:%llo Rpt=%03llo Prev=%05llo)",
 			(w & MASK_LCWrC) >> SHFT_LCWrC,
 			(w & MASK_LCWrL) >> SHFT_LCWrL,
@@ -254,7 +254,7 @@ WORD48 parserel(void)
 	} else if (ch == 'C') {
 		linep++;
 	}
-	if (isdigit((int)*linep) || (*linep == '-') || (*linep == '+')) {
+	if (isdigit((int)*linep) || (*linep == '-') || (*linep == '+'))	{
 		ll = strtoll(linep, &linep, 0);
 		switch (ch) {
 		case 'R':
@@ -279,7 +279,7 @@ int parselabel(void)
 	while(isspace((int)*linep))
 		linep++;
 	if (*linep == 'l' || *linep == 'L')
-		return getlabel(strtol(linep+1, &linep, 10));
+		return getlabel(strtol(linep+1,	&linep,	10));
 	errorl("expected label");
 	return -1;
 }
@@ -290,39 +290,39 @@ void printinstr(ADDR15 wc, WORD2 sc, BIT symbolic, BIT cwmf)
 	WORD12 code = 0;
 
 	switch (sc) {
-	case 0:	code = (MAIN[wc] >> 36) & 0xfff; break;
-	case 1:	code = (MAIN[wc] >> 24) & 0xfff; break;
-	case 2:	code = (MAIN[wc] >> 12) & 0xfff; break;
-	case 3:	code = (MAIN[wc] >> 0) & 0xfff; break;
+	case 0:	code = (MAIN[wc] >> 36)	& 0xfff; break;
+	case 1:	code = (MAIN[wc] >> 24)	& 0xfff; break;
+	case 2:	code = (MAIN[wc] >> 12)	& 0xfff; break;
+	case 3:	code = (MAIN[wc] >> 0) & 0xfff;	break;
 	}
 	printf("%04o", code);
 	if (symbolic) {
 		// search instruction table
 		ip = instruction_table;
-		while (ip->name != 0) {
+		while (ip->name	!= 0) {
 			switch (ip->outtype) {
 			case OP_ASIS:
 			case OP_BRAS:
 			case OP_BRAW:
-				if (ip->cwmf == cwmf && ip->code == code) {
+				if (ip->cwmf ==	cwmf &&	ip->code == code) {
 					printf (" %s", ip->name);
 					return;
 				}
 				break;
 			case OP_TOP4:
-				if (ip->cwmf == cwmf && ip->code == (code & 0x0ff)) {
+				if (ip->cwmf ==	cwmf &&	ip->code == (code & 0x0ff)) {
 					printf (" %s %u", ip->name, code >> 8);
 					return;
 				}
 				break;
 			case OP_TOP6:
-				if (ip->cwmf == cwmf && ip->code == (code & 0x03f)) {
+				if (ip->cwmf ==	cwmf &&	ip->code == (code & 0x03f)) {
 					printf (" %s 0%02o", ip->name, code >> 6);
 					return;
 				}
 				break;
 			case OP_TOP10:
-				if (ip->cwmf == cwmf && ip->code == (code & 0x003)) {
+				if (ip->cwmf ==	cwmf &&	ip->code == (code & 0x003)) {
 					printf (" %s 0%04o", ip->name, code >> 2);
 					return;
 				}
@@ -336,7 +336,7 @@ void printinstr(ADDR15 wc, WORD2 sc, BIT symbolic, BIT cwmf)
 	}
 }
 
-int verifyreg(char *regname, unsigned long long c)
+int verifyreg(char *regname, unsigned long long	c)
 {
 	if (strcmp(regname, "AROF") == 0) { if (cpu->r.AROF == c) return true;	} else
 	if (strcmp(regname, "BROF") == 0) { if (cpu->r.BROF == c) return true;	} else
@@ -346,7 +346,7 @@ int verifyreg(char *regname, unsigned long long c)
 	if (strcmp(regname, "SALF") == 0) { if (cpu->r.SALF == c) return true;	} else
 	if (strcmp(regname, "NCSF") == 0) { if (cpu->r.NCSF == c) return true;	} else
 	if (strcmp(regname, "CWMF") == 0) { if (cpu->r.CWMF == c) return true;	} else
-	if (strcmp(regname, "isP1") == 0) { if (cpu->isP1 == c) return true;	} else
+	if (strcmp(regname, "isP1") == 0) { if (cpu->isP1 == c)	return true;	} else
 	if (strcmp(regname, "A") == 0) { if (cpu->r.A == c) return true; } else
 	if (strcmp(regname, "B") == 0) { if (cpu->r.B == c) return true; } else
 	if (strcmp(regname, "C") == 0) { if (cpu->r.C == c) return true; } else
@@ -371,17 +371,17 @@ int verifyreg(char *regname, unsigned long long c)
 	return false;
 }
 
-void setreg(char *regname, long long c)
+void setreg(char *regname, long	long c)
 {
-	if (strcmp(regname, "AROF") == 0) { cpu->r.AROF = c; } else
-	if (strcmp(regname, "BROF") == 0) { cpu->r.BROF = c; } else
-	if (strcmp(regname, "PROF") == 0) { cpu->r.PROF = c; } else
-	if (strcmp(regname, "TROF") == 0) { cpu->r.TROF = c; } else
-	if (strcmp(regname, "MSFF") == 0) { cpu->r.MSFF = c; } else
-	if (strcmp(regname, "SALF") == 0) { cpu->r.SALF = c; } else
-	if (strcmp(regname, "NCSF") == 0) { cpu->r.NCSF = c; } else
-	if (strcmp(regname, "CWMF") == 0) { cpu->r.CWMF = c; } else
-	if (strcmp(regname, "isP1") == 0) { cpu->isP1 = c; } else
+	if (strcmp(regname, "AROF") == 0) { cpu->r.AROF	= c; } else
+	if (strcmp(regname, "BROF") == 0) { cpu->r.BROF	= c; } else
+	if (strcmp(regname, "PROF") == 0) { cpu->r.PROF	= c; } else
+	if (strcmp(regname, "TROF") == 0) { cpu->r.TROF	= c; } else
+	if (strcmp(regname, "MSFF") == 0) { cpu->r.MSFF	= c; } else
+	if (strcmp(regname, "SALF") == 0) { cpu->r.SALF	= c; } else
+	if (strcmp(regname, "NCSF") == 0) { cpu->r.NCSF	= c; } else
+	if (strcmp(regname, "CWMF") == 0) { cpu->r.CWMF	= c; } else
+	if (strcmp(regname, "isP1") == 0) { cpu->isP1 =	c; } else
 	if (strcmp(regname, "A") == 0) { cpu->r.A = c;	} else
 	if (strcmp(regname, "B") == 0) { cpu->r.B = c;	} else
 	if (strcmp(regname, "C") == 0) { cpu->r.C = c;	} else
@@ -413,14 +413,14 @@ void generate(void)	/* generate segment of code */
 	int	x;
 	int	labelvalue;
 
-	again = true;
+	again =	true;
 	while (again) {
 		getlin();
 		if (eof) {
 			printf("unexpected eof on input\n");
 			return;
 		}
-		linep = linebuf+1;
+		linep =	linebuf+1;
 		switch (linebuf[0]) {
 		case '#': /* comment */
 			if (pass2 && dolistsource)
@@ -457,17 +457,17 @@ void assemble(void)
 	unsigned oldwc;
 	unsigned oldsc;
 
-	oldwc = wc;
-	oldsc = sc;
+	oldwc =	wc;
+	oldsc =	sc;
 
-	getname(opname, sizeof opname);
+	getname(opname,	sizeof opname);
 
 	/* search for instruction in table */
 	ip = instruction_table;
-	while (ip->name != 0 && strcmp(opname, ip->name) != 0)
+	while (ip->name	!= 0 &&	strcmp(opname, ip->name) != 0)
 		ip++;
-	if (ip->name == 0)
-		errorl("illegal instruction");
+	if (ip->name ==	0)
+		errorl("illegal	instruction");
 	op = ip->code;
 
 	/* get parameters */
@@ -486,7 +486,7 @@ void assemble(void)
 	case OP_REGVAL:
 		while(isspace((int)*linep))
 			linep++;
-		getname(regname, sizeof regname);
+		getname(regname, sizeof	regname);
 		while(isspace((int)*linep))
 			linep++;
 		c = parseint();
@@ -498,8 +498,8 @@ void assemble(void)
 	/* generate code or handle pseudo instructions */
 	switch (ip->outtype) {
 	case OP_ORG:
-		oldwc = wc = c;
-		oldsc = sc = 0;
+		oldwc =	wc = c;
+		oldsc =	sc = 0;
 		if (pass2 && dolistsource)
 			fputs(linebuf, stdout);
 		return;
@@ -509,22 +509,22 @@ void assemble(void)
 				fputs(linebuf, stdout);
 			cpu->r.C = wc;
 			cpu->r.L = sc;
-			loadPviaC(cpu);	// load the program word to P
+			loadPviaC(cpu);	// load	the program word to P
 			switch (cpu->r.L) {
 			case 0:
-				cpu->r.T = (cpu->r.P >> 36) & 0xfff;
+				cpu->r.T = (cpu->r.P >>	36) & 0xfff;
 				cpu->r.L = 1;
 				break;
 			case 1:
-				cpu->r.T = (cpu->r.P >> 24) & 0xfff;
+				cpu->r.T = (cpu->r.P >>	24) & 0xfff;
 				cpu->r.L = 2;
 				break;
 			case 2:
-				cpu->r.T = (cpu->r.P >> 12) & 0xfff;
+				cpu->r.T = (cpu->r.P >>	12) & 0xfff;
 				cpu->r.L = 3;
 				break;
 			case 3:
-				cpu->r.T = (cpu->r.P >> 0) & 0xfff;
+				cpu->r.T = (cpu->r.P >>	0) & 0xfff;
 				cpu->r.L = 0;
 				cpu->r.C++;
 				cpu->r.PROF = false;
@@ -534,7 +534,7 @@ void assemble(void)
 
 			cpu->r.US14X = true;
 			start(cpu);
-//printf("runn: C=%05o L=%o T=%04o\n", cpu->r.C, cpu->r.L, cpu->r.T);
+//printf("runn:	C=%05o L=%o T=%04o\n", cpu->r.C, cpu->r.L, cpu->r.T);
 			while (cpu->busy) {
 				if (dotrcins) {
 					ADDR15 c;
@@ -547,19 +547,19 @@ void assemble(void)
 					} else {
 						l--;
 					}
-					printf("%05o:%o ", c, l);
+					printf("%05o:%o	", c, l);
 					printinstr(c, l, true, cpu->r.CWMF);
 					printf("\n");
 				}
-				cpu->cycleLimit = 1;
+				cpu->cycleLimit	= 1;
 				run(cpu);
 				if (dotrcins) {
 					if (cpu->r.CWMF) {
-						printf("  SI=%05o.%o.%o A=%s (%u) Y=%02o\n",
+						printf("  SI=%05o.%o.%o	A=%s (%u) Y=%02o\n",
 							cpu->r.M, cpu->r.G, cpu->r.H,
 							word2string(cpu->r.A), cpu->r.AROF,
 							cpu->r.Y);
-						printf("  DI=%05o.%o.%o B=%s (%u) Z=%02o\n",
+						printf("  DI=%05o.%o.%o	B=%s (%u) Z=%02o\n",
 							cpu->r.S, cpu->r.K, cpu->r.V,
 							word2string(cpu->r.B), cpu->r.BROF,
 							cpu->r.Z);
@@ -568,24 +568,24 @@ void assemble(void)
 							cpu->r.TFFF, cpu->r.SALF, cpu->r.NCSF,
 							lcw2string(cpu->r.X));
 					} else {
-						printf("  A=%016llo(%u) GH=%o%o Y=%02o M=%05o F=%05o N=%d NCSF=%u\n",
+						printf("  A=%016llo(%u)	GH=%o%o	Y=%02o M=%05o F=%05o N=%d NCSF=%u\n",
 							cpu->r.A, cpu->r.AROF,
 							cpu->r.G, cpu->r.H,
 							cpu->r.Y, cpu->r.M,
 							cpu->r.F,
 							cpu->r.N, cpu->r.NCSF);
-						printf("  B=%016llo(%u) KV=%o%o Z=%02o S=%05o R=%03o MSFF=%u SALF=%u\n",
+						printf("  B=%016llo(%u)	KV=%o%o	Z=%02o S=%05o R=%03o MSFF=%u SALF=%u\n",
 							cpu->r.B, cpu->r.BROF,
 							cpu->r.K, cpu->r.V,
 							cpu->r.Z, cpu->r.S,
 							cpu->r.R,
 							cpu->r.MSFF, cpu->r.SALF);
 					}
-					for (wc = 01000; wc < 01040; wc++)
-						if (MAIN[wc] != MAIN[wc+0x4000]) {
-							printf("  %05o: %s\n",
+					for (wc	= 01000; wc < 01040; wc++)
+						if (MAIN[wc] !=	MAIN[wc+0x4000]) {
+							printf("  %05o:	%s\n",
 								wc, word2string(MAIN[wc]));
-							MAIN[wc+0x4000] = MAIN[wc];
+							MAIN[wc+0x4000]	= MAIN[wc];
 						}
 				}
 //				sleep(1);
@@ -598,13 +598,13 @@ void assemble(void)
 			} else {
 				sc--;
 			}
-			for (wc = 01000; wc < 01040; wc++)
-				printf("  %05o: %s\n",
+			for (wc	= 01000; wc < 01040; wc++)
+				printf("  %05o:	%s\n",
 					wc, word2string(MAIN[wc]));
 		}
 		return;
 	case OP_END:
-		again = 0;
+		again =	0;
 		if (pass2 && dolistsource)
 			fputs(linebuf, stdout);
 		return;
@@ -612,7 +612,7 @@ void assemble(void)
 		if (pass2 && dolistsource)
 			fputs(linebuf, stdout);
 		if (pass2)
-			setreg(regname, c);
+			setreg(regname,	c);
 		return;
 	case OP_VFY:
 		if (pass2 && dolistsource)
@@ -649,22 +649,22 @@ void assemble(void)
 	}
 
 	if (pass2) {
-		if (ip->outtype == OP_WORD) {
+		if (ip->outtype	== OP_WORD) {
 			if (dolistsource)
 				fputs(linebuf, stdout);
 			if (dodmpins)
 				printf("%05o   %016llo\n", wc-1, MAIN[wc-1]);
 		} else {
 			if (dodmpins) {
-				printf("%05o:%o (%o) ", oldwc, oldsc, oldwc*4 + oldsc);
-				if ((oldwc!=wc) || (oldsc!=sc))
-					printinstr(oldwc, oldsc, false, false);
+				printf("%05o:%o	(%o) ",	oldwc, oldsc, oldwc*4 +	oldsc);
+				if ((oldwc!=wc)	|| (oldsc!=sc))
+					printinstr(oldwc, oldsc, false,	false);
 				else
 					printf("    ");
 			}
 			if (dolistsource)
 				fputs(linebuf, stdout);
-			if (dodmpins && !dolistsource)
+			if (dodmpins &&	!dolistsource)
 				printf("\n");
 		}
 	}
@@ -676,7 +676,7 @@ void load(void)
 	generate();
 }
 
-int main(int argc, char *argv[])
+int main(int argc, char	*argv[])
 {
 	int opt;
 
@@ -691,48 +691,48 @@ int main(int argc, char *argv[])
 			dodmpins = true; /* dump instructions after assembly */
 			break;
 		case 'c':
-			emode = true; /* do math the emode way */
+			emode =	true; /* do math the emode way */
 			break;
 		case 'm':
 			dotrcmem = true; /* trace memory accesses */
 			break;
 		case 's':
-			dolistsource = true; /* list source */
+			dolistsource = true; /*	list source */
 			break;
 		case 't':
 			dotrcins = true; /* trace execution */
 			break;
-		default: /* '?' */
+		default: /* '?'	*/
 			fprintf(stderr,
-				"Usage: %s [-a] [-b] [-m] [-s] [-t] input\n",
+				"Usage:	%s [-a]	[-b] [-m] [-s] [-t] input\n",
 				argv[0]);
 			exit(2);
 		}
 	}
-	if (argc - optind != 1) {
-		fprintf(stderr, "requires 1 filename\n");
+	if (argc - optind != 1)	{
+		fprintf(stderr,	"requires 1 filename\n");
 		exit (2);
 	}
 	prd = fopen(argv[optind], "rt");
-	if (prd == NULL) {
-		fprintf(stderr, "cannot open %s for reading\n", argv[optind]);
+	if (prd	== NULL) {
+		fprintf(stderr,	"cannot	open %s	for reading\n",	argv[optind]);
 		exit (2);
 	}
 
 	b5500_init_shares();
 
-	memset(MAIN, 0, MAXMEM*sizeof(WORD48));
+	memset(MAIN, 0,	MAXMEM*sizeof(WORD48));
 	cpu = CPUA;
 	memset(cpu, 0, sizeof(CPU));
-	cpu->id = "CPUA";
+	cpu->id	= "CPUA";
 	//cpu->isP1 = true;
 	start(cpu);
 
 	printf("Pass 1\n");
-	pass2 = false;
+	pass2 =	false;
 	load();
 	printf("Pass 2\n");
-	pass2 = true;
+	pass2 =	true;
 	load();
 
 	fclose(prd);

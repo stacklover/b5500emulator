@@ -18,35 +18,35 @@
 	.ORG	0203
 	.WORD	0
 
-# ARRAY S[16]:=
+# ARRAY	S[16]:=
 # "01234567","89ABCDEF","GHIJKLMN","OPQRSTUV","WXYZ +-/",
-# "NOW IS T","HE TIME ","FOR ALL ","GOOD MEN"," TO COME",
-# " TO THE ","AID OF T","HEIR PAR","TY.     ","1234567Q","12345678";
+# "NOW IS T","HE TIME ","FOR ALL ","GOOD MEN","	TO COME",
+# " TO THE ","AID OF T","HEIR PAR","TY.	    ","1234567Q","12345678";
 #PRT(204) = S
 	.ORG	0204
-	.WORD	05000200000001000	# array S at @1000 for 16
+	.WORD	05000200000001000	# array	S at @1000 for 16
 	.ORG	01000
 	.WORD	"01234567"
 	.WORD	"89ABCDEF"
 	.WORD	"GHIJKLMN"
 	.WORD	"OPQRSTUV"
 	.WORD	"WXYZ +-/"
-	.WORD	"NOW IS T"
+	.WORD	"NOW IS	T"
 	.WORD	"HE TIME "
 	.WORD	"FOR ALL "
 	.WORD	"GOOD MEN"
 	.WORD	" TO COME"
 	.WORD	" TO THE "
-	.WORD	"AID OF T"
+	.WORD	"AID OF	T"
 	.WORD	"HEIR PAR"
-	.WORD	"TY.     "
+	.WORD	"TY.	 "
 	.WORD	"1234567Q"
 	.WORD	"12345678"
 
-# ARRAY D[16];
+# ARRAY	D[16];
 #PRT(205) = D
 	.ORG	0205
-	.WORD	05000200000001020	# array D at @1020 for 16
+	.WORD	05000200000001020	# array	D at @1020 for 16
 	.ORG	01020
 	.WORD	0
 	.WORD	0
@@ -65,40 +65,40 @@
 	.WORD	0
 	.WORD	0
 
-# LABEL ENTRY, START;
+# LABEL	ENTRY, START;
 
 
 	.ORG	020
-# ENTRY:@20: GO TO START;
+# ENTRY:@20: GO	TO START;
 	LITC	0166
 	LFU
 
 	.ORG	0206
 # START:*:
 # D[0]:= 76543210;
-	LITC	0	# index 0
-	DESC	0205	# addr of array element D[index]
+	LITC	0	# index	0
+	DESC	0205	# addr of array	element	D[index]
 	OPDC	0265	# addr of constant 76543210
 	NOP
 	XCH		# make address be top of stack
-	STD		# store destructive
+	STD		# store	destructive
 
 # STREAM(R:=-D[0] : COUNT:=0, S:=S, D:=D);
 	NOP
-# Generate and initialize local variables for STREAM
-	LITC	0	# index 0
-	OPDC	0205	# load value at D[index]
+# Generate and initialize local	variables for STREAM
+	LITC	0	# index	0
+	OPDC	0205	# load value at	D[index]
 	CHS		# invert sign (R will be MKS-1 or RCW-5)
 	MKS		# mark stack (is MKS+0 or will be RCW-4)
-	LITC	0	# constant 0 (COUNT is MKS+1 or will be RCW-3)
-	LITC	0204	# address of descriptor of S
-	LOD		# load descriptor (S is MKS+2 or will be RCW-2)
-	LITC	0205	# address of descriptor of D
-	LOD		# load descriptor (D is MKS+3 or will be RCW-1)
-	CMN		# enter character mode (is RCW+0)
+	LITC	0	# constant 0 (COUNT is MKS+1 or	will be	RCW-3)
+	LITC	0204	# address of descriptor	of S
+	LOD		# load descriptor (S is	MKS+2 or will be RCW-2)
+	LITC	0205	# address of descriptor	of D
+	LOD		# load descriptor (D is	MKS+3 or will be RCW-1)
+	CMN		# enter	character mode (is RCW+0)
 # BEGIN
 
-# Stack is now:
+# Stack	is now:
 #	R	=RCW-5
 #	MCW	=RCW-4
 #	COUNT	=RCW-3
@@ -139,7 +139,7 @@
 # DI:= DI+9;
 	SFD	9	# destination pointer +9
 # COUNT:= DI;
-	SDA	3	# store destination address in RCW-3 (COUNT)
+	SDA	3	# store	destination address in RCW-3 (COUNT)
 # DS:= 9 LIT "ADGJMPSV7";
 	TRP	9	# copy 9 chars from code stream
 	.SYLL	00021
@@ -148,65 +148,65 @@
 	.SYLL	04762
 	.SYLL	06507
 # SI:= COUNT;
-	RSA	3	# recall source address from RCW-3 (COUNT)
+	RSA	3	# recall source	address	from RCW-3 (COUNT)
 # DS:= 9 ZON;
-	TRZ	9	# copy 9 chars zone bits (BAxxxx) only, keep 8421
+	TRZ	9	# copy 9 chars zone bits (BAxxxx) only,	keep 8421
 # SI:= COUNT;
-	RSA	3	# recall source address from RCW-3 (COUNT)
+	RSA	3	# recall source	address	from RCW-3 (COUNT)
 # DS:= 9 NUM;
 	TRN	9	# copy 9 chars numeric bits (xx8421) only, set BA=00
 # SI:= COUNT;
-	RSA	3	# recall source address from RCW-3 (COUNT)
+	RSA	3	# recall source	address	from RCW-3 (COUNT)
 # DI:= COUNT;
-	RDA	3	# recall destination address from RCW-3 (COUNT)
+	RDA	3	# recall destination address from RCW-3	(COUNT)
 # DI:= DI+11;
 	SFD	11	# destination pointer +11
 # TALLY:= 3;
 	SEC	3	# set tally to 3
 # COUNT:= TALLY;
-	STC	3	# store tally in RCW-3 (COUNT)
+	STC	3	# store	tally in RCW-3 (COUNT)
 # DS:= COUNT WDS;
 	CRF	3	# load repeat field from RCW-3 (COUNT)
 	TRW	0	# copy xx words
 # DI:= D;
-	RDA	1	# recall destination address from RCW-1 (D)
+	RDA	1	# recall destination address from RCW-1	(D)
 # DI:= DI+9;
 	SFD	9	# destination pointer +9
 # DS:= 9 FILL;
 	TBN	9	# copy max 9 blanks while 0
 # SI:= S;
 	RSA	2	# S at RCW-2
-# IF SC > "A" THEN
-	TGR	021	# test greater than 021 ('A')
+# IF SC	> "A" THEN
+	TGR	021	# test greater than 021	('A')
 	JFC	1	# jump forward if false
 # DS:= SET;
 	BIS	1	# set one bit to 1
-# IF SC = "A" THEN
+# IF SC	= "A" THEN
 	TEG	021	# test greater than or equal 021 ('A')
 	JFC	1	# jump forward if false
 # DS:= SET;
 	BIS	1	# set one bit to 1
-# IF SC = "A" THEN
+# IF SC	= "A" THEN
 	TEQ	021	# test equal 021 ('A')
 	JFC	1	# jump forward if false
 # DS:= SET;
 	BIS	1	# set one bit to 1
-# IF SC = "A" THEN
+# IF SC	= "A" THEN
 	TEL	021	# test less than or equal 021 ('A')
 	JFC	1	# jump forward if false
 # DS:= SET;
 	BIS	1	# set one bit to 1
-# IF SC < "A" THEN
-	TLS	021	# test greater than 021 ('A')
+# IF SC	< "A" THEN
+	TLS	021	# test greater than 021	('A')
 	JFC	1	# jump forward if false
 # DS:= SET;
 	BIS	1	# set one bit to 1
-# IF SC ? "A" THEN
+# IF SC	? "A" THEN
 	TNE	021	# test not equal 021 ('A')
 	JFC	1	# jump forward if false
 # DS:= SET;
 	BIS	1	# set one bit to 1
-# IF SC = ALPHA THEN
+# IF SC	= ALPHA	THEN
 	TAN	021	# test greater than or equal 021 ('A') AND alphanumeric
 	JFC	1	# jump forward if false
 # DS:= SET;
@@ -265,26 +265,26 @@
 	JFC	1	# jump forward if false
 # TALLY:= TALLY+1;
 	INC	1	# increment tally by 1
-# 3(IF SB THEN JUMP OUT ELSE SKIP SB);
+# 3(IF SB THEN JUMP OUT	ELSE SKIP SB);
 	BNS	3	# loop 3x
 	BIT	1	# test bit in source for 1
 	JFC	3	# jump forward if false
 	JNS	0	# terminate loop, 0=no jump
 	JFW	3	# jump forward 3
 	JFW	1	# jump forward 1
-	BSS	1	# skip 1 source bit
+	BSS	1	# skip 1 source	bit
 	ENS		# end loop
 # 2(IF SB THEN
 	BNS	2	# loop 2x
 	BIT	1	# test bit in source for 1
 	JFC	2	# jump forward if false
 # SKIP SB
-	BSS	1	# skip 1 source bit
+	BSS	1	# skip 1 source	bit
 # ELSE
 	JFW	3	# jump forward 3
 # BEGIN
 # SKIP 2 SB;
-	BSS	2	# skip 2 source bits
+	BSS	2	# skip 2 source	bits
 # JUMP OUT;
 	JNS	0	# terminate loop, 0=no jump
 	JFW	1	# jump forward 1
@@ -308,18 +308,18 @@
 # TALLY:= 10;
 	SEC	10	# set tally = 10
 # COUNT:= TALLY;
-	STC	3	# store tally in RCW-3 (COUNT)
+	STC	3	# store	tally in RCW-3 (COUNT)
 # COUNT(
 	CRF	3	# load repeat field from RCW-3 (COUNT)
 	BNS	7	# loop 7 times OR skip forward 7 (if COUNT=0)
-# IF SB THEN DS:= SET ELSE DS:= RESET;
+# IF SB	THEN DS:= SET ELSE DS:=	RESET;
 	BIT	1	# test bit in source for 1
 	JFC	2	# jump forward 2 if false
 	BIS	1	# set one bit to 1
 	JFW	1	# jump forward 1
 	BIR	1	# set one bit to 0
 # SKIP SB;
-	BSS	1	# skip 1 source bit
+	BSS	1	# skip 1 source	bit
 # );
 	ENS		# end loop
 # DI:= D;
@@ -345,7 +345,7 @@
 # DI:= DI+9;
 	SFD	9	# destination pointer +9
 # DS:= 9 ADD;
-	FAD	9	# field add 9 chars
+	FAD	9	# field	add 9 chars
 # DI:= D;
 	RDA	1	# D at RCW-1
 # DS:= 9 LIT "00000123M";
@@ -369,10 +369,10 @@
 # DI:= DI+9;
 	SFD	9	# destination pointer +9
 # DS:= 9 SUB;
-	FSU	9	# field sub 9 chars
+	FSU	9	# field	sub 9 chars
 # COUNT:= CI;
-	SCA	3	# store control address in RCW-3 (count)
-# CI:= COUNT; % SINCE RCA INCREMENTS L, THIS SHOULD BE OK
+	SCA	3	# store	control	address	in RCW-3 (count)
+# CI:= COUNT; %	SINCE RCA INCREMENTS L,	THIS SHOULD BE OK
 	RCA	3	# load control address from RCW-3 (count)
 # TALLY:= COUNT;
 	SEC	0	# set tally = 0
@@ -380,9 +380,9 @@
 	SEC	0	# set tally = 0
 # END STREAM;
 	CMX		# exit character mode
-# P(DEL); % EAT THE WORD LEFT BELOW MSCW BY THE STREAM
-	DEL		# delete top of stack
-# GO TO START;
+# P(DEL); % EAT	THE WORD LEFT BELOW MSCW BY THE	STREAM
+	DEL		# delete top of	stack
+# GO TO	START;
 	ZPI		# stop
 	LITC	056
 	LBU

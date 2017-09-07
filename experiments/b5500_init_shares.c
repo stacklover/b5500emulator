@@ -1,10 +1,10 @@
 /***********************************************************************
 * b5500emulator
 ************************************************************************
-* Copyright (c) 2016, Reinhard Meyer, DL5UY
+* Copyright (c)	2016, Reinhard Meyer, DL5UY
 * Licensed under the MIT License,
-*       see LICENSE
-* based on work by Nigel Williams and Paul Kimpel
+*	see LICENSE
+* based	on work	by Nigel Williams and Paul Kimpel
 * see: https://github.com/pkimpel/retro-b5500
 ************************************************************************
 * initialize shared memory
@@ -14,7 +14,7 @@
 * 2016-03-01  R.Meyer
 *   added Central Control and message queues
 * 2017-07-17  R.Meyer
-*   added proper casts to return values of shmat
+*   added proper casts to return values	of shmat
 ***********************************************************************/
 
 #include <stdio.h>
@@ -63,8 +63,8 @@ void b5500_init_shares(void)
 		perror("shmget CPUB");
 		exit(2);
 	}
-	shm_cc = shmget(SHM_CC, sizeof(CENTRAL_CONTROL), IPC_CREAT|0644);
-	if (shm_cc < 0) {
+	shm_cc = shmget(SHM_CC,	sizeof(CENTRAL_CONTROL), IPC_CREAT|0644);
+	if (shm_cc < 0)	{
 		perror("shmget CENTRAL_CONTROL");
 		exit(2);
 	}
@@ -79,13 +79,13 @@ void b5500_init_shares(void)
 		perror("msgget CPUB");
 		exit(2);
 	}
-	msg_cc = msgget(MSG_CC, IPC_CREAT|0644);
-	if (msg_cc < 0) {
+	msg_cc = msgget(MSG_CC,	IPC_CREAT|0644);
+	if (msg_cc < 0)	{
 		perror("msgget CC");
 		exit(2);
 	}
 
-	MAIN = (WORD48*)shmat(shm_main, NULL, 0);
+	MAIN = (WORD48*)shmat(shm_main,	NULL, 0);
 	if ((int)MAIN == -1) {
 		perror("shmat MAIN");
 		exit(2);
