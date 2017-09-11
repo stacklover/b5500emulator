@@ -29,21 +29,18 @@
 /*
  * storage declared here
  *
- * we might have different, implementation dependant ways
+ * we might have different, implementation dependent ways
  * to get storage
  */
 static
-int	shm_main,
-	shm_cpua,
-	shm_cpub,
-	shm_cc,
-	msg_cpua,
-	msg_cpub,
-	msg_cc;
+int	shm_main,   // main memory
+	shm_cpu[2], // P1 and P2 registers
+	shm_cc,	    // central control registers
+	msg_cpu[2], // messages	to P1 and P2
+	msg_cc;	    // messages	to CC
 
 WORD48		*MAIN;
-CPU		*CPUA;
-CPU		*CPUB;
+CPU		*P[2];
 CENTRAL_CONTROL	*CC;
 
 void b5500_init_shares(void)
@@ -53,30 +50,30 @@ void b5500_init_shares(void)
 		perror("shmget MAIN");
 		exit(2);
 	}
-	shm_cpua = shmget(SHM_CPUA, sizeof(CPU), IPC_CREAT|0644);
-	if (shm_cpua < 0) {
-		perror("shmget CPUA");
+	shm_cpu[0] = shmget(SHM_CPUA, sizeof(CPU), IPC_CREAT|0644);
+	if (shm_cpu[0] < 0) {
+		perror("shmget P1");
 		exit(2);
 	}
-	shm_cpub = shmget(SHM_CPUB, sizeof(CPU), IPC_CREAT|0644);
-	if (shm_cpub < 0) {
-		perror("shmget CPUB");
+	shm_cpu[1] = shmget(SHM_CPUB, sizeof(CPU), IPC_CREAT|0644);
+	if (shm_cpu[1] < 0) {
+		perror("shmget P2");
 		exit(2);
 	}
 	shm_cc = shmget(SHM_CC,	sizeof(CENTRAL_CONTROL), IPC_CREAT|0644);
 	if (shm_cc < 0)	{
-		perror("shmget CENTRAL_CONTROL");
+		perror("shmget CC");
 		exit(2);
 	}
 
-	msg_cpua = msgget(MSG_CPUA, IPC_CREAT|0644);
-	if (msg_cpua < 0) {
-		perror("msgget CPUA");
+	msg_cpu[0] = msgget(MSG_CPUA, IPC_CREAT|0644);
+	if (msg_cpu[0] < 0) {
+		perror("msgget P1");
 		exit(2);
 	}
-	msg_cpub = msgget(MSG_CPUB, IPC_CREAT|0644);
-	if (msg_cpub < 0) {
-		perror("msgget CPUB");
+	msg_cpu[1] = msgget(MSG_CPUB, IPC_CREAT|0644);
+	if (msg_cpu[1] < 0) {
+		perror("msgget P2");
 		exit(2);
 	}
 	msg_cc = msgget(MSG_CC,	IPC_CREAT|0644);
@@ -90,14 +87,14 @@ void b5500_init_shares(void)
 		perror("shmat MAIN");
 		exit(2);
 	}
-	CPUA = (CPU *)shmat(shm_cpua, NULL, 0);
-	if ((int)CPUA == -1) {
-		perror("shmat CPUA");
+	P[0] = (CPU *)shmat(shm_cpu[0],	NULL,	0);
+	if ((int)P[0]	== -1) {
+		perror("shmat P1");
 		exit(2);
 	}
-	CPUB = (CPU *)shmat(shm_cpub, NULL, 0);
-	if ((int)CPUB == -1) {
-		perror("shmat CPUB");
+	P[1] = (CPU *)shmat(shm_cpu[1],	NULL,	0);
+	if ((int)P[1]	== -1) {
+		perror("shmat P2");
 		exit(2);
 	}
 	CC = (CENTRAL_CONTROL*)shmat(shm_cc, NULL, 0);

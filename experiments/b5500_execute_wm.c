@@ -159,14 +159,16 @@ void b5500_execute_wm(CPU *cpu)
 				break;
 			case 002: // 0211: ITI=Interrogate Interrupt
 				// control-state only
-				if (CC->IAR && !cpu->r.NCSF) {
-					cpu->r.C = CC->IAR;
-					cpu->r.L = 0;
-					// stack address @100
-					cpu->r.S = AA_IRQSTACK;
-					clearInterrupt(cpu);
-					// require fetch at SECL
-					cpu->r.PROF = false;
+				if (!cpu->r.NCSF) {
+					ADDR15 vector =	getandclearInterrupt(cpu);
+					if (vector) {
+						cpu->r.C = vector;
+						cpu->r.L = 0;
+						// stack address @100
+						cpu->r.S = AA_IRQSTACK;
+						// require fetch at SECL
+						cpu->r.PROF = false;
+					}
 				}
 				break;
 			case 004: // 0411: RTR=Read Timer

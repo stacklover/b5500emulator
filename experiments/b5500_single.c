@@ -9,7 +9,7 @@
 ************************************************************************
 * single precision arithmetic
 ************************************************************************
-* 2016-02-1921	R.Meyer
+* 2016-02-19  R.Meyer
 *   Converted Paul's work from Javascript to C
 * 2017-07-17  R.Meyer
 *   changed "this" to "cpu" to avoid errors when using g++

@@ -1,4 +1,25 @@
 # Loader
+# 20: 14M90+KI = 0104
+# 21: $|#0|00M
+# 22: M)290+JI
+# 23: "000000D
+# 24: 4*342L05
+# 25: 000V10JI = 0000 00
+# 26: 18JI0)0)
+# 27: 000S0QKI = 0000 00
+# 30: 000W0HKI = 0000 00
+# 31: 000,08KI = 0000 00
+# 32: 000]=/1V = 0000 00
+# 33: 082I08JI = 0010 02
+# 34: 0417+E0M
+# 35: 16+E[)|/
+# 36: EV+EBV+E
+# 37: }V+E?V*)
+# 40: */}V000M
+# 41: 16+E:)B/
+# 42: 1VB),/4V
+# 43: 4J1>50JI
+
 	.ORG	020
 # Entry	point for the hardware load -- Literal Call: push a literal @21
 # into the stack (A register) as the absolute address of the card read
@@ -15,7 +36,7 @@
 # alpha	mode, address @44. Note	that while the hardware	load reads one binary
 # card,	the ESPOL Loader reads cards in	alpha mode, i.e., the way they would
 # normally be encoded by a keypunch machine.
-	.WORD	0
+	.WORD	05240120040000044
 # Dial A to bit	28 (numbered 20	in the Handbook	word diagrams)
 	DIA	044
 # Interrogate interrupts and branch to the vector address for the
@@ -40,7 +61,7 @@
 	CRF	2
 # Transfer the designated number of words from source to destination
 # addresses
-	TRW
+	TRW	0
 # Exit character mode, in this case returning to 43:2
 	EXC
 # Transfer zero	bits from A to B (effectively a	no-op, except that it sets A

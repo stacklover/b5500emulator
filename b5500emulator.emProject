@@ -1,0 +1,52 @@
+<!DOCTYPE CrossStudio_Project_File>
+<solution Name="b5500emulator" target="8" version="2">
+  <project Name="b5500emulator">
+    <folder Name="cpu_control_panel">
+      <file file_name="experiments/b5500_view.c" />
+      <file file_name="experiments/b5500_pdp_text.c" />
+    </folder>
+    <folder Name="cpu_core_functions">
+      <file file_name="experiments/b5500_bitfield.c" />
+      <file file_name="experiments/b5500_double.c" />
+      <file file_name="experiments/b5500_execute_cm.c" />
+      <file file_name="experiments/b5500_execute_wm.c" />
+      <file file_name="experiments/b5500_jump_call.c" />
+      <file file_name="experiments/b5500_misc_cpu.c" />
+      <file file_name="experiments/b5500_single.c" />
+      <file file_name="experiments/b5500_stream.c" />
+      <file file_name="experiments/b5500_irq_io.c" />
+    </folder>
+    <folder Name="common">
+      <file file_name="experiments/b5500_init_shares.c" />
+      <file file_name="experiments/b5500_common.h" />
+      <file file_name="experiments/Makefile" />
+      <file file_name="experiments/b5500_translatetables.c" />
+    </folder>
+    <folder Name="cpu_asm">
+      <file file_name="experiments/b5500_asm.c" />
+      <file file_name="experiments/b5500_instr_table.c" />
+    </folder>
+    <folder Name="cpu_memory_access">
+      <file file_name="experiments/b5500_memory.c" />
+      <file file_name="experiments/b5500_stack.c" />
+    </folder>
+    <folder Name="sptest">
+      <file file_name="experiments/b5500_sptest.c" />
+    </folder>
+  </project>
+  <project Name="Testing Software">
+    <file file_name="testing/fieldtest1.asm" />
+    <file file_name="testing/loader.asm" />
+    <file file_name="testing/sptest.asm" />
+    <file file_name="testing/subtest1.asm" />
+    <file file_name="testing/subtest2.asm" />
+    <file file_name="testing/subtest3.asm" />
+    <file file_name="testing/test1.asm" />
+    <file file_name="testing/testfp.asm" />
+    <file file_name="experiments/test.txt" />
+    <file file_name="testing/charmode_test.asm" />
+    <file file_name="testing/COLD13-fromDisk.lst" />
+    <file file_name="experiments/diskfile1.txt" />
+    <file file_name="testing/COLDSTART-XIII-modified.card.txt" />
+  </project>
+</solution>

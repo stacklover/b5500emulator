@@ -28,7 +28,7 @@ int main(int argc, char	*argv[])
 	printf("\033[2J");
 	while (1) {
 		printf("\033[H");
-		b5500_pdp_text(CPUA);
+		b5500_pdp_text(P[0]);
 		sleep(1);
 	}
 	return 0;
