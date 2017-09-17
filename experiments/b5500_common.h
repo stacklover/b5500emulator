@@ -36,8 +36,9 @@ typedef unsigned long long WORD39;      // 39 bits mantissa extension
 typedef unsigned long long WORD48;      // 48 bits machine word
 
 typedef struct central_control {
-        BIT             IAR;
-        BIT             HP2F;
+        ADDR15          IAR;    // IRQ "vector"
+        WORD6           RTC;    // real time clock register
+        BIT             HP2F;   // HALT CPU #2 flag
         BIT             P2BF;   // CPU #2 busy flag
 } CENTRAL_CONTROL;
 
@@ -120,6 +121,15 @@ typedef struct cpu {
         BIT             isP1;           // we are CPU #1
         BIT             busy;           // CPU is busy
 } CPU;
+
+typedef struct unit {
+        const char      *name;          // printable unit name
+        const unsigned  readybit;       // B5500 bit number of ready status bit in TUS
+        // handling functions
+        BIT             (*isready)(unsigned);     // function to check for ready
+        WORD48          (*ioaccess)(WORD48);      // function to actually perform IO
+        BIT             (*load)(void);            // function to load from this unit
+} UNIT;
 
 /*
  * shared memory resource names and pointers
@@ -387,9 +397,7 @@ extern CENTRAL_CONTROL  *CC;
 #define MASK_IODTAPEDIR 00000000200000000ll // (0000'0200'0000) tape direction (1=reverse)
 #define MASK_IODUSEWC   00000000100000000ll // (0000'0100'0000) use word counter
 #define MASK_IODREAD    00000000040000000ll // (0000'0080'0000) read mode (0=write)
-#define MASK_IODRESULT  00000000017700000ll // (0000'003f'8000) result
-#define MASK_IODRESNRDY 00000000000400000ll // (0000'003f'8000) result 'not ready'
-#define MASK_IODSEGCNT  00000000017700000ll // (0000'003f'8000) segment count
+#define MASK_IODSEGCNT  00000000007700000ll // (0000'001f'8000) segment count
 #define MASK_IODADDR    00000000000077777ll // (0000'0000'7fff) memory address
 #define MASK_DSKFILADR  00077777777777777ll // (03ff'ffff'ffff) disk file address
 #define SHFT_IODUNIT    40
@@ -402,6 +410,25 @@ extern CENTRAL_CONTROL  *CC;
 #define SHFT_IODRESULT  15
 #define SHFT_IODSEGCNT  15
 #define SHFT_IODADDR    0
+
+/*
+ * I/O result bits
+ * octet numbers         FEDCBA9876543210
+ */
+#define MASK_IORISMOD3  01000000000000000ll // TAPE - Model III
+#define MASK_IORMEMPAR  00001000000000000ll // TAPE - Mem. Parity
+#define MASK_IORBLANK   00000400000000000ll // TAPE - Blank Tape
+#define MASK_IORBOT     00000200000000000ll // TAPE - Begin of Tape
+#define MASK_IOREOT     00000100000000000ll // TAPE - End of Tape
+#define MASK_IORCHARS   00000070000000000ll // TAPE - Chars in last word
+#define MASK_IORMAE     00000000010000000ll // ALL - Memory Access Error
+#define MASK_IORD21     00000000004000000ll // ALL - unit specific END
+#define MASK_IORD20     00000000002000000ll // ALL - unit specific ERR
+#define MASK_IORD19     00000000001000000ll // ALL - unit specific PAR
+#define MASK_IORNRDY    00000000000400000ll // ALL - not ready
+#define MASK_IORDPE     00000000000200000ll // ALL - descriptor parity error
+#define MASK_IORBUSY    00000000000100000ll // ALL - busy
+#define SHFT_IORCHARS   30
 
 /*
  * For all single precision operations we use the 64 bits of the host
@@ -526,6 +553,11 @@ extern void run(CPU *);
 /* translate tables */
 extern const WORD6 translatetable_ascii2bic[128];
 extern const char translatetable_bic2ascii[64];
+extern const char translatetable_bcl2bic[64];
+
+/* other tables */
+extern UNIT unit[32][2];
+
 /*
  * bit and field manipulations
  *

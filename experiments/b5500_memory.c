@@ -24,19 +24,22 @@
  */
 void fetch(ACCESSOR *acc)
 {
+        BIT watched = dotrcmem;
+        //if (acc->addr == 0200)
+        //        watched = true;
         // For now, we assume memory parity can never happen
         if (acc->MAIL) {
                 acc->MPED = false;      // no memory parity error
                 acc->MAED = true;       // memory address error
                 acc->word = 0;
-                if (dotrcmem)
+                if (watched)
                         printf("\t[%05o] ERROR MPED=%u MAED=%u (%s)\n",
                                 acc->addr, acc->MPED, acc->MAED, acc->id);
         } else {
                 acc->MPED = false;      // no parity error
                 acc->MAED = false;      // no address error
                 acc->word = MAIN[acc->addr & MASKMEM];
-                if (dotrcmem)
+                if (watched)
                         printf("\t[%05o]->%016llo OK (%s)\n",
                                 acc->addr, acc->word, acc->id);
         }
@@ -48,18 +51,21 @@ void fetch(ACCESSOR *acc)
  */
 void store(ACCESSOR *acc)
 {
+        BIT watched = dotrcmem;
+        //if (acc->addr == 0200)
+        //        watched = true;
         // For now, we assume memory parity can never happen
         if (acc->MAIL) {
                 acc->MPED = false;      // no memory parity error
                 acc->MAED = true;       // memory address error
-                if (dotrcmem)
+                if (watched)
                         printf("\t[%05o] ERROR MPED=%u MAED=%u (%s)\n",
                         acc->addr, acc->MPED, acc->MAED, acc->id);
         } else {
                 acc->MPED = false;      // no parity error
                 acc->MAED = false;      // no address error
                 MAIN[acc->addr & MASKMEM] = acc->word;
-                if (dotrcmem)
+                if (watched)
                         printf("\t[%05o]<-%016llo OK (%s)\n",
                                 acc->addr, acc->word, acc->id);
         }

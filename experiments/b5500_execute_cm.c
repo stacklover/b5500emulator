@@ -640,11 +640,9 @@ void b5500_execute_cm(CPU *cpu)
                         // save B in A (note that BROF is not altered)
                         cpu->r.A = cpu->r.B;
 
-                        // construct new LCW - keep previous F field
-                        t1 = cpu->r.X & MASK_LCWrF;
-                        // insert repeat count
+                        // construct new LCW - insert repeat count
                         // decrement count for first iteration
-                        t1 |= (WORD48)(variant ? variant-1 : 0) << SHFT_LCWrpt;
+                        t1 = (WORD48)(variant ? variant-1 : 0) << SHFT_LCWrpt;
                         // insert L
                         t1 |= (WORD48)(cpu->r.L) << SHFT_LCWrL;
                         // insert C
@@ -656,12 +654,11 @@ void b5500_execute_cm(CPU *cpu)
                         // save S (not the way the hardware did it)
                         t2 = cpu->r.S;
                         // get F value from X value and ++
-                        cpu->r.S = (cpu->r.X & MASK_LCWrF) >> SHFT_LCWrF;
-                        cpu->r.S++;
+                        cpu->r.S = ((cpu->r.X & MASK_LCWrF) >> SHFT_LCWrF) + 1;
                         // [S] = B, save prior LCW in stack
                         storeBviaS(cpu);
                         // update F value in X
-                        t1 |= (cpu->r.S << SHFT_LCWrF);
+                        t1 |= (WORD48)(cpu->r.S) << SHFT_LCWrF;
                         cpu->r.X = t1;
                         // restore S
                         cpu->r.S = t2;
