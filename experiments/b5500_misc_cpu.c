@@ -235,16 +235,6 @@ void haltP2(CPU *cpu)
 
 }
 
-WORD48 readTimer(CPU *cpu)
-{
-        //printf("*** readTimer ***\n");
-
-        if (CC->IAR == 00022)
-                return CC->RTC | 0100;
-        else
-                return CC->RTC;
-}
-
 /*
  * Presets the processor registers for a load condition at C=runAddr
  */

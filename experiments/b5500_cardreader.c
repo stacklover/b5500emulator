@@ -18,6 +18,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <ctype.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include "b5500_common.h"
 
 #define MAXLINELENGTH   (264)   /* maximum line length for all devices - must be multiple of 8 */
@@ -27,6 +29,7 @@ int dodmpins     = false;       /* dump instructions after assembly */
 int dotrcmem     = false;       /* trace memory accesses */
 int dolistsource = false;       /* list source line */
 int dotrcins     = false;       /* trace instruction execution */
+int realspo      = false;       /* print to real SPO */
 // never set
 int dotrcmat     = false;       /* trace math operations */
 int emode        = false;       /* emode math */
@@ -45,17 +48,59 @@ FILEHANDLE    cardfile;         /* file with cards */
 FILEHANDLE    tapefile;         /* file with tape */
 FILEHANDLE    diskfile;         /* file with disk */
 FILEHANDLE    listfile;         /* file with listing */
+FILEHANDLE    spiofile;         /* file with special instruction and I/O trace */
 
 /* input/output buffer */
 char    linebuf[MAXLINELENGTH];
 char    *linep;
 
 /* NAME entries */
-#define MAXNAME 500
-char name[MAXNAME][9];
+#define MAXNAME 1000
+char name[MAXNAME][29];
 
 /* instruction execution counter */
 unsigned instr_count;
+
+CPU *cpu;
+
+/*
+ * table of I/O units
+ * indexed by unit designator and read bit of I/O descriptor
+ */
+UNIT unit[32][2] = {
+        /*00*/ {{NULL, 0},      {NULL, 0}},
+        /*01*/ {{"MTA", 47-47}, {"MTA", 47-47}},
+        /*02*/ {{NULL, 0},      {NULL, 0}},
+        /*03*/ {{"MTB", 47-46}, {"MTB", 47-46}},
+        /*04*/ {{"DRA", 47-31}, {"DRA", 47-31}},
+        /*05*/ {{"MTC", 47-45}, {"MTC", 47-45}},
+        /*06*/ {{"DKA", 47-29}, {"DKA", 47-29}},
+        /*07*/ {{"MTD", 47-44}, {"MTD", 47-44}},
+        /*08*/ {{"DRB", 47-30}, {"DRB", 47-30}},
+        /*09*/ {{"MTE", 47-43}, {"MTE", 47-43}},
+        /*10*/ {{"CPA", 47-25}, {"CRA", 47-24}},
+        /*11*/ {{"MTF", 47-42}, {"MTF", 47-42}},
+        /*12*/ {{"DKB", 47-28}, {"DKB", 47-28}},
+        /*13*/ {{"MTH", 47-41}, {"MTH", 47-41}},
+        /*14*/ {{NULL, 0},      {"CRB", 47-23}},
+        /*15*/ {{"MTJ", 47-40}, {"MTJ", 47-40}},
+        /*16*/ {{"DCC", 47-17}, {"DCC", 47-17}},
+        /*17*/ {{"MTK", 47-39}, {"MTK", 47-39}},
+        /*18*/ {{"PP1", 47-21}, {"PR1", 47-20}},
+        /*19*/ {{"MTL", 47-38}, {"MTL", 47-38}},
+        /*20*/ {{"PPA", 47-19}, {"PRA", 47-18}},
+        /*21*/ {{"MTM", 47-37}, {"MTM", 47-37}},
+        /*22*/ {{"LP1", 47-27}, {NULL, 0}},
+        /*23*/ {{"MTN", 47-36}, {"MTN", 47-36}},
+        /*24*/ {{NULL, 0},      {NULL, 0}},
+        /*25*/ {{"MTP", 47-35}, {"MTP", 47-35}},
+        /*26*/ {{"LP1", 47-27}, {NULL, 0}},
+        /*27*/ {{"MTR", 47-34}, {"MTR", 47-34}},
+        /*28*/ {{NULL, 0},      {NULL, 0}},
+        /*29*/ {{"MTS", 47-33}, {"MTS", 47-33}},
+        /*30*/ {{"SPO", 47-22}, {"SPO", 47-22}},
+        /*31*/ {{"MTT", 47-32}, {"MTT", 47-32}},
+};
 
 int openfile(FILEHANDLE *f, const char *mode) {
         if (f->name != NULL) {
@@ -103,10 +148,48 @@ void errorl(const char *msg) {
         exit(2);
 }
 
-void signalInterrupt(CPU *cpu)
-{
-        printf("\nIRQ=$%02x\n", cpu->r.I);
-        sleep(10);
+void signalInterrupt(void) {
+        // Called by all modules to signal that an interrupt has occurred and
+        // to invoke the interrupt prioritization mechanism. This will result in
+        // an updated vector address in the IAR. Can also be called to reprioritize
+        // any remaining interrupts after an interrupt is handled. If no interrupt
+        // condition exists, CC->IAR is set to zero
+        if (P[0]->r.I & 0x01) CC->IAR = 060; // P1 memory parity error
+        else if (P[0]->r.I & 0x02) CC->IAR = 061; // P1 invalid address error
+
+        else if (CC->CCI03F) CC->IAR = 022; // Time interval
+        else if (CC->CCI04F) CC->IAR = 023; // I/O busy
+        else if (CC->CCI05F) CC->IAR = 024; // Keyboard request
+        else if (CC->CCI08F) CC->IAR = 027; // I/O 1 finished
+        else if (CC->CCI09F) CC->IAR = 030; // I/O 2 finished
+        else if (CC->CCI10F) CC->IAR = 031; // I/O 3 finished
+        else if (CC->CCI11F) CC->IAR = 032; // I/O 4 finished
+        else if (CC->CCI06F) CC->IAR = 025; // Printer 1 finished
+        else if (CC->CCI07F) CC->IAR = 026; // Printer 2 finished
+        else if (CC->CCI12F) CC->IAR = 033; // P2 busy
+        else if (CC->CCI13F) CC->IAR = 034; // Inquiry request
+        else if (CC->CCI14F) CC->IAR = 035; // Special interrupt 1
+        else if (CC->CCI15F) CC->IAR = 036; // Disk file 1 read check finished
+        else if (CC->CCI16F) CC->IAR = 037; // Disk file 2 read check finished
+
+        else if (P[0]->r.I & 0x04) CC->IAR = 062; // P1 stack overflow
+        else if (P[0]->r.I & 0xF0) CC->IAR = (P[0]->r.I >> 4) + 064; // P1 syllable-dependent
+
+        else if (P[1]->r.I & 0x01) CC->IAR = 040; // P2 memory parity error
+        else if (P[1]->r.I & 0x02) CC->IAR = 041; // P2 invalid address error
+        else if (P[1]->r.I & 0x04) CC->IAR = 042; // P2 stack overflow
+        else if (P[1]->r.I & 0xF0) CC->IAR = (P[1]->r.I >> 4) + 040; // P2 syllable-dependent
+        else CC->IAR = 0; // no interrupt set
+
+        if (CC->IAR) {
+                CC->interruptMask |= (1ll << CC->IAR);
+                CC->interruptLatch |= (1ll << CC->IAR);
+        }
+
+        if (spiofile.trace) {
+                fprintf(spiofile.trace, "%08u signalInterrupt P1.I=%02x P2.I=%02x MASK=%012llx LATCH=%012llx\n",
+                        instr_count, P[0]->r.I, P[1]->r.I, CC->interruptMask, CC->interruptLatch);
+        }
 }
 
 void getlin(FILEHANDLE *f) { /* get next line */
@@ -143,6 +226,26 @@ void putword(WORD48 w) {
         int i;
         for (i=7; i>=0; i--) {
                 *linep++ = translatetable_bic2ascii[(w >> (6*i)) & 0x3f];
+        }
+}
+
+void fileheaderanalyze(FILEHANDLE *f, WORD48 *hdr) {
+        int i;
+        if (!f->trace) return;
+        fprintf(f->trace, "\tFH[00]=%016llo RECLEN=%llu BLKLEN=%llu RECSPERBLK=%llu SEGSPERBLK=%llu\n",
+                hdr[0], (hdr[0]>>33)&077777, (hdr[0]>>18)&077777, (hdr[0]>>6)&07777, hdr[0]&077);
+        fprintf(f->trace, "\tFH[01]=%016llo DATE=%llu TIME=%llu\n",
+                hdr[1], (hdr[1]>>24)&0777777, hdr[1]&037777777);
+        fprintf(f->trace, "\tFH[07]=%016llo RECORDS=%llu\n",
+                hdr[7], hdr[7]);
+        fprintf(f->trace, "\tFH[08]=%016llo SEGSPERROW=%llu\n",
+                hdr[8], hdr[8]);
+        fprintf(f->trace, "\tFH[09]=%016llo MAXROWS=%llu\n",
+                hdr[9], hdr[9]&037);
+        for (i=10; i<29; i++) {
+                if (hdr[i] > 0) {
+                        fprintf(f->trace, "\tFH[%02d]=%016llo DFA=%llu\n", i, hdr[i], hdr[i]);
+                }
         }
 }
 
@@ -213,6 +316,7 @@ void spo_write(ADDR15 *addr) {
         acc.id = "SPO";
         acc.MAIL = false;
         linep = linebuf;
+        *linep++ = '!';
 loop:   acc.addr = (*addr)++;
         acc.MAIL = false;
         fetch(&acc);
@@ -226,43 +330,46 @@ loop:   acc.addr = (*addr)++;
         }
         goto loop;
 done:   *linep++ = 0;
-        printf ("*\tSPO: %s\n", linebuf);
+        printf ("*\tSPO: %s\n", linebuf+1);
         // also write this to all open trace files
         if (cardfile.trace) {
-                fprintf(cardfile.trace, "*** SPO: %s\n\n", linebuf);
+                fprintf(cardfile.trace, "*** SPO: %s\n", linebuf+1);
                 fflush(cardfile.trace);
         }
         if (tapefile.trace) {
-                fprintf(tapefile.trace, "*** SPO: %s\n\n", linebuf);
+                fprintf(tapefile.trace, "*** SPO: %s\n", linebuf+1);
                 fflush(tapefile.trace);
         }
         if (diskfile.trace) {
-                fprintf(diskfile.trace, "*** SPO: %s\n\n", linebuf);
+                fprintf(diskfile.trace, "*** SPO: %s\n", linebuf+1);
                 fflush(diskfile.trace);
         }
-        sleep(1);
+        if (spiofile.trace) {
+                fprintf(spiofile.trace, "*** SPO: %s\n", linebuf+1);
+                fflush(spiofile.trace);
+        }
+        // print to REAL SPO
+        if (realspo) {
+                count = open("/dev/ttyS4", O_RDWR);
+                if (count >= 0) {
+                        linep--; *linep++ = 0x0d; *linep++ = 0;
+                        write(count, linebuf, linep-linebuf);
+                        close(count);
+                }
+        }
 }
 
-WORD48 disk_access(WORD48 iocw) {
+BIT readcheck = false;
+WORD48 disk_access(WORD48 iocw, int eu, int diskfileaddr) {
         unsigned unit, count, segcnt, words;
         ADDR15 core;
         // prepare result with unit and read flag
         WORD48 result = iocw & (MASK_IODUNIT | MASK_IODREAD);
         ACCESSOR acc;
-        WORD48 diskfileaddr;
-        unsigned bindiskfileaddr;
-        int i;
-        int lp;
+        int i, j;
+        ADDR15 startaddr;
 
-        if (diskfile.fp == NULL) {
-                diskfile.fp = fopen(diskfile.name, "r+");
-                if (diskfile.fp == NULL) {
-                        perror(diskfile.name);
-                        exit(0);
-                }
-        }
-
-        acc.id = "DF1";
+        acc.id = "DKA";
         acc.MAIL = false;
         unit = (iocw & MASK_IODUNIT) >> SHFT_IODUNIT;
         count = (iocw & MASK_IODWC) >> SHFT_IODWC;
@@ -271,105 +378,135 @@ WORD48 disk_access(WORD48 iocw) {
         // number of words to do
         words = (iocw & MASK_IODUSEWC) ? count : segcnt * 30;
 
-        if (unit != 6 || diskfile.fp == NULL) {
-                result |= MASK_IORNRDY | (core << SHFT_IODADDR);
-                return  result;
-        }
+        core++;
 
         if (diskfile.trace) {
-                fprintf(diskfile.trace, "%08u IOCW=%016llo", instr_count, iocw);
+                fprintf(diskfile.trace, "%08u UNIT=%u IOCW=%016llo, EU:DFA=%d:%06d", instr_count, unit, iocw, eu, diskfileaddr);
         }
 
-        // fetch first word from core with disk address
-        acc.addr = core++;
-        fetch(&acc);
-        diskfileaddr = acc.word & MASK_DSKFILADR;
-        bindiskfileaddr = 0;
-        for (i=6; i>=0; i--) {
-                bindiskfileaddr *= 10;
-                bindiskfileaddr += ((diskfileaddr >> 6*i) & 017);
-        }
-        if (diskfile.trace)
-                fprintf(diskfile.trace, " [%05o]=%014llo DISKADDR=%05u", acc.addr, acc.word, bindiskfileaddr);
-
-        if (iocw & MASK_IODREAD) {
+        if (unit != 6 || diskfile.fp == NULL || eu < 0 || eu > 1 || diskfileaddr < 0 || diskfileaddr > 199999) {
+                // not supported
                 if (diskfile.trace)
-                        fprintf(diskfile.trace, " READ WORDS=%02u\n\t%05o %05u '", words, core, bindiskfileaddr);
-                lp = 0;
+                        fprintf(diskfile.trace, " NOT SUPPORTED\n");
+                result |= MASK_IORNRDY;
+        } else if (iocw & MASK_IODMI) {
+                // special case when memory inhibit
+                readcheck = true;
+                if (diskfile.trace)
+                        fprintf(diskfile.trace, " READ CHECK SEGMENTS=%02u\n", segcnt);
+        } else if (words == 0) {
+                // special case when words=0
+                if (diskfile.trace)
+                        fprintf(diskfile.trace, " INTERROGATE\n");
+        } else if (iocw & MASK_IODREAD) {
+                // regular read
+                if (diskfile.trace)
+                        fprintf(diskfile.trace, " READ WORDS=%02u\n", words);
                 diskfile.eof = false;
+
+                // read until word count exhausted
                 while (words > 0) {
-                        fseek(diskfile.fp, bindiskfileaddr*256, SEEK_SET);
-                        fread(linebuf, sizeof(char), 256, diskfile.fp);
+                        // get the physical record
+                        fseek(diskfile.fp, (eu*200000+diskfileaddr)*256, SEEK_SET);
                         linep = linebuf;
-                        if (strncmp(linebuf, "DADDR(", 6) != 0) {
-                                memset(linebuf, '^', 255);
+                        // on read problems or if the signature is missing or wrong, this record has never been written
+                        if (fread(linebuf, sizeof(char), 256, diskfile.fp) != 256 ||
+                                  strncmp(linebuf, "DADDR(", 6) != 0 ||
+                                  (linebuf[6]-'0') != eu ||
+                                  linebuf[7] != ':' ||
+                                  strtol(linebuf+8, NULL, 10) != diskfileaddr ||
+                                  linebuf[14] != ')') {
+                                // return bogus data
+                                memset(linebuf, 0, 255);
                                 linebuf[255] = '\n';
                                 diskfile.eof = true;
+                                printf("*** DISKIO READ OF RECORD NEVER WRITTEN DFA=%d:%06d ***\n", eu, diskfileaddr);
                         }
                         linep += 15;
-                        for (i=0; i<30; i++) {
-                                if (diskfile.trace) {
-                                        if (lp >= 10) {
-                                                fprintf(diskfile.trace, "'\n\t%05o %05u '", core, bindiskfileaddr);
-                                                lp = 0;
+                        // always read 30 words
+                        startaddr = core;
+                        for (i=0; i<3; i++) {
+                                if (diskfile.trace)
+                                        fprintf(diskfile.trace, "\t%05o %d:%06d", core, eu, diskfileaddr);
+                                for (j=0; j<10; j++) {
+                                        fprintf(diskfile.trace, " %-8.8s", linep);
+                                        // store until word count exhausted
+                                        if (words > 0) {
+                                                acc.addr = core++;
+                                                acc.word = getword(0);
+                                                words--;
+                                                store(&acc);
                                         }
-                                        fprintf(diskfile.trace, "%-8.8s", linep);
-                                        lp++;
                                 }
-                                if (words > 0) {
-                                        acc.addr = core++;
-                                        acc.word = getword(0);
-                                        words--;
-                                        store(&acc);
-                                }
+                                if (diskfile.trace)
+                                        fprintf(diskfile.trace, "\n");
                         }
-                        bindiskfileaddr++;
+                        // dump file header if in directory
+                        if (diskfile.trace && eu==0 && diskfileaddr>=2004 && diskfileaddr<=2018)
+                                fileheaderanalyze(&diskfile, MAIN+startaddr);
+                        // next record address
+                        diskfileaddr++;
                 }
-                if (diskfile.trace)
-                        fprintf(diskfile.trace, "'\n");
                 if (diskfile.eof) {
                         if (diskfile.trace)
                                 fprintf(diskfile.trace, "\t*** never written segments in this read ***\n");
-                        //exit(0);
                 }
         } else {
+                // regular write
                 if (diskfile.trace)
-                        fprintf(diskfile.trace, " WRITE WORDS=%02u\n\t%05o %05u '", words, core, bindiskfileaddr);
-                lp = 0;
+                        fprintf(diskfile.trace, " WRITE WORDS=%02u\n", words);
                 diskfile.eof = false;
+
+                // keep writing records until word count is exhausted
                 while (words > 0) {
+                        // prepare buffer pointer and write header
                         linep = linebuf;
-                        linep += sprintf(linep, "DADDR(%08u)", bindiskfileaddr);
-                        for (i=0; i<30; i++) {
-                                if (words > 0) {
-                                        acc.addr = core++;
-                                        words--;
-                                        fetch(&acc);
-                                        putword(acc.word);
-                                } else {
-                                        putword(0ll);
-                                }
-                                if (diskfile.trace) {
-                                        if (lp >= 10) {
-                                                fprintf(diskfile.trace, "'\n\t%05o %05u '", core, bindiskfileaddr);
-                                                lp = 0;
+                        linep += sprintf(linep, "DADDR(%d:%06d)", eu, diskfileaddr);
+
+                        // always write 30 words
+                        startaddr = core;
+                        for (i=0; i<3; i++) {
+                                if (diskfile.trace)
+                                        fprintf(diskfile.trace, "\t%05o %d:%06d", core, eu, diskfileaddr);
+                                for (j=0; j<10; j++) {
+                                        if (words > 0) {
+                                                // if word count NOT exhausted, write next word
+                                                acc.addr = core++;
+                                                words--;
+                                                fetch(&acc);
+                                                putword(acc.word);
+                                        } else {
+                                                // if word count exhausted, write zeros
+                                                putword(0ll);
                                         }
-                                        fprintf(diskfile.trace, "%-8.8s", linep-8);
-                                        lp++;
+                                        if (diskfile.trace)
+                                                fprintf(diskfile.trace, " %-8.8s", linep-8);
                                 }
+                                if (diskfile.trace)
+                                        fprintf(diskfile.trace, "\n");
                         }
+
+                        // mark end of record
                         linep += sprintf(linep, "\n");
+
+                        // sanity check - should never fail
                         if (linep != linebuf+256) {
-                                printf("linep error\n");
-                                exit(0);
+                                printf("*** DISKIO WRITE SANITY CHECK FAILED ***\n");
+                                exit(2);
                         }
-                        fseek(diskfile.fp, bindiskfileaddr*256, SEEK_SET);
+
+                        // write record to physical file
+                        fseek(diskfile.fp, (eu*200000+diskfileaddr)*256, SEEK_SET);
                         fwrite(linebuf, sizeof(char), 256, diskfile.fp);
                         fflush(diskfile.fp);
-                        bindiskfileaddr++;
+
+                        // dump file header if in directory
+                        if (diskfile.trace && eu==0 && diskfileaddr>=2004 && diskfileaddr<=2018)
+                                fileheaderanalyze(&diskfile, MAIN+startaddr);
+                        // next record address
+                        diskfileaddr++;
                 }
-                if (diskfile.trace)
-                        fprintf(diskfile.trace, "'\n");
+
         }
 
         result |= (core << SHFT_IODADDR);
@@ -414,11 +551,13 @@ WORD48 tape_access(WORD48 iocw) {
 
         if (unit != 1 || tapefile.fp == NULL) {
                 result |= MASK_IORNRDY | (core << SHFT_IODADDR);
+                CC->CCI08F = true;
+                signalInterrupt();
                 return  result;
         }
 
         if (tapefile.trace) {
-                fprintf(tapefile.trace, "%08u IOCW=%016llo", instr_count, iocw);
+                fprintf(tapefile.trace, "%08u IIO IOCW=%016llo", instr_count, iocw);
         }
 
         // now analyze valid combinations
@@ -536,28 +675,198 @@ retresult:
         return result;
 }
 
-WORD48 iohandler(WORD48 iocw) {
-        unsigned unitdes, count;
+void clearInterrupt(void) {
+        // Resets an interrupt based on the current setting of CC->IAR, then
+        // reprioritices any remaining interrupts, leaving the new vector address
+        // in CC->IAR
+        if (CC->IAR) {
+                // current active IRQ
+                CC->interruptMask &= ~(1ll << CC->IAR);
+                switch (CC->IAR) {
+                case 022: // Time interval
+                        CC->CCI03F = false;
+                        break;
+                case 027: // I/O 1 finished
+                        CC->CCI08F = false;
+                        CC->AD1F = false; // make unit non-busy
+                        CC->iouMask &= ~1;
+                        break;
+                case 030: // I/O 2 finished
+                        CC->CCI09F = false;
+                        CC->AD2F = false; // make unit non-busy
+                        CC->iouMask &= ~2;
+                        break;
+                case 031: // I/O 3 finished
+                        CC->CCI10F = false;
+                        CC->AD3F = false; // make unit non-busy
+                        CC->iouMask &= ~4;
+                        break;
+                case 032: // I/O 4 finished
+                        CC->CCI11F = false;
+                        CC->AD4F = false; // make unit non-busy
+                        CC->iouMask &= ~8;
+                        break;
+                case 025: // Printer 1 finished
+                        CC->CCI06F = false;
+                        break;
+                case 026: // Printer 2 finished
+                        CC->CCI07F = false;
+                        break;
+                // 64-75: P1 syllable-dependent
+                case 064: case 065: case 066: case 067:
+                case 070: case 071: case 072: case 073:
+                case 074: case 075:
+                        P[0]->r.I &= 0x0F;
+                        break;
+
+                case 034: // Inquiry request
+                        CC->CCI13F = false;
+                        break;
+                case 024: // Keyboard request
+                        CC->CCI05F = false;
+                        break;
+                // 44-55: P2 syllable-dependent
+                case 044: case 045: case 046: case 047:
+                case 050: case 051: case 052: case 053:
+                case 054: case 055:
+                        if (P[1]) P[1]->r.I &= 0x0F;
+                        break;
+
+                case 060: // P1 memory parity error
+                        P[0]->r.I &= 0xFE;
+                        break;
+                case 061: // P1 invalid address error
+                        P[0]->r.I &= 0xFD;
+                        break;
+                case 062: // P1 stack overflow
+                        P[0]->r.I &= 0xFB;
+                        break;
+
+                case 040: // P2 memory parity error
+                        if (P[1]) P[1]->r.I &= 0xFE;
+                        break;
+                case 041: // P2 invalid address error
+                        if (P[1]) P[1]->r.I &= 0xFD;
+                        break;
+                case 042: // P2 stack overflow
+                        if (P[1]) P[1]->r.I &= 0xFB;
+                        break;
+
+                case 036: // Disk file 1 read check finished
+                        CC->CCI15F = false;
+                        break;
+                case 037: // Disk file 2 read check finished
+                        CC->CCI16F = false;
+                        break;
+                case 023: // I/O busy
+                        CC->CCI04F = false;
+                        break;
+                case 033: // P2 busy
+                        CC->CCI12F = false;
+                        break;
+                case 035: // Special interrupt 1
+                        CC->CCI14F = false;
+                        break;
+                default: // no interrupt vector was set
+                        break;
+                }
+        }
+
+        if (spiofile.trace) {
+                fprintf(spiofile.trace, "%08u clearInterrupt P1.I=%02x P2.I=%02x MASK=%012llx LATCH=%012llx\n",
+                        instr_count, P[0]->r.I, P[1]->r.I, CC->interruptMask, CC->interruptLatch);
+        }
+
+        signalInterrupt();
+};
+
+
+void interrogateInterrupt(CPU *cpu) {
+        // control-state only
+        if (CC->IAR && !cpu->r.NCSF) {
+                if (spiofile.trace) {
+                        fprintf(spiofile.trace, "%08u ITI IAR=%05o\n",
+                                instr_count, CC->IAR);
+                }
+                cpu->r.C = CC->IAR;
+                cpu->r.L = 0;
+                // stack address @100
+                cpu->r.S = AA_IRQSTACK;
+                // clear IRQ
+                clearInterrupt();
+                // require fetch at SECL
+                cpu->r.PROF = false;
+                return;
+        }
+
+        // elaborate trace
+        if (spiofile.trace) {
+                fprintf(spiofile.trace, "%08u ITI NO IRQ PENDING\n",
+                        instr_count);
+        }
+}
+
+void initiateIO(CPU *cpu) {
+        ACCESSOR acc;
+        WORD48 iocw;
+        WORD48 result;
+        unsigned unitdes, wc;
         ADDR15 core;
         BIT reading;
-        // prepare result descriptor
-        WORD48 result = iocw & MASK_IODUNIT;
+        int eu = -1, diskfileaddr = -1;
+        int i;
 
+        acc.id = "IO";
+
+        // get address of IOCW
+        acc.addr = 010;
+        acc.MAIL = false;
+        fetch(&acc);
+        // get IOCW itself
+        acc.addr = acc.word;
+        acc.MAIL = false;
+        fetch(&acc);
+        iocw = acc.word;
+
+        // prepare result descriptor
+        result = iocw & MASK_IODUNIT;
+
+        // analyze IOCW
         unitdes = (iocw & MASK_IODUNIT) >> SHFT_IODUNIT;
-        count = (iocw & MASK_IODWC) >> SHFT_IODWC;
+        wc = (iocw & MASK_IODWC) >> SHFT_IODWC;
         reading = (iocw & MASK_IODREAD) >> SHFT_IODREAD;
         core = (iocw & MASK_IODADDR) >> SHFT_IODADDR;
 
-        if (dodmpins) {
-                printf("*\tIOCW=%016llo\n", iocw);
-                printf("*\tunit=%u(%s) count=%u addr=%05o", unitdes, unit[unitdes][reading].name, count, core);
-                if (iocw & MASK_IODMI) printf(" mem_inhibit");
-                if (iocw & MASK_IODBINARY) printf(" binary"); else printf(" alpha");
-                if (iocw & MASK_IODTAPEDIR)  printf(" reverse");
-                if (iocw & MASK_IODUSEWC) printf(" use_word_counter");
-                if (reading) printf(" read"); else printf(" write");
-                if (iocw & MASK_IODSEGCNT) printf(" segments=%llu", (iocw & MASK_IODSEGCNT) >> SHFT_IODSEGCNT);
-                printf("\n");
+        if (unitdes == 6 || unitdes == 12) {
+                // disk file units: fetch first word from core with disk address
+                acc.addr = core++;
+                fetch(&acc);
+                acc.word &= MASK_DSKFILADR;
+                diskfileaddr = 0;
+                eu = (acc.word >> 36) & 0xf;
+                for (i=5; i>=0; i--) {
+                        unsigned char ch = (acc.word >> 6*i) & 0xf;
+                        if (ch > 9) {
+                                  printf("*** FATAL: disk file address has value > 9 ***\n");
+                                  exit(2);
+                        }
+                        diskfileaddr *= 10;
+                        diskfileaddr += ch;
+                }
+        }
+
+        // elaborate trace
+        if (spiofile.trace) {
+                fprintf(spiofile.trace, "%08u IOCW=%016llo\n", instr_count, iocw);
+                fprintf(spiofile.trace, "\tunit=%u(%s) core=%05o", unitdes, unit[unitdes][reading].name, core);
+                if (iocw & MASK_IODMI) fprintf(spiofile.trace, " inhibit");
+                if (iocw & MASK_IODBINARY) fprintf(spiofile.trace, " binary"); else fprintf(spiofile.trace, " alpha");
+                if (iocw & MASK_IODTAPEDIR)  fprintf(spiofile.trace, " reverse");
+                if (reading) fprintf(spiofile.trace, " read"); else fprintf(spiofile.trace, " write");
+                if (iocw & MASK_IODSEGCNT) fprintf(spiofile.trace, " segments=%llu", (iocw & MASK_IODSEGCNT) >> SHFT_IODSEGCNT);
+                if (iocw & MASK_IODUSEWC) fprintf(spiofile.trace, " wc=%u", wc);
+                if (diskfileaddr >= 0) fprintf(spiofile.trace, " dfa=%d:%06d", eu, diskfileaddr);
+                fprintf(spiofile.trace, "\n");
         }
         switch (unitdes) {
         case 1:  // MTA
@@ -579,7 +888,7 @@ WORD48 iohandler(WORD48 iocw) {
                 result = tape_access(iocw);
                 break;
         case 6:  // DF1
-                result = disk_access(iocw);
+                result = disk_access(iocw, eu, diskfileaddr);
                 break;
         case 10: // CRA CPA
                 if ((iocw & MASK_IODMI) != 0 || (iocw & MASK_IODREAD) == 0) {
@@ -606,13 +915,66 @@ WORD48 iohandler(WORD48 iocw) {
                 break;
         }
 
-        if (dodmpins) {
-                printf("*\tRSLT=%016llo\n", result);
+        if (spiofile.trace) {
+                fprintf(spiofile.trace, "\tRSLT=%016llo\n", result);
+                fflush(spiofile.trace);
+        }
+
+        // return IO RESULT
+        acc.addr = 014;
+        acc.word = result;
+        store(&acc);
+        CC->CCI08F = true;
+        signalInterrupt();
+}
+
+WORD48 interrogateUnitStatus(CPU *cpu) {
+        WORD48 result = 0;
+        // report MTA, DF1, CR1, SPO as ready
+        result |= 1ll << unit[ 1][1].readybit;
+        result |= 1ll << unit[ 6][1].readybit;
+        result |= 1ll << unit[10][1].readybit;
+        result |= 1ll << unit[30][1].readybit;
+
+        // elaborate trace
+        if (spiofile.trace)
+                fprintf(spiofile.trace, "%08u TUS=%016llo\n", instr_count, result);
+
+        // simulate timer
+        CC->TM++;
+        if (CC->TM >= 63) {
+                CC->TM = 0;
+                CC->CCI03F = true;
+                signalInterrupt();
+        } else {
+                CC->TM++;
         }
         return result;
 }
 
-CPU *cpu;
+WORD48 interrogateIOChannel(CPU *cpu) {
+        WORD48 result = 0;
+        // report I/O control unit 1
+        result = 1ll;
+
+        // elaborate trace
+        if (spiofile.trace)
+                fprintf(spiofile.trace, "%08u TIO=%llu\n", instr_count, result);
+        return result;
+}
+
+WORD48 readTimer(CPU *cpu) {
+        WORD48 result = 0;
+
+        if (CC->CCI03F)
+                result =  CC->TM | 0100;
+        else
+                result =  CC->TM;
+
+        // elaborate trace
+        if (spiofile.trace)
+                fprintf(spiofile.trace, "%08u RTR=%03llo\n", instr_count, result);
+        return result;}
 
 const char *relsym(unsigned offset, BIT cEnabled) {
         static char buf[32];
@@ -854,6 +1216,20 @@ runagain:
 printf("runn: C=%05o L=%o T=%04o\n", cpu->r.C, cpu->r.L, cpu->r.T);
         while (cpu->busy) {
                 instr_count++;
+#if 0
+                // check for instruction count
+                if (instr_count > 200000) {
+                        dotrcmem = dodmpins = dotrcins = false;
+                        memdump();
+                        closefile(&tapefile);
+                        closefile(&diskfile);
+                        closefile(&cardfile);
+                        closefile(&spiofile);
+                        exit (0);
+                } else if (instr_count >= 85199) {
+                        dotrcmem = dodmpins = dotrcins = true;
+                }
+#endif
                 if (dotrcins) {
                         ADDR15 c;
                         WORD2 l;
@@ -870,17 +1246,7 @@ printf("runn: C=%05o L=%o T=%04o\n", cpu->r.C, cpu->r.L, cpu->r.T);
                         printinstr(c, l, cpu->r.CWMF);
                         printf("\n");
                 }
-                // check for instruction count
-                if (instr_count > 95000) {
-                        dotrcmem = dodmpins = dotrcins = false;
-                        memdump();
-                        closefile(&tapefile);
-                        closefile(&diskfile);
-                        closefile(&cardfile);
-                        exit (0);
-                } else if (instr_count >= 84356) {
-                        dotrcmem = dodmpins = dotrcins = true;
-                }
+
                 // end check for instruction count
                 cpu->cycleLimit = 1;
                 run(cpu);
@@ -930,10 +1296,19 @@ int main(int argc, char *argv[])
         printf("B5500 Card Reader\n");
         diskfile.name = (char*)"./diskfile1.txt";
 
-        while ((opt = getopt(argc, argv, "imsel:c:C:t:T:d:D:")) != -1) {
+        b5500_init_shares();
+
+        memset(MAIN, 0, MAXMEM*sizeof(WORD48));
+        cpu = P[0];
+        memset(cpu, 0, sizeof(CPU));
+        cpu->id = "P1";
+        cpu->acc.id = cpu->id;
+        cpu->isP1 = true;
+
+        while ((opt = getopt(argc, argv, "imsezrl:I:c:C:t:T:d:D:")) != -1) {
                 switch (opt) {
                 case 'i':
-                        dodmpins = true; /* dump instructions after assembly */
+                        dodmpins = true; /* I/O trace */
                         break;
                 case 'm':
                         dotrcmem = true; /* trace memory accesses */
@@ -944,21 +1319,34 @@ int main(int argc, char *argv[])
                 case 'e':
                         dotrcins = true; /* trace execution */
                         break;
+                case 'z':
+                        cpu->r.US14X = true; /* stop on ZPI */
+                        break;
+                case 'r':
+                        realspo = true; /* print to real SPO */
+                        break;
                 case 'l':
                         listfile.name = optarg; /* file with listing */
                         break;
+                // I/O and special instruction trace
+                case 'I':
+                        spiofile.tracename = optarg; /* trace file for special instructions and I/O */
+                        break;
+                // CARD
                 case 'c':
                         cardfile.name = optarg; /* file with cards */
                         break;
                 case 'C':
                         cardfile.tracename = optarg; /* trace file for cards */
                         break;
+                // TAPE
                 case 't':
                         tapefile.name = optarg; /* file with tape */
                         break;
                 case 'T':
                         tapefile.tracename = optarg; /* trace file for tapes */
                         break;
+                // DISK
                 case 'd':
                         diskfile.name = optarg; /* file with disk image */
                         break;
@@ -972,6 +1360,8 @@ int main(int argc, char *argv[])
                                 "\t-m\t\tshow memory accesses\n"
                                 "\t-s\t\tlist source cards\n"
                                 "\t-e\t\ttrace execution\n"
+                                "\t-z\t\tstop at ZPI instruction\n"
+                                "\t-r\t\tuse real SPO\n"
                                 "\t-l <file>\tspecify listing file name\n"
                                 "\t-c <file>\tspecify card file name\n"
                                 "\t-t <file>\tspecify tape file name\n"
@@ -1023,15 +1413,10 @@ int main(int argc, char *argv[])
         if (opt)
                 exit(2);
 
-        b5500_init_shares();
+        opt = openfile(&spiofile, "r");
+        if (opt)
+                exit(2);
 
-        memset(MAIN, 0, MAXMEM*sizeof(WORD48));
-        cpu = P[0];
-        memset(cpu, 0, sizeof(CPU));
-        cpu->id = "P1";
-        cpu->acc.id = cpu->id;
-        cpu->r.US14X = true;
-        //cpu->isP1 = true;
         start(cpu);
 
         // load first card to 020

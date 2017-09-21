@@ -37,9 +37,30 @@ typedef unsigned long long WORD48;      // 48 bits machine word
 
 typedef struct central_control {
         ADDR15          IAR;    // IRQ "vector"
-        WORD6           RTC;    // real time clock register
+        WORD6           TM;     // real time clock register
+        BIT             CCI03F;
+        BIT             CCI04F;
+        BIT             CCI05F;
+        BIT             CCI06F;
+        BIT             CCI07F;
+        BIT             CCI08F;
+        BIT             CCI09F;
+        BIT             CCI10F;
+        BIT             CCI11F;
+        BIT             CCI12F;
+        BIT             CCI13F;
+        BIT             CCI14F;
+        BIT             CCI15F;
+        BIT             CCI16F;
+        BIT             AD1F;
+        BIT             AD2F;
+        BIT             AD3F;
+        BIT             AD4F;
         BIT             HP2F;   // HALT CPU #2 flag
         BIT             P2BF;   // CPU #2 busy flag
+        WORD48          interruptMask;
+        WORD48          interruptLatch;
+        WORD4           iouMask;
 } CENTRAL_CONTROL;
 
 typedef struct accessor {
@@ -459,7 +480,6 @@ extern void num_right_shift_cnt(NUM *, int);
 extern void num_normalize(NUM *, int);
 extern void num_round(NUM *);
 
-extern void signalInterrupt(CPU *);
 extern void b5500_pdp_text(CPU *);
 extern void b5500_init_shares(void);
 
@@ -507,8 +527,9 @@ extern BIT presenceTest(CPU *, WORD48 word);
 extern WORD48 interrogateUnitStatus(CPU *);
 extern WORD48 interrogateIOChannel(CPU *);
 extern void storeForInterrupt(CPU *, BIT forced, BIT forTest);
-extern ADDR15 getandclearInterrupt(CPU *);
+extern void interrogateInterrupt(CPU *);
 extern void initiateIO(CPU *);
+extern void signalInterrupt(void);
 
 /* single precision */
 extern int singlePrecisionCompare(CPU *);

@@ -23,45 +23,6 @@
 #include "b5500_common.h"
 
 /*
- * table of I/O units
- * indexed by unit designator and read bit of I/O descriptor
- */
-UNIT unit[32][2] = {
-        /*00*/ {{NULL, 0},   {NULL, 0}},
-        /*01*/ {{"MTA", 47-47}, {"MTA", 47-47}},
-        /*02*/ {{NULL, 0},   {NULL, 0}},
-        /*03*/ {{"MTB", 47-46}, {"MTB", 47-46}},
-        /*04*/ {{"DRA", 47-31}, {"DRA", 47-31}},
-        /*05*/ {{"MTC", 47-45}, {"MTC", 47-45}},
-        /*06*/ {{"DF1", 47-29}, {"DF1", 47-29}},
-        /*07*/ {{"MTD", 47-44}, {"MTD", 47-44}},
-        /*08*/ {{"DRB", 47-30}, {"DRB", 47-30}},
-        /*09*/ {{"MTE", 47-43}, {"MTE", 47-43}},
-        /*10*/ {{"CPA", 47-25}, {"CRA", 47-24}},
-        /*11*/ {{"MTF", 47-42}, {"MTF", 47-42}},
-        /*12*/ {{"DF2", 47-28}, {"DF2", 47-28}},
-        /*13*/ {{"MTH", 47-41}, {"MTH", 47-41}},
-        /*14*/ {{NULL, 0},   {"CRB", 23}},
-        /*15*/ {{"MTJ", 47-40}, {"MTJ", 47-40}},
-        /*16*/ {{"DCC", 47-17}, {"DCC", 47-17}},
-        /*17*/ {{"MTK", 47-39}, {"MTK", 47-39}},
-        /*18*/ {{"PP1", 47-21}, {"PR1", 47-20}},
-        /*19*/ {{"MTL", 47-38}, {"MTL", 47-38}},
-        /*20*/ {{"PP1", 47-19}, {"PR1", 47-18}},
-        /*21*/ {{"MTM", 47-37}, {"MTM", 47-37}},
-        /*22*/ {{"LP1", 47-27}, {NULL, 0}},
-        /*23*/ {{"MTN", 47-36}, {"MTN", 47-36}},
-        /*24*/ {{NULL, 0},   {NULL, 0}},
-        /*25*/ {{"MTP", 47-35}, {"MTP", 47-35}},
-        /*26*/ {{"LP1", 47-27}, {NULL, 0}},
-        /*27*/ {{"MTR", 47-34}, {"MTR", 47-34}},
-        /*28*/ {{NULL, 0},   {NULL, 0}},
-        /*29*/ {{"MTS", 47-33}, {"MTS", 47-33}},
-        /*30*/ {{"SPO", 47-22}, {"SPO", 47-22}},
-        /*31*/ {{"MTT", 47-32}, {"MTT", 47-32}},
-};
-
-/*
  * Tests and returns the presence bit [2:1] of the "word" parameter,
  * which it assumes is a control word. If [2:1] is 0, the p-bit interrupt
  * is set; otherwise no further action
@@ -73,46 +34,9 @@ BIT presenceTest(CPU *cpu, WORD48 word)
 
         if (cpu->r.NCSF) {
                 cpu->r.I = (cpu->r.I & 0x0F) | 0x70; // set I05/6/7: p-bit
-                signalInterrupt(cpu);
+                signalInterrupt();
         }
         return false;
-}
-
-WORD48 interrogateUnitStatus(CPU *cpu)
-{
-        WORD48 result = 0;
-        if (dotrcins)
-                printf("******************** TUS ********************\n");
-        // report MTA, DF1, CR1, SPO as ready
-        result |= 1ll << unit[ 1][1].readybit;
-        result |= 1ll << unit[ 6][1].readybit;
-        result |= 1ll << unit[11][1].readybit;
-        result |= 1ll << unit[30][1].readybit;
-        if (dotrcins)
-                printf("*\tresult=%016llo\n", result);
-        // simulate timer
-        CC->RTC++;
-        if (CC->RTC >= 63) {
-                CC->RTC = 0;
-                CC->IAR = 00022;
-                if (dotrcins)
-                        printf("*\tTIMER!!!\n");
-                sleep(1);
-                //dotrcins = true;
-        }
-        return result;
-}
-
-WORD48 interrogateIOChannel(CPU *cpu)
-{
-        WORD48 result = 0;
-        if (dotrcins)
-                printf("******************** TIO ********************\n");
-        // report I/O control unit 1
-        result = 1ll;
-        if (dotrcins)
-                printf("*\tresult=%016llo\n", result);
-        return result;
 }
 
 /*
@@ -280,43 +204,5 @@ void storeForInterrupt(CPU *cpu, BIT forced, BIT forTest)
                 stop(cpu); // idle the P2 processor
                 CC->P2BF = 0; // tell CC and P1 we've stopped
         }
-}
-
-ADDR15 getandclearInterrupt(CPU *cpu)
-{
-        ADDR15 temp = CC->IAR;
-        CC->IAR = 0;
-        if (dotrcins) {
-                printf("******************** IRQ ********************\n");
-                printf("*\tIAR=%05o\n", temp);
-                printf("******************** IRQ ********************\n");
-        }
-        return temp;
-}
-
-extern WORD48 iohandler(WORD48);
-
-void initiateIO(CPU *cpu)
-{
-        ACCESSOR acc;
-        WORD48 result;
-
-        acc.id = "IO";
-        if (dotrcins)
-                printf("******************** IO ********************\n");
-        acc.addr = 010;
-        acc.MAIL = false;
-        fetch(&acc);
-        acc.addr = acc.word;
-        acc.MAIL = false;
-        fetch(&acc);
-        result = iohandler(acc.word);
-        // return IO RESULT
-        acc.addr = 014;
-        acc.word = result;
-        store(&acc);
-        CC->IAR = 027;
-        if (dotrcins)
-                printf("******************** IO ********************\n");
 }
 

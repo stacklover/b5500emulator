@@ -79,11 +79,11 @@ void accessError(CPU *cpu)
         if (cpu->acc.MAED) {
                 // set I02F: memory address/inhibit error
                 cpu->r.I |= 0x02;
-                signalInterrupt(cpu);
+                signalInterrupt();
         } else if (cpu->acc.MPED) {
                 // set I01F: memory parity error
                 cpu->r.I |= 0x01;
-                signalInterrupt(cpu);
+                signalInterrupt();
                 if (cpu->isP1 && !cpu->r.NCSF) {
                         // P1 memory parity in Control State stops the proc
                         stop(cpu);
@@ -217,7 +217,7 @@ BIT indexDescriptor(CPU *cpu)
                         if (cpu->r.NCSF) {
                                 // set I07/8: integer overflow
                                 cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_INTO;
-                                signalInterrupt(cpu);
+                                signalInterrupt();
                         }
                 }
         }
@@ -232,7 +232,7 @@ BIT indexDescriptor(CPU *cpu)
                         if (cpu->r.NCSF) {
                                 // set I05/8: invalid-index
                                 cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_INDEX;
-                                signalInterrupt(cpu);
+                                signalInterrupt();
                         }
                 } else if (I.m < ((aw & MASK_DDWC) >> SHFT_DDWC)) {
                         // We finally have a valid index
@@ -245,7 +245,7 @@ BIT indexDescriptor(CPU *cpu)
                         if (cpu->r.NCSF) {
                                 // set I05/8: invalid-index
                                 cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_INDEX;
-                                signalInterrupt(cpu);
+                                signalInterrupt();
                         }
                 }
         }
@@ -471,7 +471,7 @@ void integerStore(CPU *cpu, BIT conditional, BIT destructive)
                                 if (cpu->r.NCSF) {
                                         // set I07/8: integer overflow
                                         cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_INTO;
-                                        signalInterrupt(cpu);
+                                        signalInterrupt();
                                 }
                         }
                         if (doStore) {

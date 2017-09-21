@@ -59,9 +59,9 @@ LABELREC labeltab[MAXLABEL];
 CENTRAL_CONTROL cc;
 CPU *cpu;
 
-void signalInterrupt(CPU *cpu)
+void signalInterrupt(void)
 {
-        printf("\nIRQ=$%02x\n", cpu->r.I);
+        printf("***** signalInterrupt *****\n");
 }
 
 void init(void)
@@ -677,7 +677,11 @@ void load(void)
         generate();
 }
 
-WORD48 iohandler(WORD48 iocw) {return 0;}
+void initiateIO(CPU *cpu){}
+void interrogateInterrupt(CPU *cpu){}
+WORD48 interrogateUnitStatus(CPU *cpu){return 0;}
+WORD48 interrogateIOChannel(CPU *cpu){return 0;}
+WORD48 readTimer(CPU *cpu){return 0;}
 
 int main(int argc, char *argv[])
 {
