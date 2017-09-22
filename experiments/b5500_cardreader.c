@@ -1217,7 +1217,7 @@ runagain:
 printf("runn: C=%05o L=%o T=%04o\n", cpu->r.C, cpu->r.L, cpu->r.T);
         while (cpu->busy) {
                 instr_count++;
-#if 1
+#if 0
                 // check for instruction count
                 if (instr_count > 200000) {
                         dotrcmem = dodmpins = dotrcins = false;

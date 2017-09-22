@@ -108,7 +108,7 @@ void streamAdjustDestChar(CPU *cpu)
  * TFFF=1: the inequality was source > destination
  * If the two strings are equal, Q03F and TFFF will both be zero. Once an
  * inequality is encountered, Q03F will be set to 1 and TFFF (also known as
- * MSFF) will be set based on the nature of inequality. After cpu point, the
+ * MSFF) will be set based on the nature of inequality. After this point, the
  * processor merely advances its address pointers to exhaust the count and does
  * not fetch additional words from memory. Note that the processor uses Q04F to
  * inhibit storing the B register at the end of a word boundary. This store
@@ -118,9 +118,9 @@ void streamAdjustDestChar(CPU *cpu)
 void compareSourceWithDest(CPU *cpu, unsigned count, BIT numeric)
 {
         unsigned        aBit;   // A register bit nr
-        WORD48          aw;             // current A register word
+        WORD48          aw;     // current A register word
         unsigned        bBit;   // B register bit nr
-        WORD48          bw;             // current B register word
+        WORD48          bw;     // current B register word
         BIT             Q03F = cpu->r.Q03F; // local copy of Q03F: inequality detected
         BIT             Q04F = cpu->r.Q04F; // local copy of Q04F: B not dirty
         unsigned        yc = 0; // local Y register
@@ -145,7 +145,7 @@ void compareSourceWithDest(CPU *cpu, unsigned count, BIT numeric)
                         loadAviaM(cpu); // A = [M]
                 }
 
-                // setting Q06F and saving the count in H & V is only significant if cpu
+                // setting Q06F and saving the count in H & V is only significant if this
                 // routine is executed as part of Field Add (FAD) or Field Subtract (FSU).
                 cpu->r.Q06F = true; // set Q06F
                 cpu->r.H = count >> 3;
@@ -195,7 +195,7 @@ void compareSourceWithDest(CPU *cpu, unsigned count, BIT numeric)
                                         }
                                 }
                         } else {
-                                // strings still equal -- check cpu character
+                                // strings still equal -- check this character
                                 if (numeric) {
                                         yc = fieldIsolate(aw, aBit+2, 4);
                                         zc = fieldIsolate(bw, bBit+2, 4);
@@ -473,10 +473,10 @@ void streamBitsToDest(CPU *cpu, unsigned count, WORD48 mask)
 void streamProgramToDest(CPU *cpu, unsigned count)
 {
         unsigned        bBit;   // B register bit nr
-        WORD48          bw;             // current B register value
-        unsigned        c;              // current character
+        WORD48          bw;     // current B register value
+        unsigned        c;      // current character
         unsigned        pBit;   // P register bit nr
-        WORD48          pw;             // current P register value
+        WORD48          pw;     // current P register value
 
         streamAdjustDestChar(cpu);
         if (count) { // count > 0
@@ -536,10 +536,10 @@ void streamProgramToDest(CPU *cpu, unsigned count)
 void streamCharacterToDest(CPU *cpu, unsigned count)
 {
         unsigned        aBit;   // A register bit nr
-        WORD48          aw;             // current A register word
+        WORD48          aw;     // current A register word
         unsigned        bBit;   // B register bit nr
-        WORD48          bw;             // current B register word
-        unsigned        c;              // current character
+        WORD48          bw;     // current B register word
+        unsigned        c;      // current character
 
         streamAdjustSourceChar(cpu);
         streamAdjustDestChar(cpu);
@@ -603,10 +603,10 @@ void streamCharacterToDest(CPU *cpu, unsigned count)
 void streamNumericToDest(CPU *cpu, unsigned count, unsigned zones)
 {
         unsigned        aBit;   // A register bit nr
-        WORD48          aw;             // current A register word
+        WORD48          aw;     // current A register word
         unsigned        bBit;   // B register bit nr
-        WORD48          bw;             // current B register word
-        unsigned        c;              // current character
+        WORD48          bw;     // current B register word
+        unsigned        c;      // current character
 
         streamAdjustSourceChar(cpu);
         streamAdjustDestChar(cpu);
@@ -684,8 +684,8 @@ void streamNumericToDest(CPU *cpu, unsigned count, unsigned zones)
 void streamBlankForNonNumeric(CPU *cpu, unsigned count)
 {
         unsigned        bBit;   // B register bit nr
-        WORD48          bw;             // current B register word
-        unsigned        c;              // current destination character
+        WORD48          bw;     // current B register word
+        unsigned        c;      // current destination character
 
         cpu->r.TFFF = true; // assume the count will be exhausted
         streamAdjustDestChar(cpu);
@@ -828,9 +828,9 @@ void streamInputConvert(CPU *cpu, unsigned count)
  */
 void streamOutputConvert(CPU *cpu, unsigned count)
 {
-        WORD48          a;              // local working copy of A
+        WORD48          a;      // local working copy of A
         WORD48          b = 0;  // local working copy of B
-        unsigned        c;              // converted decimal character
+        unsigned        c;      // converted decimal character
         unsigned        d = 0;  // digit counter
         WORD48  power = 1;      // power-of-64 factor for result digits
 
