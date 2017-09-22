@@ -136,7 +136,7 @@ void b5500_execute_wm(CPU *cpu)
                                         if (cpu->r.NCSF) {
                                                 // not in control state
                                                 // test continuity bit, [20:1]
-                                                if (cpu->r.A & MASK_DDCONT) {
+                                                if (cpu->r.A & MASK_CONT) {
                                                         // set I07/6: continuity bit
                                                         cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_CONT;
                                                 } else {
@@ -422,26 +422,26 @@ void b5500_execute_wm(CPU *cpu)
 
                         case 014: // 1425: FTC=F field to C field
                                 adjustABFull(cpu);
-                                t1 = (cpu->r.A & MASK_RCWrF) >> SHFT_RCWrF;
-                                cpu->r.B = (cpu->r.B & ~MASK_RCWrC) | (t1 << SHFT_RCWrC);
+                                t1 = (cpu->r.A & MASK_FREG) >> SHFT_FREG;
+                                cpu->r.B = (cpu->r.B & ~MASK_CREG) | (t1 << SHFT_CREG);
                                 cpu->r.AROF = false;
                                 break;
                         case 034: // 3425: FTF=F field to F field
                                 adjustABFull(cpu);
-                                t1 = (cpu->r.A & MASK_RCWrF) >> SHFT_RCWrF;
-                                cpu->r.B = (cpu->r.B & ~MASK_RCWrF) | (t1 << SHFT_RCWrF);
+                                t1 = (cpu->r.A & MASK_FREG) >> SHFT_FREG;
+                                cpu->r.B = (cpu->r.B & ~MASK_FREG) | (t1 << SHFT_FREG);
                                 cpu->r.AROF = false;
                                 break;
                         case 054: // 5425: CTC=C field to C field
                                 adjustABFull(cpu);
-                                t1 = (cpu->r.A & MASK_RCWrC) >> SHFT_RCWrC;
-                                cpu->r.B = (cpu->r.B & ~MASK_RCWrC) | (t1 << SHFT_RCWrC);
+                                t1 = (cpu->r.A & MASK_CREG) >> SHFT_CREG;
+                                cpu->r.B = (cpu->r.B & ~MASK_CREG) | (t1 << SHFT_CREG);
                                 cpu->r.AROF = false;
                                 break;
                         case 074: // 7425: CTF=C field to F field
                                 adjustABFull(cpu);
-                                t1 = (cpu->r.A & MASK_RCWrC) >> SHFT_RCWrC;
-                                cpu->r.B = (cpu->r.B & ~MASK_RCWrF) | (t1 << SHFT_RCWrF);
+                                t1 = (cpu->r.A & MASK_CREG) >> SHFT_CREG;
+                                cpu->r.B = (cpu->r.B & ~MASK_FREG) | (t1 << SHFT_FREG);
                                 cpu->r.AROF = false;
                                 break;
                         }
@@ -668,18 +668,17 @@ common_branch_word:
                                 adjustABFull(cpu);
                                 switch (cpu->r.A & 3) {
                                 case 0: // store F into B.[18:15]
-                                        cpu->r.B = (cpu->r.B & ~MASK_RCWrF) | (cpu->r.F << SHFT_RCWrF);
-                                        break;
+                                        cpu->r.B = (cpu->r.B & ~MASK_FREG) | (cpu->r.F << SHFT_FREG);
                                 case 1: // store S into B.[33:15]
-                                        cpu->r.B = (cpu->r.B & ~MASK_RCWrC) | (cpu->r.S << SHFT_RCWrC);
+                                        cpu->r.B = (cpu->r.B & ~MASK_CREG) | (cpu->r.S << SHFT_CREG);
                                         break;
-                                case 2: // set   F from B.[18:15]
-                                        cpu->r.F = (cpu->r.B & MASK_RCWrF) >> SHFT_RCWrF;
+                                case 2: // set F from B.[18:15]
+                                        cpu->r.F = (cpu->r.B & MASK_FREG) >> SHFT_FREG;
                                         cpu->r.SALF = true;
                                         cpu->r.BROF = false;
                                         break;
-                                case 3: // set   S from B.[33:15]
-                                        cpu->r.S = (cpu->r.B & MASK_RCWrC) >> SHFT_RCWrC;
+                                case 3: // set S from B.[33:15]
+                                        cpu->r.S = (cpu->r.B & MASK_CREG) >> SHFT_CREG;
                                         cpu->r.BROF = false;
                                         break;
                                 }

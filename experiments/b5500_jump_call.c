@@ -62,7 +62,7 @@ void jumpOutOfLoop(CPU *cpu, int count)
 
         cpu->cycleCount += 2;
         // get prior LCW addr from X value
-        cpu->r.S = (cpu->r.X & MASK_LCWrF) >> SHFT_LCWrF;
+        cpu->r.S = (cpu->r.X & MASK_FREG) >> SHFT_FREG;
         loadAviaS(cpu); // A = [S], fetch prior LCW from stack
         if (count) {
                 cpu->cycleCount += (count >> 2) + (count & 3);
@@ -81,11 +81,14 @@ void jumpOutOfLoop(CPU *cpu, int count)
  */
 WORD48 buildMSCW(CPU *cpu)
 {
-        return  INIT_MSCW |
-                ((WORD48)cpu->r.F << SHFT_MSCWrF) |
-                ((WORD48)cpu->r.SALF << SHFT_MSCWSALF) |
-                ((WORD48)cpu->r.MSFF << SHFT_MSCWMSFF) |
-                ((WORD48)cpu->r.R << SHFT_MSCWrR);
+        WORD48 t1 = INIT_MSCW |
+                ((WORD48)cpu->r.F << SHFT_FREG) |
+                ((WORD48)cpu->r.R << SHFT_RREG);
+        if (cpu->r.SALF)
+              t1 |= MASK_SALF;
+        if (cpu->r.MSFF)
+              t1 |= MASK_MSFF;
+        return t1;
 }
 
 /*
@@ -94,10 +97,10 @@ WORD48 buildMSCW(CPU *cpu)
  */
 void applyMSCW(CPU *cpu, WORD48 word)
 {
-        cpu->r.F = (word & MASK_MSCWrF) >> SHFT_MSCWrF;
-        cpu->r.SALF = (word & MASK_MSCWSALF) >> SHFT_MSCWSALF;
-        cpu->r.MSFF = (word & MASK_MSCWMSFF) >> SHFT_MSCWMSFF;
-        cpu->r.R = (word & MASK_MSCWrR) >> SHFT_MSCWrR;
+        cpu->r.F = (word & MASK_FREG) >> SHFT_FREG;
+        cpu->r.R = (word & MASK_RREG) >> SHFT_RREG;
+        cpu->r.SALF = (word & MASK_SALF) ? true : false;
+        cpu->r.MSFF = (word & MASK_MSFF) ? true : false;
 }
 
 /*
@@ -105,15 +108,17 @@ void applyMSCW(CPU *cpu, WORD48 word)
  */
 WORD48 buildRCW(CPU *cpu, BIT descriptorCall)
 {
-        return  INIT_RCW |
-                ((WORD48)cpu->r.C << SHFT_RCWrC) |
-                ((WORD48)cpu->r.F << SHFT_RCWrF) |
-                ((WORD48)cpu->r.K << SHFT_RCWrK) |
-                ((WORD48)cpu->r.G << SHFT_RCWrG) |
-                ((WORD48)cpu->r.L << SHFT_RCWrL) |
-                ((WORD48)cpu->r.V << SHFT_RCWrV) |
-                ((WORD48)cpu->r.H << SHFT_RCWrH) |
-                ((WORD48)descriptorCall << SHFT_RCWTYPE);
+        WORD48 t1 = INIT_RCW |
+                ((WORD48)cpu->r.C << SHFT_CREG) |
+                ((WORD48)cpu->r.F << SHFT_FREG) |
+                ((WORD48)cpu->r.K << SHFT_KREG) |
+                ((WORD48)cpu->r.G << SHFT_GREG) |
+                ((WORD48)cpu->r.L << SHFT_LREG) |
+                ((WORD48)cpu->r.V << SHFT_VREG) |
+                ((WORD48)cpu->r.H << SHFT_HREG);
+        if (descriptorCall)
+                t1 |= MASK_RCWTYPE;
+        return t1;
 }
 
 /*
@@ -124,16 +129,16 @@ WORD48 buildRCW(CPU *cpu, BIT descriptorCall)
 BIT applyRCW(CPU *cpu, WORD48 word, BIT in_line)
 {
         if (!in_line) {
-                cpu->r.C = (word & MASK_RCWrC) >> SHFT_RCWrC;
-                cpu->r.L = (word & MASK_RCWrL) >> SHFT_RCWrL;
+                cpu->r.C = (word & MASK_CREG) >> SHFT_CREG;
+                cpu->r.L = (word & MASK_LREG) >> SHFT_LREG;
                 cpu->r.PROF = false;    // require fetch at SECL
         }
-        cpu->r.F = (word & MASK_RCWrF) >> SHFT_RCWrF;
-        cpu->r.K = (word & MASK_RCWrK) >> SHFT_RCWrK;
-        cpu->r.G = (word & MASK_RCWrG) >> SHFT_RCWrG;
-        cpu->r.V = (word & MASK_RCWrV) >> SHFT_RCWrV;
-        cpu->r.H = (word & MASK_RCWrH) >> SHFT_RCWrH;
-        return (word & MASK_RCWTYPE) >> SHFT_RCWTYPE;
+        cpu->r.F = (word & MASK_FREG) >> SHFT_FREG;
+        cpu->r.K = (word & MASK_KREG) >> SHFT_KREG;
+        cpu->r.G = (word & MASK_GREG) >> SHFT_GREG;
+        cpu->r.V = (word & MASK_VREG) >> SHFT_VREG;
+        cpu->r.H = (word & MASK_HREG) >> SHFT_HREG;
+        return (word & MASK_RCWTYPE) ? true : false;
 }
 
 /*
@@ -146,7 +151,7 @@ void operandCall(CPU *cpu)
         WORD48  aw = cpu->r.A;          // local copy of A reg value
         BIT     interrupted = 0;        // interrupt occurred
 
-//printf("descriptorCall: A=%016llo->", cpu->r.A);
+        //printf("descriptorCall: A=%016llo->", cpu->r.A);
         // If A contains a simple operand, just leave it there, otherwise...
         if (aw & MASK_FLAG) {
                 // It's not a simple operand
@@ -154,7 +159,7 @@ void operandCall(CPU *cpu)
                 case 2: // CODE=0, PBIT=1, XBIT=0
                 case 3: // CODE=0, PBIT=1, XBIT=1
                         // Present data descriptor: see if it must be indexed
-                        if (aw & MASK_DDWC) { // aw.[8:10]
+                        if (aw & MASK_WCNT) { // aw.[8:10]
                                 interrupted = indexDescriptor(cpu);
                                 // else descriptor is already indexed (word count 0)
                         }
@@ -199,37 +204,37 @@ void descriptorCall(CPU *cpu)
 {
         WORD48  aw = cpu->r.A;          // local copy of A reg value
         BIT     interrupted = 0;        // interrupt occurred
-//printf("descriptorCall: A=%016llo->", cpu->r.A);
+        //printf("descriptorCall: A=%016llo->", cpu->r.A);
         if (!(aw & MASK_FLAG)) {
                 // It's a simple operand
-//printf("operand");
+                //printf("operand");
                 cpu->r.A = cpu->r.M | (MASK_FLAG | MASK_PBIT);
         } else {
                 // It's not a simple operand
                 switch ((aw & MASK_TYPE) >> SHFT_TYPE) { // aw.[1:3]
                 case 2: // CODE=0, PBIT=1, XBIT=0
                 case 3: // CODE=0, PBIT=1, XBIT=1
-//printf("present data");
+                        //printf("present data");
                         // Present data descriptor: see if it must be indexed
-                        if (aw & MASK_DDWC) { // aw.[8:10]
+                        if (aw & MASK_WCNT) { // aw.[8:10]
                                 interrupted = indexDescriptor(cpu);
                                 // else descriptor is already indexed (word count 0)
                                 if (!interrupted) {
                                         // set word count to zero
-                                        cpu->r.A &= ~MASK_DDWC;
+                                        cpu->r.A &= ~MASK_WCNT;
                                 }
                                 // else descriptor is already indexed (word count 0)
                         }
                         break;
                 case 7: //  CODE=1, PBIT=1, XBIT=1
-//printf("present program");
+                        //printf("present program");
                         // Present program descriptor
                         enterSubroutine(cpu, true);
                         break;
                 case 0: // CODE=0, PBIT=0, XBIT=0
                 case 1: // CODE=0, PBIT=0, XBIT=1
                 case 5: // CODE=1, PBIT=0, XBIT=1
-//printf("absent program/data");
+                        //printf("absent program/data");
                         // Absent data or program descriptor
                         if (cpu->r.NCSF) {
                                 cpu->r.I = (cpu->r.I & 0x0F) | 0x70; // set I05/6/7: p-bit
@@ -238,13 +243,13 @@ void descriptorCall(CPU *cpu)
                         }
                         break;
                 default: // cases 4, 6  // CODE=1, PBIT=0/1, XBIT=0
-//printf("misc");
+                        //printf("misc");
                         // Miscellaneous control word
                         cpu->r.A = cpu->r.M | (MASK_FLAG | MASK_PBIT);
                         break;
                 }
         }
-//printf("\n");
+        //printf("\n");
 }
 
 /*
@@ -254,9 +259,9 @@ void descriptorCall(CPU *cpu)
 void enterSubroutine(CPU *cpu, BIT descriptorCall)
 {
         WORD48  aw = cpu->r.A;  // local copy of word in A reg
-        BIT     arg = (aw & MASK_PCWARGS) >> SHFT_PCWARGS;
-        BIT     mode = (aw & MASK_PCWMODE) >> SHFT_PCWMODE;
-//printf("enterSubroutine: MSFF=%u\n", cpu->r.MSFF);
+        BIT     arg = (aw & MASK_ARGS) ? true : false;
+        BIT     mode = (aw & MASK_MODE) ? true : false;
+        //printf("enterSubroutine: MSFF=%u\n", cpu->r.MSFF);
         if (arg && !cpu->r.MSFF) {
                 // just leave the Program Descriptor on TOS
         } else if (mode && !arg) {
@@ -278,7 +283,7 @@ void enterSubroutine(CPU *cpu, BIT descriptorCall)
                 adjustBEmpty(cpu);
 
                 // Fetch the first word of subroutine code
-                cpu->r.C = (aw & MASK_PCWADDR) >> SHFT_PCWADDR;
+                cpu->r.C = (aw & MASK_ADDR) >> SHFT_ADDR;
                 cpu->r.L = 0;
                 // require fetch at SECL
                 cpu->r.PROF = false;
@@ -287,7 +292,7 @@ void enterSubroutine(CPU *cpu, BIT descriptorCall)
                 if (arg) {
                         cpu->r.F = cpu->r.S;
                 } else {
-                        cpu->r.F = (aw & MASK_PCWrF) >> SHFT_PCWrF;
+                        cpu->r.F = (aw & MASK_FREG) >> SHFT_FREG;
                         // aw.[18:15]
                 }
                 cpu->r.AROF = false;
@@ -297,6 +302,7 @@ void enterSubroutine(CPU *cpu, BIT descriptorCall)
                 if (mode) {
                         cpu->r.CWMF = 1;
                         cpu->r.R = 0;
+                        // TODO: make this into mask and shift
                         cpu->r.X = fieldInsert(cpu->r.X, 18, 15, cpu->r.S);
                         cpu->r.S = 0;
                 }
@@ -339,15 +345,15 @@ int exitSubroutine(CPU *cpu, int in_line)
                 if (cpu->r.MSFF && cpu->r.SALF) {
                         cpu->r.Q06F = true; // set Q06F, not used except for display
                         do {
-                                cpu->r.S = (cpu->r.B & MASK_MSCWrF) >> SHFT_MSCWrF;
+                                cpu->r.S = (cpu->r.B & MASK_FREG) >> SHFT_FREG;
                                 loadBviaS(cpu); // B = [S], fetch prior MSCW
-                        } while (cpu->r.B & MASK_MSCWMSFF); // MSFF
+                        } while (cpu->r.B & MASK_MSFF); // MSFF
                         cpu->r.S = (cpu->r.R<<6) + 7;
                         storeBviaS(cpu); // [S] = B, store last MSCW at [R]+7
                 }
-                cpu->r.S = ((cpu->r.X & MASK_MSCWrF) >> SHFT_MSCWrF) - 1;
+                cpu->r.S = ((cpu->r.X & MASK_FREG) >> SHFT_FREG) - 1;
                 cpu->r.BROF = false;
         }
-//printf("exitSubroutine: %d\n", result);
+        //printf("exitSubroutine: %d\n", result);
         return result;
 }

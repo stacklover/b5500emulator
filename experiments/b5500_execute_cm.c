@@ -609,8 +609,8 @@ void b5500_execute_cm(CPU *cpu)
                         // loop count exhausted?
                         if (t2) {
                                         // no, restore C, L, and P to loop again
-                                        cpu->r.C = (t1 & MASK_LCWrC) >> SHFT_LCWrC;
-                                        cpu->r.L = (t1 & MASK_LCWrL) >> SHFT_LCWrL;
+                                        cpu->r.C = (t1 & MASK_CREG) >> SHFT_CREG;
+                                        cpu->r.L = (t1 & MASK_LREG) >> SHFT_LREG;
                                         // require fetch at SECL
                                         cpu->r.PROF = false;
                                         // store decremented count in X
@@ -620,7 +620,7 @@ void b5500_execute_cm(CPU *cpu)
                                 // save S (not the way the hardware did it)
                                 t2 = cpu->r.S;
                                 // get prior LCW addr from X value
-                                cpu->r.S = (t1 & MASK_LCWrF) >> SHFT_LCWrF;
+                                cpu->r.S = (t1 & MASK_FREG) >> SHFT_FREG;
                                 // B = [S], fetch prior LCW from stack
                                 loadBviaS(cpu);
                                 // restore S
@@ -644,21 +644,22 @@ void b5500_execute_cm(CPU *cpu)
                         // decrement count for first iteration
                         t1 = (WORD48)(variant ? variant-1 : 0) << SHFT_LCWrpt;
                         // insert L
-                        t1 |= (WORD48)(cpu->r.L) << SHFT_LCWrL;
+                        t1 |= (WORD48)(cpu->r.L) << SHFT_LREG;
                         // insert C
-                        t1 |= (WORD48)(cpu->r.C) << SHFT_LCWrC;
+                        t1 |= (WORD48)(cpu->r.C) << SHFT_CREG;
 
                         // save current loop control word
                         // set control bits [0:2]=3
                         cpu->r.B = cpu->r.X | INIT_LCW;
+
                         // save S (not the way the hardware did it)
                         t2 = cpu->r.S;
                         // get F value from X value and ++
-                        cpu->r.S = ((cpu->r.X & MASK_LCWrF) >> SHFT_LCWrF) + 1;
+                        cpu->r.S = ((cpu->r.X & MASK_FREG) >> SHFT_FREG) + 1;
                         // [S] = B, save prior LCW in stack
                         storeBviaS(cpu);
                         // update F value in X
-                        t1 |= (WORD48)(cpu->r.S) << SHFT_LCWrF;
+                        t1 |= (WORD48)(cpu->r.S) << SHFT_FREG;
                         cpu->r.X = t1;
                         // restore S
                         cpu->r.S = t2;

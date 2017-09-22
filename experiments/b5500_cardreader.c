@@ -372,9 +372,9 @@ WORD48 disk_access(WORD48 iocw, int eu, int diskfileaddr) {
         acc.id = "DKA";
         acc.MAIL = false;
         unit = (iocw & MASK_IODUNIT) >> SHFT_IODUNIT;
-        count = (iocw & MASK_IODWC) >> SHFT_IODWC;
+        count = (iocw & MASK_WCNT) >> SHFT_WCNT;
         segcnt = (iocw & MASK_IODSEGCNT) >> SHFT_IODSEGCNT;
-        core = (iocw & MASK_IODADDR) >> SHFT_IODADDR;
+        core = (iocw & MASK_ADDR) >> SHFT_ADDR;
         // number of words to do
         words = (iocw & MASK_IODUSEWC) ? count : segcnt * 30;
 
@@ -429,7 +429,8 @@ WORD48 disk_access(WORD48 iocw, int eu, int diskfileaddr) {
                                 if (diskfile.trace)
                                         fprintf(diskfile.trace, "\t%05o %d:%06d", core, eu, diskfileaddr);
                                 for (j=0; j<10; j++) {
-                                        fprintf(diskfile.trace, " %-8.8s", linep);
+                                        if (diskfile.trace)
+                                                fprintf(diskfile.trace, " %-8.8s", linep);
                                         // store until word count exhausted
                                         if (words > 0) {
                                                 acc.addr = core++;
@@ -509,9 +510,9 @@ WORD48 disk_access(WORD48 iocw, int eu, int diskfileaddr) {
 
         }
 
-        result |= (core << SHFT_IODADDR);
+        result |= (core << SHFT_ADDR);
         if (iocw & MASK_IODUSEWC)
-                result |= ((WORD48)words << SHFT_DDWC);
+                result |= ((WORD48)words << SHFT_WCNT);
 
         if (diskfile.trace) {
                 fprintf(diskfile.trace, "\tIO RESULT=%016llo\n\n", result);
@@ -539,18 +540,18 @@ WORD48 tape_access(WORD48 iocw) {
         acc.MAIL = false;
 
         unit = (iocw & MASK_IODUNIT) >> SHFT_IODUNIT;
-        count = (iocw & MASK_IODWC) >> SHFT_IODWC;
-        mi = (iocw & MASK_IODMI) >> SHFT_IODMI;
-        binary = (iocw & MASK_IODBINARY) >> SHFT_IODBINARY;
-        tapedir = (iocw & MASK_IODTAPEDIR) >> SHFT_IODTAPEDIR;
-        read = (iocw & MASK_IODREAD) >> SHFT_IODREAD;
-        core = (iocw & MASK_IODADDR) >> SHFT_IODADDR;
+        count = (iocw & MASK_WCNT) >> SHFT_WCNT;
+        mi = (iocw & MASK_IODMI) ? true : false;
+        binary = (iocw & MASK_IODBINARY) ? true : false;
+        tapedir = (iocw & MASK_IODTAPEDIR) ? true : false;
+        read = (iocw & MASK_IODREAD) ? true : false;
+        core = (iocw & MASK_ADDR) >> SHFT_ADDR;
         // number of words to do
         words = (iocw & MASK_IODUSEWC) ? count : 1024;
 
 
         if (unit != 1 || tapefile.fp == NULL) {
-                result |= MASK_IORNRDY | (core << SHFT_IODADDR);
+                result |= MASK_IORNRDY | (core << SHFT_ADDR);
                 CC->CCI08F = true;
                 signalInterrupt();
                 return  result;
@@ -585,7 +586,7 @@ WORD48 tape_access(WORD48 iocw) {
                                 tapefile.eof = true;
                                 if (tapefile.trace)
                                         fprintf(tapefile.trace, " EOT\n");
-                                result |= (core << SHFT_IODADDR) | MASK_IOREOT;
+                                result |= (core << SHFT_ADDR) | MASK_IOREOT;
                                 goto retresult;
                         }
                         // check for record end
@@ -595,7 +596,7 @@ WORD48 tape_access(WORD48 iocw) {
                                         // tape mark
                                         if (tapefile.trace)
                                                 fprintf(tapefile.trace, "' MARK\n");
-                                        result |= (core << SHFT_IODADDR) | MASK_IORD21;
+                                        result |= (core << SHFT_ADDR) | MASK_IORD21;
                                         goto retresult;
                                 }
                                 // ignore on first char
@@ -606,7 +607,7 @@ WORD48 tape_access(WORD48 iocw) {
                                 // the first char must have bit 7 set
                                 if (first) {
                                         printf("*\ttape not positioned at record begin\n");
-                                        result |= (core << SHFT_IODADDR) | MASK_IORD20;
+                                        result |= (core << SHFT_ADDR) | MASK_IORD20;
                                         goto retresult;
                                 }
                         }
@@ -664,9 +665,9 @@ recend:         // record end reached
 
 retresult:
         if (iocw & MASK_IODUSEWC)
-                result |= (WORD48)words << SHFT_DDWC;
+                result |= (WORD48)words << SHFT_WCNT;
 
-        result |= (core << SHFT_IODADDR) | ((WORD48)((42-cp)/6) << SHFT_IORCHARS);
+        result |= (core << SHFT_ADDR) | ((WORD48)((42-cp)/6) << SHFT_IORCHARS);
 
         if (tapefile.trace) {
                 fprintf(tapefile.trace, "\tIO RESULT=%016llo\n\n", result);
@@ -833,9 +834,9 @@ void initiateIO(CPU *cpu) {
 
         // analyze IOCW
         unitdes = (iocw & MASK_IODUNIT) >> SHFT_IODUNIT;
-        wc = (iocw & MASK_IODWC) >> SHFT_IODWC;
-        reading = (iocw & MASK_IODREAD) >> SHFT_IODREAD;
-        core = (iocw & MASK_IODADDR) >> SHFT_IODADDR;
+        wc = (iocw & MASK_WCNT) >> SHFT_WCNT;
+        reading = (iocw & MASK_IODREAD) ? true : false;
+        core = (iocw & MASK_ADDR) >> SHFT_ADDR;
 
         if (unitdes == 6 || unitdes == 12) {
                 // disk file units: fetch first word from core with disk address
@@ -892,17 +893,17 @@ void initiateIO(CPU *cpu) {
                 break;
         case 10: // CRA CPA
                 if ((iocw & MASK_IODMI) != 0 || (iocw & MASK_IODREAD) == 0) {
-                        result |= (core << SHFT_IODADDR);
+                        result |= (core << SHFT_ADDR);
                         break;
                 }
                 if (iocw & MASK_IODBINARY) {
                         if (card_read_binary(&core)) {
-                                result |= (core << SHFT_IODADDR);
+                                result |= (core << SHFT_ADDR);
                                 break;
                         }
                 } else {
                         if (card_read_alpha(&core)) {
-                                result |= (core << SHFT_IODADDR);
+                                result |= (core << SHFT_ADDR);
                                 break;
                         }
                 }
@@ -911,7 +912,7 @@ void initiateIO(CPU *cpu) {
                 if ((iocw & MASK_IODREAD) != 0)
                         break;
                 spo_write(&core);
-                result |= (core << SHFT_IODADDR);
+                result |= (core << SHFT_ADDR);
                 break;
         }
 
@@ -992,7 +993,7 @@ prtuse:
                         if (offset < MAXNAME && name[offset][0] != 0) {
                                 // do we have a memory address?
                                 if (MAIN[(cpu->r.R<<6) + offset] & MASK_FLAG)
-                                        sprintf(buf, "%s=%05llo", name[offset], MAIN[(cpu->r.R<<6) + offset] & MASK_PCWADDR);
+                                        sprintf(buf, "%s=%05llo", name[offset], MAIN[(cpu->r.R<<6) + offset] & MASK_ADDR);
                                 else
                                         sprintf(buf, "%s", name[offset]);
                                 return buf;
@@ -1052,7 +1053,7 @@ void codesym(ADDR15 c, WORD2 l) {
                 if (name[index][0] != 0) {
                         // do we have a memory address?
                         if (MAIN[index] & MASK_FLAG)
-                                addr = MAIN[index] & MASK_PCWADDR;
+                                addr = MAIN[index] & MASK_ADDR;
                         else
                                 addr = 0;
                         if (addr <= c && bestaddr < addr) {
@@ -1134,12 +1135,12 @@ char *word2string(WORD48 w)
 char *lcw2string(WORD48 w)
 {
         static char buf[33];
-        if (w & MASK_LCWrC) {
+        if (w & MASK_CREG) {
                 sprintf(buf, "Loop(%05llo:%llo Rpt=%03llo Prev=%05llo)",
-                        (w & MASK_LCWrC) >> SHFT_LCWrC,
-                        (w & MASK_LCWrL) >> SHFT_LCWrL,
+                        (w & MASK_CREG) >> SHFT_CREG,
+                        (w & MASK_LREG) >> SHFT_LREG,
                         (w & MASK_LCWrpt) >> SHFT_LCWrpt,
-                        (w & MASK_LCWrF) >> SHFT_LCWrF);
+                        (w & MASK_FREG) >> SHFT_FREG);
                 buf[32]=0;
         } else {
                 buf[0]=0;
@@ -1216,7 +1217,7 @@ runagain:
 printf("runn: C=%05o L=%o T=%04o\n", cpu->r.C, cpu->r.L, cpu->r.T);
         while (cpu->busy) {
                 instr_count++;
-#if 0
+#if 1
                 // check for instruction count
                 if (instr_count > 200000) {
                         dotrcmem = dodmpins = dotrcins = false;
@@ -1226,7 +1227,7 @@ printf("runn: C=%05o L=%o T=%04o\n", cpu->r.C, cpu->r.L, cpu->r.T);
                         closefile(&cardfile);
                         closefile(&spiofile);
                         exit (0);
-                } else if (instr_count >= 85199) {
+                } else if (instr_count >= 0) {
                         dotrcmem = dodmpins = dotrcins = true;
                 }
 #endif

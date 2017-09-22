@@ -216,12 +216,12 @@ char *word2string(WORD48 w)
 char *lcw2string(WORD48 w)
 {
         static char buf[33];
-        if (w & MASK_LCWrC) {
+        if (w & MASK_CREG) {
                 sprintf(buf, "Loop(%05llo:%llo Rpt=%03llo Prev=%05llo)",
-                        (w & MASK_LCWrC) >> SHFT_LCWrC,
-                        (w & MASK_LCWrL) >> SHFT_LCWrL,
+                        (w & MASK_CREG) >> SHFT_CREG,
+                        (w & MASK_LREG) >> SHFT_LREG,
                         (w & MASK_LCWrpt) >> SHFT_LCWrpt,
-                        (w & MASK_LCWrF) >> SHFT_LCWrF);
+                        (w & MASK_FREG) >> SHFT_FREG);
                 buf[32]=0;
         } else {
                 buf[0]=0;

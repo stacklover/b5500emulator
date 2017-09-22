@@ -234,10 +234,10 @@ BIT indexDescriptor(CPU *cpu)
                                 cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_INDEX;
                                 signalInterrupt();
                         }
-                } else if (I.m < ((aw & MASK_DDWC) >> SHFT_DDWC)) {
+                } else if (I.m < ((aw & MASK_WCNT) >> SHFT_WCNT)) {
                         // We finally have a valid index
-                        I.m = (aw + I.m) & MASK_DDADDR;
-                        cpu->r.A = (aw & ~MASK_DDADDR) | I.m;
+                        I.m = (aw + I.m) & MASK_ADDR;
+                        cpu->r.A = (aw & ~MASK_ADDR) | I.m;
                         cpu->r.BROF = false;
                 } else {
                         // Oops... index not less than size
@@ -325,7 +325,7 @@ void loadBviaM(CPU *cpu)
 
 void loadMviaM(CPU *cpu)
 {
-        // note: cpu is only used to get the saved F registers value from
+        // note: this is only used to get the saved F registers value from
         // the saved MSCW at R+7.
         if (dotrcmem)
                 printf("\t[M]~>M ");
@@ -337,7 +337,7 @@ void loadMviaM(CPU *cpu)
         if (cpu->acc.MAED || cpu->acc.MPED) {
                 accessError(cpu);
         } else {
-                cpu->r.M = (cpu->acc.word & MASK_MSCWrF) >> SHFT_MSCWrF;
+                cpu->r.M = (cpu->acc.word & MASK_FREG) >> SHFT_FREG;
         }
 }
 
@@ -445,7 +445,7 @@ void integerStore(CPU *cpu, BIT conditional, BIT destructive)
                 if (presenceTest(cpu, aw)) {
                         cpu->r.M = aw & MASKMEM;
                         if (conditional) {
-                                if (!(aw & MASK_DDINT)) { // [19:1] is the integer bit
+                                if (!(aw & MASK_INTG)) { // [19:1] is the integer bit
                                         normalize = false;
                                 }
                         }

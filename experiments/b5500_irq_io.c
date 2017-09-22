@@ -59,8 +59,8 @@ void storeForInterrupt(CPU *cpu, BIT forced, BIT forTest)
         if (cpu->r.CWMF) {
                 // in Character Mode, get the correct TOS address from X
                 temp = cpu->r.S;
-                cpu->r.S = (cpu->r.X & MASK_RCWrF) >> SHFT_RCWrF;
-                cpu->r.X = (cpu->r.X & MASK_RCWrC) | (temp << SHFT_RCWrF);
+                cpu->r.S = (cpu->r.X & MASK_FREG) >> SHFT_FREG;
+                cpu->r.X = (cpu->r.X & MASK_CREG) | (temp << SHFT_FREG);
 
                 if (saveAROF || forTest) {
                         ++cpu->r.S;
@@ -76,8 +76,9 @@ void storeForInterrupt(CPU *cpu, BIT forced, BIT forTest)
                 // 444444443333333333222222222211111111110000000000
                 // 765432109876543210987654321098765432109876543210
                 // 11A000000XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-                cpu->r.B = INIT_ILCW | cpu->r.X |
-                        ((WORD48)saveAROF << SHFT_ILCWAROF);
+                cpu->r.B = INIT_ILCW | cpu->r.X;
+                if (saveAROF)
+                        cpu->r.B |= MASK_ILCWAROF;
                 ++cpu->r.S;
                 if (dotrcins)
                         printf("ILCW:");
@@ -100,12 +101,15 @@ void storeForInterrupt(CPU *cpu, BIT forced, BIT forTest)
         // 765432109876543210987654321098765432109876543210
         // 110000RRRRRRRRR0MS00000V00000NNNNMMMMMMMMMMMMMMM
         cpu->r.B = INIT_ICW |
-                ((WORD48)cpu->r.M << SHFT_ICWrM) |
-                ((WORD48)cpu->r.N << SHFT_ICWrN) |
-                ((WORD48)cpu->r.VARF << SHFT_ICWVARF) |
-                ((WORD48)cpu->r.SALF << SHFT_ICWSALF) |
-                ((WORD48)cpu->r.MSFF << SHFT_ICWMSFF) |
-                ((WORD48)cpu->r.R << SHFT_ICWrR);
+                ((WORD48)cpu->r.M << SHFT_MREG) |
+                ((WORD48)cpu->r.N << SHFT_NREG) |
+                ((WORD48)cpu->r.R << SHFT_RREG);
+        if (cpu->r.VARF)
+                cpu->r.B |= MASK_VARF;
+        if (cpu->r.SALF)
+                cpu->r.B |= MASK_SALF;
+        if (cpu->r.MSFF)
+                cpu->r.B |= MASK_MSFF;
         ++cpu->r.S;
         if (dotrcins)
                 printf("ICW: ");
@@ -116,14 +120,15 @@ void storeForInterrupt(CPU *cpu, BIT forced, BIT forTest)
         // 765432109876543210987654321098765432109876543210
         // 11B0HHHVVVLLGGGKKKFFFFFFFFFFFFFFFCCCCCCCCCCCCCCC
         cpu->r.B = INIT_RCW |
-                ((WORD48)cpu->r.C << SHFT_RCWrC) |
-                ((WORD48)cpu->r.F << SHFT_RCWrF) |
-                ((WORD48)cpu->r.K << SHFT_RCWrK) |
-                ((WORD48)cpu->r.G << SHFT_RCWrG) |
-                ((WORD48)cpu->r.L << SHFT_RCWrL) |
-                ((WORD48)cpu->r.V << SHFT_RCWrV) |
-                ((WORD48)cpu->r.H << SHFT_RCWrH) |
-                ((WORD48)saveBROF << SHFT_RCWBROF);
+                ((WORD48)cpu->r.C << SHFT_CREG) |
+                ((WORD48)cpu->r.F << SHFT_FREG) |
+                ((WORD48)cpu->r.K << SHFT_KREG) |
+                ((WORD48)cpu->r.G << SHFT_GREG) |
+                ((WORD48)cpu->r.L << SHFT_LREG) |
+                ((WORD48)cpu->r.V << SHFT_VREG) |
+                ((WORD48)cpu->r.H << SHFT_HREG);
+        if (saveBROF)
+                cpu->r.B |= MASK_RCWBROF;
         ++cpu->r.S;
         if (dotrcins)
                 printf("IRCW:");
@@ -136,10 +141,10 @@ void storeForInterrupt(CPU *cpu, BIT forced, BIT forTest)
                 cpu->r.S = temp;
 
                 loadBviaS(cpu); // B = [S]: get last RCW
-                cpu->r.S = (cpu->r.B & MASK_RCWrF) >> SHFT_RCWrF;
+                cpu->r.S = (cpu->r.B & MASK_FREG) >> SHFT_FREG;
 
                 loadBviaS(cpu); // B = [S]: get last MSCW
-                cpu->r.R = (cpu->r.B & MASK_MSCWrR) >> SHFT_MSCWrR;
+                cpu->r.R = (cpu->r.B & MASK_RREG) >> SHFT_RREG;
                 cpu->r.S = cpu->r.F;
         }
 
@@ -149,19 +154,29 @@ void storeForInterrupt(CPU *cpu, BIT forced, BIT forTest)
         // 11000QQQQQQQQQYYYYYYZZZZZZ0TTTTTCSSSSSSSSSSSSSSS
         cpu->r.B = INIT_INCW |
                 ((WORD48)cpu->r.S << SHFT_INCWrS) |
-                ((WORD48)cpu->r.CWMF << SHFT_INCWMODE) |
                 (((WORD48)cpu->r.TM << SHFT_INCWrTM) & MASK_INCWrTM) |
                 ((WORD48)cpu->r.Z << SHFT_INCWrZ) |
-                ((WORD48)cpu->r.Y << SHFT_INCWrY) |
-                ((WORD48)cpu->r.Q01F << SHFT_INCWQ01F) |
-                ((WORD48)cpu->r.Q02F << SHFT_INCWQ02F) |
-                ((WORD48)cpu->r.Q03F << SHFT_INCWQ03F) |
-                ((WORD48)cpu->r.Q04F << SHFT_INCWQ04F) |
-                ((WORD48)cpu->r.Q05F << SHFT_INCWQ05F) |
-                ((WORD48)cpu->r.Q06F << SHFT_INCWQ06F) |
-                ((WORD48)cpu->r.Q07F << SHFT_INCWQ07F) |
-                ((WORD48)cpu->r.Q08F << SHFT_INCWQ08F) |
-                ((WORD48)cpu->r.Q09F << SHFT_INCWQ09F);
+                ((WORD48)cpu->r.Y << SHFT_INCWrY);
+        if (cpu->r.CWMF)
+                cpu->r.B |= MASK_INCWMODE;
+        if (cpu->r.Q01F)
+                cpu->r.B |= MASK_INCWQ01F;
+        if (cpu->r.Q02F)
+                cpu->r.B |= MASK_INCWQ02F;
+        if (cpu->r.Q03F)
+                cpu->r.B |= MASK_INCWQ03F;
+        if (cpu->r.Q04F)
+                cpu->r.B |= MASK_INCWQ04F;
+        if (cpu->r.Q05F)
+                cpu->r.B |= MASK_INCWQ05F;
+        if (cpu->r.Q06F)
+                cpu->r.B |= MASK_INCWQ06F;
+        if (cpu->r.Q07F)
+                cpu->r.B |= MASK_INCWQ07F;
+        if (cpu->r.Q08F)
+                cpu->r.B |= MASK_INCWQ08F;
+        if (cpu->r.Q09F)
+                cpu->r.B |= MASK_INCWQ09F;
         cpu->r.M = (cpu->r.R<<6) + 8; // store initiate word at R+@10
         if (dotrcins)
                 printf("INCW:");
@@ -187,7 +202,7 @@ void storeForInterrupt(CPU *cpu, BIT forced, BIT forTest)
                 // if it's P1
                 if (forTest) {
                         loadBviaM(cpu); // B = [M]: load DD for test
-                        cpu->r.C = (cpu->r.B & MASK_RCWrC) >> SHFT_RCWrC;
+                        cpu->r.C = (cpu->r.B & MASK_CREG) >> SHFT_CREG;
                         cpu->r.L = 0;
                         cpu->r.PROF = 0; // require fetch at SECL
                         cpu->r.G = 0;

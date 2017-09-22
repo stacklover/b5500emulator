@@ -41,7 +41,7 @@ void enterCharModeInline(CPU *cpu)
         cpu->r.F = cpu->r.S;
         cpu->r.R = 0;
         cpu->r.CWMF = true;
-        cpu->r.X = (WORD39)cpu->r.S << SHFT_LCWrF; // inserting S into X.[18:15], but X is zero at cpu point
+        cpu->r.X = (WORD39)cpu->r.S << SHFT_FREG; // inserting S into X.[18:15], but X is zero at this point
         cpu->r.V = 0;
         cpu->r.B = bw = cpu->r.A;
 
@@ -82,7 +82,7 @@ void initiate(CPU *cpu, BIT forTest)
 
         // restore the Initiate Control Word (INCW) or Initiate Test Control Word
         cpu->r.S = (bw & MASK_INCWrS) >> SHFT_INCWrS;
-        cpu->r.CWMF = (bw & MASK_INCWMODE) >> SHFT_INCWMODE;
+        cpu->r.CWMF = (bw & MASK_MODE) ? true : false;
         if (forTest) {
                 cpu->r.TM = (bw & MASK_INCWrTM) >> SHFT_INCWrTM;
 #if 0
@@ -96,15 +96,15 @@ void initiate(CPU *cpu, BIT forTest)
 #endif
                 cpu->r.Z = (bw & MASK_INCWrZ) >> SHFT_INCWrZ;
                 cpu->r.Y = (bw & MASK_INCWrY) >> SHFT_INCWrY;
-                cpu->r.Q01F = (bw & MASK_INCWQ01F) >> SHFT_INCWQ01F;
-                cpu->r.Q02F = (bw & MASK_INCWQ02F) >> SHFT_INCWQ02F;
-                cpu->r.Q03F = (bw & MASK_INCWQ03F) >> SHFT_INCWQ03F;
-                cpu->r.Q04F = (bw & MASK_INCWQ04F) >> SHFT_INCWQ04F;
-                cpu->r.Q05F = (bw & MASK_INCWQ05F) >> SHFT_INCWQ05F;
-                cpu->r.Q06F = (bw & MASK_INCWQ06F) >> SHFT_INCWQ06F;
-                cpu->r.Q07F = (bw & MASK_INCWQ07F) >> SHFT_INCWQ07F;
-                cpu->r.Q08F = (bw & MASK_INCWQ08F) >> SHFT_INCWQ08F;
-                cpu->r.Q09F = (bw & MASK_INCWQ09F) >> SHFT_INCWQ09F;
+                cpu->r.Q01F = (bw & MASK_INCWQ01F) ? true : false;
+                cpu->r.Q02F = (bw & MASK_INCWQ02F) ? true : false;
+                cpu->r.Q03F = (bw & MASK_INCWQ03F) ? true : false;
+                cpu->r.Q04F = (bw & MASK_INCWQ04F) ? true : false;
+                cpu->r.Q05F = (bw & MASK_INCWQ05F) ? true : false;
+                cpu->r.Q06F = (bw & MASK_INCWQ06F) ? true : false;
+                cpu->r.Q07F = (bw & MASK_INCWQ07F) ? true : false;
+                cpu->r.Q08F = (bw & MASK_INCWQ08F) ? true : false;
+                cpu->r.Q09F = (bw & MASK_INCWQ09F) ? true : false;
                 // Emulator doesn't support J register, so can't set that from TM
         }
 
@@ -112,37 +112,37 @@ void initiate(CPU *cpu, BIT forTest)
         loadBviaS(cpu); // B = [S]
         --cpu->r.S;
         bw = cpu->r.B;
-        cpu->r.C = (bw & MASK_RCWrC) >> SHFT_RCWrC;
-        cpu->r.F = (bw & MASK_RCWrF) >> SHFT_RCWrF;
-        cpu->r.K = (bw & MASK_RCWrK) >> SHFT_RCWrK;
-        cpu->r.G = (bw & MASK_RCWrG) >> SHFT_RCWrG;
-        cpu->r.L = (bw & MASK_RCWrL) >> SHFT_RCWrL;
-        cpu->r.V = (bw & MASK_RCWrV) >> SHFT_RCWrV;
-        cpu->r.H = (bw & MASK_RCWrH) >> SHFT_RCWrH;
+        cpu->r.C = (bw & MASK_CREG) >> SHFT_CREG;
+        cpu->r.F = (bw & MASK_FREG) >> SHFT_FREG;
+        cpu->r.K = (bw & MASK_KREG) >> SHFT_KREG;
+        cpu->r.G = (bw & MASK_GREG) >> SHFT_GREG;
+        cpu->r.L = (bw & MASK_LREG) >> SHFT_LREG;
+        cpu->r.V = (bw & MASK_VREG) >> SHFT_VREG;
+        cpu->r.H = (bw & MASK_HREG) >> SHFT_HREG;
         loadPviaC(cpu); // load program word to P
         if (cpu->r.CWMF || forTest) {
-                saveBROF = (bw &MASK_RCWBROF) >> SHFT_RCWBROF;
+                saveBROF = (bw & MASK_RCWBROF) ? true : false;
         }
 
         // restore the Interrupt Control Word (ICW)
         loadBviaS(cpu); // B = [S]
         --cpu->r.S;
         bw = cpu->r.B;
-        cpu->r.VARF = (bw & MASK_ICWVARF) >> SHFT_ICWVARF;
-        cpu->r.SALF = (bw & MASK_ICWSALF) >> SHFT_ICWSALF;
-        cpu->r.MSFF = (bw & MASK_ICWMSFF) >> SHFT_ICWMSFF;
-        cpu->r.R = (bw & MASK_ICWrR) >> SHFT_ICWrR;
+        cpu->r.VARF = (bw & MASK_VARF) ? true : false;
+        cpu->r.SALF = (bw & MASK_SALF) ? true : false;
+        cpu->r.MSFF = (bw & MASK_MSFF) ? true : false;
+        cpu->r.R = (bw & MASK_RREG) >> SHFT_RREG;
 
         if (cpu->r.CWMF || forTest) {
-                cpu->r.M = (bw & MASK_ICWrM) >> SHFT_ICWrM;
-                cpu->r.N = (bw & MASK_ICSrN) >> SHFT_ICWrN;
+                cpu->r.M = (bw & MASK_MREG) >> SHFT_MREG;
+                cpu->r.N = (bw & MASK_NREG) >> SHFT_NREG;
 
                 // restore the CM Interrupt Loop Control Word (ILCW)
                 loadBviaS(cpu); // B = [S]
                 --cpu->r.S;
                 bw = cpu->r.B;
                 cpu->r.X = bw & MASK_MANTISSA;
-                saveAROF = (bw & MASK_ILCWAROF) >> SHFT_ILCWAROF;
+                saveAROF = (bw & MASK_ILCWAROF) ? true : false;
 
                 // restore the B register
                 if (saveBROF || forTest) {
@@ -161,9 +161,9 @@ void initiate(CPU *cpu, BIT forTest)
                 if (cpu->r.CWMF) {
                         // exchange S with its field in X
                         temp = cpu->r.S;
-                        cpu->r.S = (cpu->r.X & MASK_LCWrF) >> SHFT_LCWrF;
-                        cpu->r.X = (cpu->r.X & ~MASK_LCWrF)
-                                        || ((WORD48)temp << SHFT_LCWrF);
+                        cpu->r.S = (cpu->r.X & MASK_FREG) >> SHFT_FREG;
+                        cpu->r.X = (cpu->r.X & ~MASK_FREG)
+                                        || ((WORD48)temp << SHFT_FREG);
                 }
         } else {
                 cpu->r.AROF = 0; // don't restore A or B for word mode --
