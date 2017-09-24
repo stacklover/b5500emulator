@@ -52,7 +52,6 @@
     <file file_name="experiments/tapetrace.txt" />
     <file file_name="experiments/coredump.txt" />
     <file file_name="experiments/iotrace.txt" />
-    <file file_name="experiments/trace.txt" />
     <configuration Name="Common" build_exclude_from_build="Yes" />
   </project>
 </solution>

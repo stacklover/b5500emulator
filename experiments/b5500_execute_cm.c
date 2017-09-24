@@ -198,7 +198,7 @@ again:
                         cpu->r.Y = fieldIsolate(cpu->r.A, cpu->r.G*6, 6);
                         cpu->r.B = (cpu->r.B << 6) | cpu->r.Y;
                         // make sure B is not exceeding 48 bits
-                        cpu->r.B &= 07777777777777777ll;
+                        cpu->r.B &= MASK_WORD48;
                         if (cpu->r.G < 7) {
                                 ++cpu->r.G;
                         } else {
@@ -227,11 +227,11 @@ again:
                         break;
 
                 case 030:       // 3011: SFI=Store for Interrupt
-                        storeForInterrupt(cpu, false, false);
+                        storeForInterrupt(cpu, false, false, "cmSFI");
                         break;
 
                 case 034:       // 3411: SFT=Store for Test
-                        storeForInterrupt(cpu, false, true);
+                        storeForInterrupt(cpu, false, true, "cmSFT");
                         break;
 
                 default:        // Anything else is a no-op
@@ -746,7 +746,7 @@ again:
                         cpu->r.Y = fieldIsolate(cpu->r.A, cpu->r.G*6, 6);
                         cpu->r.B = (cpu->r.B << 6) + cpu->r.Y;
                         // make sure B is not exceeding 48 bits
-                        cpu->r.B &= 07777777777777777ll;
+                        cpu->r.B &= MASK_WORD48;
                         if (cpu->r.G < 7) {
                                 ++cpu->r.G;
                         } else {
@@ -796,7 +796,7 @@ again:
                 break;
 
         case 064:       // XX64: BIS=Set bit
-                streamBitsToDest(cpu, variant, 07777777777777777ll);
+                streamBitsToDest(cpu, variant, MASK_WORD48);
                 break;
 
         case 065:       // XX65: BIR=Reset bit

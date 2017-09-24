@@ -51,6 +51,7 @@ char    opname[20];
 char    regname[20];
 unsigned wc;
 unsigned sc;
+unsigned instr_count;
 
 /* variables of code generator */
 int     pass2;
@@ -59,7 +60,7 @@ LABELREC labeltab[MAXLABEL];
 CENTRAL_CONTROL cc;
 CPU *cpu;
 
-void signalInterrupt(void)
+void signalInterrupt(const char *id, const char *cause)
 {
         printf("***** signalInterrupt *****\n");
 }

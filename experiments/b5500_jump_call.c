@@ -168,7 +168,7 @@ void operandCall(CPU *cpu)
                                 loadAviaM(cpu); // A = [M]
                                 if ((cpu->r.A & MASK_FLAG) && cpu->r.NCSF) { // Flag bit is set
                                         cpu->r.I = (cpu->r.I & 0x0F) | 0x80; // set I08: flag-bit interrupt
-                                        signalInterrupt();
+                                        signalInterrupt(cpu->id, "OPCD FLAG SET");
                                         // B5500DumpState("Flag Bit: OPDC"); // <<< DEBUG >>>
                                 }
                         }
@@ -183,7 +183,7 @@ void operandCall(CPU *cpu)
                         // Absent data or program descriptor
                         if (cpu->r.NCSF) {
                                 cpu->r.I = (cpu->r.I & 0x0F) | 0x70; // set I05/6/7: p-bit
-                                signalInterrupt();
+                                signalInterrupt(cpu->id, "OPDC NOT PBIT");
                                 // else if Control State, we're done
                         }
                         break;
@@ -238,7 +238,7 @@ void descriptorCall(CPU *cpu)
                         // Absent data or program descriptor
                         if (cpu->r.NCSF) {
                                 cpu->r.I = (cpu->r.I & 0x0F) | 0x70; // set I05/6/7: p-bit
-                                signalInterrupt();
+                                signalInterrupt(cpu->id, "OPDC NOT PBIT");
                                 // else if Control State, we're done
                         }
                         break;
@@ -326,12 +326,12 @@ int exitSubroutine(CPU *cpu, int in_line)
 {
         int     result;
 
-        if (!(cpu->r.B & MASK_FLAG)) {
+        if (OPERAND(cpu->r.B)) {
                 // flag bit not set
                 result = 2;
                 if (cpu->r.NCSF) {
                         cpu->r.I = (cpu->r.I & 0x0F) | 0x80; // set I08: flag-bit
-                        signalInterrupt();
+                        signalInterrupt(cpu->id, "XIT no FLAG");
                 }
         } else {
                 // flag bit is set

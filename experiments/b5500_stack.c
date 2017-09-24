@@ -90,7 +90,7 @@ void adjustABEmpty(CPU *cpu)
                 if (((cpu->r.S >> 6) == cpu->r.R) && cpu->r.NCSF) {
                         // set I03F: stack overflow
                         cpu->r.I |= 0x04;
-                        signalInterrupt();
+                        signalInterrupt(cpu->id, "StackOverflow");
                 } else {
                         ++cpu->r.S;
                         storeBviaS(cpu); // [S] = B
@@ -106,7 +106,7 @@ void adjustABEmpty(CPU *cpu)
                 if (((cpu->r.S >> 6) == cpu->r.R) && cpu->r.NCSF) {
                         // set I03F: stack overflow
                         cpu->r.I |= 0x04;
-                        signalInterrupt();
+                        signalInterrupt(cpu->id, "StackOverflow");
                 } else {
                         ++cpu->r.S;
                         storeAviaS(cpu); // [S] = B
@@ -131,7 +131,7 @@ void adjustAEmpty(CPU *cpu)
                         if (((cpu->r.S >> 6) == cpu->r.R) && cpu->r.NCSF) {
                                 // set I03F: stack overflow
                                 cpu->r.I |= 0x04;
-                                signalInterrupt();
+                                signalInterrupt(cpu->id, "StackOverflow");
                         } else {
                                 ++cpu->r.S;
                                 storeBviaS(cpu); // [S] = B
@@ -157,7 +157,7 @@ void adjustBEmpty(CPU *cpu)
                 if (((cpu->r.S >> 6) == cpu->r.R) && cpu->r.NCSF) {
                         // set I03F: stack overflow
                         cpu->r.I |= 0x04;
-                        signalInterrupt();
+                        signalInterrupt(cpu->id, "StackOverflow");
                 } else {
                         ++cpu->r.S;
                         storeBviaS(cpu); // [S] = B

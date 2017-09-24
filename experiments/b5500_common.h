@@ -48,6 +48,22 @@ typedef unsigned long long WORD39;      // 39 bits mantissa extension
 typedef unsigned long long WORD48;      // 48 bits machine word
 
 /*
+ * masks that should be used when assigning to above types when overflow is possible
+ */
+#define MASK_BIT    01
+#define MASK_WORD2  03
+#define MASK_WORD3  07
+#define MASK_WORD4  017
+#define MASK_WORD6  077
+#define MASK_WORD8  0377
+#define MASK_ADDR9  0777
+#define MASK_WORD12 07777
+#define MASK_ADDR15 077777
+#define MASK_WORD21 07777777
+#define MASK_WORD39 07777777777777ll
+#define MASK_WORD48 07777777777777777ll
+
+/*
  * define all the registers of the Central Control instance
  */
 typedef struct central_control {
@@ -300,9 +316,9 @@ extern CENTRAL_CONTROL  *CC;
 #define MASK_VREG       00034000000000000ll // V: V register
 #define MASK_LREG       00003000000000000ll // L: L register
 #define MASK_GREG       00000700000000000ll // G: G register
-#define MASK_KREG       00000070000000000ll // K: L register
+#define MASK_KREG       00000070000000000ll // K: K register
 #define MASK_MSFF       00000020000000000ll // m: MSFF bit
-#define MASK_SALF       00000010000000000ll // s: SAIF bit
+#define MASK_SALF       00000010000000000ll // s: SALF bit
 #define MASK_INTG       00000002000000000ll // j: integer bit
 #define MASK_CONT       00000001000000000ll // k: continuity bit
 #define MASK_VARF       00000000100000000ll // v: VARF bit
@@ -523,10 +539,10 @@ extern int exitSubroutine(CPU *, int how);
 extern BIT presenceTest(CPU *, WORD48 word);
 extern WORD48 interrogateUnitStatus(CPU *);
 extern WORD48 interrogateIOChannel(CPU *);
-extern void storeForInterrupt(CPU *, BIT forced, BIT forTest);
+extern void storeForInterrupt(CPU *, BIT forced, BIT forTest, const char *);
 extern void interrogateInterrupt(CPU *);
 extern void initiateIO(CPU *);
-extern void signalInterrupt(void);
+extern void signalInterrupt(const char *id, const char *cause);
 
 /* single precision */
 extern int singlePrecisionCompare(CPU *);
@@ -570,8 +586,8 @@ extern void run(CPU *);
 
 /* translate tables */
 extern const WORD6 translatetable_ascii2bic[128];
-extern const char translatetable_bic2ascii[64];
-extern const char translatetable_bcl2bic[64];
+extern const WORD8 translatetable_bic2ascii[64];
+extern const WORD6 translatetable_bcl2bic[64];
 
 /* other tables */
 extern UNIT unit[32][2];
@@ -641,5 +657,6 @@ extern int dotrcins;    // trace instruction and IRQs
 extern int dotrcmat;    // trace math operations
 extern int emode;       // emode math
 extern const INSTRUCTION instruction_table[];
+extern unsigned instr_count;
 
 #endif /* B5500_COMMON_H */

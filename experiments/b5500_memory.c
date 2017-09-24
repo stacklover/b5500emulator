@@ -79,11 +79,11 @@ void accessError(CPU *cpu)
         if (cpu->acc.MAED) {
                 // set I02F: memory address/inhibit error
                 cpu->r.I |= 0x02;
-                signalInterrupt();
+                signalInterrupt(cpu->id, "MAE");
         } else if (cpu->acc.MPED) {
                 // set I01F: memory parity error
                 cpu->r.I |= 0x01;
-                signalInterrupt();
+                signalInterrupt(cpu->id, "MPE");
                 if (cpu->isP1 && !cpu->r.NCSF) {
                         // P1 memory parity in Control State stops the proc
                         stop(cpu);
@@ -217,7 +217,7 @@ BIT indexDescriptor(CPU *cpu)
                         if (cpu->r.NCSF) {
                                 // set I07/8: integer overflow
                                 cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_INTO;
-                                signalInterrupt();
+                                signalInterrupt(cpu->id, "INX Overflow");
                         }
                 }
         }
@@ -232,7 +232,7 @@ BIT indexDescriptor(CPU *cpu)
                         if (cpu->r.NCSF) {
                                 // set I05/8: invalid-index
                                 cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_INDEX;
-                                signalInterrupt();
+                                signalInterrupt(cpu->id, "INX<0");
                         }
                 } else if (I.m < ((aw & MASK_WCNT) >> SHFT_WCNT)) {
                         // We finally have a valid index
@@ -245,7 +245,7 @@ BIT indexDescriptor(CPU *cpu)
                         if (cpu->r.NCSF) {
                                 // set I05/8: invalid-index
                                 cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_INDEX;
-                                signalInterrupt();
+                                signalInterrupt(cpu->id, "INX>WC");
                         }
                 }
         }
@@ -437,7 +437,7 @@ void integerStore(CPU *cpu, BIT conditional, BIT destructive)
 
         adjustABFull(cpu);
         aw = cpu->r.A;
-        if (!(aw & MASK_FLAG)) {
+        if (OPERAND(aw)) {
                 // it's an operand
                 computeRelativeAddr(cpu, aw, false);
         } else {
@@ -455,6 +455,7 @@ void integerStore(CPU *cpu, BIT conditional, BIT destructive)
         }
 
         if (normalize) {
+
                 num_extract(&cpu->r.B, &B);
 
                 if (B.e < 0) {
@@ -471,12 +472,12 @@ void integerStore(CPU *cpu, BIT conditional, BIT destructive)
                                 if (cpu->r.NCSF) {
                                         // set I07/8: integer overflow
                                         cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_INTO;
-                                        signalInterrupt();
+                                        signalInterrupt(cpu->id, "ISD/ISN Overflow");
                                 }
                         }
-                        if (doStore) {
-                                num_compose(&B, &cpu->r.B);
-                        }
+                }
+                if (doStore) {
+                        num_compose(&B, &cpu->r.B);
                 }
         }
 

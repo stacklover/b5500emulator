@@ -9,26 +9,17 @@
 ************************************************************************
 * character mode
 ************************************************************************
-* 2016-02-19  R.Meyer
+* 2016-02-19 R.Meyer
 *   Converted Paul's work from Javascript to C
-* 2017-07-17  R.Meyer
+* 2017-07-17 R.Meyer
 *   changed "this" to "cpu" to avoid errors when using g++
 *   changed "compl" to "compla" to avoid errors when using g++
+* 2017-09-23 R.Meyer
+*   some recoding and checking
 ***********************************************************************/
 
 #include <stdio.h>
 #include "b5500_common.h"
-
-// index by BIC to get collation value
-const WORD6 collation[64] = {
-        53, 54, 55, 56, 57, 58, 59, 60,         // @00: 0 1 2 3 4 5 6 7
-        61, 62, 19, 20, 63, 21, 22, 23,         // @10: 8 9 # @ ? : > }
-        24, 25, 26, 27, 28, 29, 30, 31,         // @20: + A B C D E F G
-        32, 33,  1,  2,  6,  3,  4,  5,         // @30: H I . [ & ( < ~
-        34, 35, 36, 37, 38, 39, 40, 41,         // @40: | J K L M N O P
-        42, 43,  7,  8, 12,  9, 10, 11,         // @50: Q R $ * - ) ; {
-         0, 13, 45, 46, 47, 48, 49, 50,         // @60: _ / S T U V W X  (_ = blank)
-        51, 52, 14, 15, 44, 16, 17, 18};        // @70: Y Z , % ! = ] "
 
 /*
  * Generally
@@ -49,22 +40,20 @@ const WORD6 collation[64] = {
  * boundary, as necessary. If the adjustment crosses a word boundary,
  * AROF is reset to force reloading later at the new source address
  */
+// recoded and checked 17-09-23 RM
 void streamAdjustSourceChar(CPU *cpu)
 {
         if (cpu->r.H > 0) {
                 // not at bit position 0
                 // reset bit position
                 cpu->r.H = 0;
-                // more to next char
-                if (cpu->r.G < 7) {
-                        // in same word
-                        ++cpu->r.G;
-                } else {
-                        // in next word
-                        cpu->r.G = 0;
-                        // make sure its loaded next
-                        cpu->r.AROF = false;
+                // move to next char
+                ++cpu->r.G;
+                if (cpu->r.G > 7) {
+                        // move to next word
                         ++cpu->r.M;
+                        cpu->r.G = 0;
+                        cpu->r.AROF = false;
                 }
         }
 }
@@ -75,6 +64,7 @@ void streamAdjustSourceChar(CPU *cpu)
  * BROF is set, B is stored at S before S is incremented and BROF is reset
  * to force reloading later at the new destination address
  */
+// recoded and checked 17-09-23 RM
 void streamAdjustDestChar(CPU *cpu)
 {
         if (cpu->r.V > 0) {
@@ -82,19 +72,17 @@ void streamAdjustDestChar(CPU *cpu)
                 // reset bit position
                 cpu->r.V = 0;
                 // more to next char
-                if (cpu->r.K < 7) {
-                        // in same word
-                        ++cpu->r.K;
-                } else {
-                        // in next word
-                        cpu->r.K = 0;
-                        // current word touched?
+                ++cpu->r.K;
+                if (cpu->r.K > 7) {
+                        // move next word
+                        // store current word when touched
                         if (cpu->r.BROF) {
                                 // store it
                                 storeBviaS(cpu);
                                 cpu->r.BROF = false;
                         }
                         ++cpu->r.S;
+                        cpu->r.K = 0;
                 }
         }
 }
@@ -115,6 +103,7 @@ void streamAdjustDestChar(CPU *cpu)
  * may be required only for the first word in the destination string, if B may
  * have been left in an updated state by a prior syllable
  */
+// not used by MCP up to problem 17-09-23 RM
 void compareSourceWithDest(CPU *cpu, unsigned count, BIT numeric)
 {
         unsigned        aBit;   // A register bit nr
@@ -126,7 +115,8 @@ void compareSourceWithDest(CPU *cpu, unsigned count, BIT numeric)
         unsigned        yc = 0; // local Y register
         unsigned        zc = 0; // local Z register
 
-        //printf("* count=%u, num=%u\n", count, numeric);
+//printf("cSWD\n");
+//        printf("* count=%u, num=%u\n", count, numeric);
         cpu->r.TFFF = false;
         streamAdjustSourceChar(cpu);
         streamAdjustDestChar(cpu);
@@ -203,7 +193,7 @@ void compareSourceWithDest(CPU *cpu, unsigned count, BIT numeric)
                                         yc = fieldIsolate(aw, aBit, 6);
                                         zc = fieldIsolate(bw, bBit, 6);
                                 }
-                                //printf("* still equal... yc=%03o zc=%03o\n", yc, zc);
+//                                printf("* still equal... yc=%03o zc=%03o\n", yc, zc);
                                 if (yc != zc) {
                                         // set Q03F to stop further comparison
                                         Q03F = true;
@@ -281,7 +271,7 @@ void fieldArithmetic(CPU *cpu, unsigned count, BIT adding)
         unsigned        yd;             // source digit
         BIT             zcompl = false; // complement destination digits
         unsigned        zd;             // destination digit
-
+//printf("fA\n");
         compareSourceWithDest(cpu, count, true);
         cpu->cycleCount += 2;   // approximate the timing thus far
         if (cpu->r.Q06F) {      // Q06F => count > 0, so there's characters to add
@@ -431,6 +421,7 @@ void streamBitsToDest(CPU *cpu, unsigned count, WORD48 mask)
         unsigned        bn;     // field starting bit number
         unsigned        fl;     // field length in bits
 
+//printf("sBTD\n");
         if (count) {
                 cpu->cycleCount += count;
                 if (!cpu->r.BROF) {
@@ -478,6 +469,7 @@ void streamProgramToDest(CPU *cpu, unsigned count)
         unsigned        pBit;   // P register bit nr
         WORD48          pw;     // current P register value
 
+//printf("sPTD\n");
         streamAdjustDestChar(cpu);
         if (count) { // count > 0
                 if (!cpu->r.BROF) {
@@ -541,6 +533,7 @@ void streamCharacterToDest(CPU *cpu, unsigned count)
         WORD48          bw;     // current B register word
         unsigned        c;      // current character
 
+//printf("sCTD %u '", count);
         streamAdjustSourceChar(cpu);
         streamAdjustDestChar(cpu);
         if (count) {
@@ -557,6 +550,7 @@ void streamCharacterToDest(CPU *cpu, unsigned count)
                 bw = cpu->r.B;
                 do {
                         c = fieldIsolate(aw, aBit, 6);
+//printf("%c", translatetable_bic2ascii[c]);
                         bw = fieldInsert(bw, bBit, 6, c);
                         --count;
                         if (bBit < 42) {
@@ -593,6 +587,7 @@ void streamCharacterToDest(CPU *cpu, unsigned count)
                 cpu->r.B = bw;
                 cpu->r.Y = c; // for display purposes only
         }
+//printf("'\n");
 }
 
 /*
@@ -608,6 +603,7 @@ void streamNumericToDest(CPU *cpu, unsigned count, unsigned zones)
         WORD48          bw;     // current B register word
         unsigned        c;      // current character
 
+//printf("sNTD %u %c '", count, zones ? 'Z' : 'N');
         streamAdjustSourceChar(cpu);
         streamAdjustDestChar(cpu);
         if (count) {
@@ -630,8 +626,10 @@ void streamNumericToDest(CPU *cpu, unsigned count, unsigned zones)
                 do {
                         c = fieldIsolate(aw, aBit, 6);
                         if (zones) { // transfer only the zone portion of the char
+//printf("%c", translatetable_bic2ascii[c >> 4]);
                                 bw = fieldInsert(bw, bBit, 2, c >> 4);
                         } else { // transfer the numeric portion with a zero zone
+//printf("%c", translatetable_bic2ascii[c & 0x0f]);
                                 bw = fieldInsert(bw, bBit, 6, (c & 0x0F));
                         }
                         --count;
@@ -672,6 +670,7 @@ void streamNumericToDest(CPU *cpu, unsigned count, unsigned zones)
                         cpu->r.TFFF = true; // last char had a negative sign
                 }
         }
+//printf("'\n");
 }
 
 /*
@@ -687,6 +686,7 @@ void streamBlankForNonNumeric(CPU *cpu, unsigned count)
         WORD48          bw;     // current B register word
         unsigned        c;      // current destination character
 
+//printf("sBFNN %u '", count);
         cpu->r.TFFF = true; // assume the count will be exhausted
         streamAdjustDestChar(cpu);
         if (count) {
@@ -698,6 +698,7 @@ void streamBlankForNonNumeric(CPU *cpu, unsigned count)
                 do {
                         cpu->cycleCount += 2; // approximate the timing
                         c = fieldIsolate(bw, bBit, 6);
+//printf("%c", translatetable_bic2ascii[c]);
                         if (c > 0 && c <= 9) {
                                 // is numeric and non-zero: stop blanking
                                 cpu->r.TFFF = false;
@@ -729,6 +730,7 @@ void streamBlankForNonNumeric(CPU *cpu, unsigned count)
                 cpu->r.B = bw;
                 cpu->r.Z = c; // for display purposes only
         }
+//printf("'\n");
 }
 
 /*
@@ -751,6 +753,7 @@ void streamInputConvert(CPU *cpu, unsigned count)
         WORD48  b = 0;          // local working copy of B
         WORD48  power = 1;      // A-register shift factor
 
+//printf("sIC %u '", count);
         streamAdjustSourceChar(cpu);
         if (cpu->r.BROF) {
                 storeBviaS(cpu); // [S] = B
@@ -770,6 +773,7 @@ void streamInputConvert(CPU *cpu, unsigned count)
                 // First, assemble the digits into B as 4-bit BCD
                 do {
                         b = (b << 4) | ((cpu->r.Y = fieldIsolate(cpu->r.A, cpu->r.G*6, 6)) & 0x0F);
+//printf("%c", translatetable_bic2ascii[cpu->r.Y]);
                         if (cpu->r.G < 7) {
                                 ++cpu->r.G;
                         } else {
@@ -817,6 +821,7 @@ void streamInputConvert(CPU *cpu, unsigned count)
                 storeAviaS(cpu); // [S] = A
                 ++cpu->r.S;
         }
+//printf("'\n");
 }
 
 /*
@@ -834,6 +839,7 @@ void streamOutputConvert(CPU *cpu, unsigned count)
         unsigned        d = 0;  // digit counter
         WORD48  power = 1;      // power-of-64 factor for result digits
 
+//printf("%08u sOC %d ", instr_count, count);
         cpu->r.TFFF = true; // set TFFF unless there's overflow
         streamAdjustDestChar(cpu);
         if (cpu->r.BROF) {
@@ -849,6 +855,7 @@ void streamOutputConvert(CPU *cpu, unsigned count)
                 if (!cpu->r.AROF) {
                         loadAviaM(cpu); // A = [M]
                 }
+//printf("A=%016llo '", cpu->r.A);
                 count = ((count-1) & 0x07) + 1; // limit the count to 8
                 a = cpu->r.A & MASK_MANTISSA; // get absolute mantissa value, ignore exponent
                 if (a) { // mantissa is non-zero, so conversion is required
@@ -877,7 +884,9 @@ void streamOutputConvert(CPU *cpu, unsigned count)
                 loadBviaS(cpu); // B = [S], restore original value of B
                 d = 48 - count*6; // starting bit in A
                 do {
-                        fieldTransfer(&cpu->r.B, cpu->r.K*6, 6, b, d);
+                        c = fieldIsolate(b, d, 6);
+//printf("%c", translatetable_bic2ascii[c]);
+                        cpu->r.B = fieldInsert(cpu->r.B, cpu->r.K*6, 6, c);
                         d += 6;
                         if (cpu->r.K < 7) {
                                 ++cpu->r.K;
@@ -893,4 +902,5 @@ void streamOutputConvert(CPU *cpu, unsigned count)
                         }
                 } while (--count);
         }
+//printf("'\n");
 }

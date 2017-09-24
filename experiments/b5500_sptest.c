@@ -50,11 +50,12 @@ char    opname[20];
 char    regname[20];
 unsigned wc;
 unsigned sc;
+unsigned instr_count;
 
 CENTRAL_CONTROL cc;
 CPU *cpu;
 
-void signalInterrupt(void)
+void signalInterrupt(const char *id, const char *cause)
 {
         printf("***** signalInterrupt *****\n");
 }

@@ -18,6 +18,9 @@
 #include <stdio.h>
 #include "b5500_common.h"
 
+#define DPRINTF if(0)printf
+#define TRCMEM false
+
 /*
  * Implements the 4441=CMN syllable
  */
@@ -68,8 +71,10 @@ void initiate(CPU *cpu, BIT forTest)
         BIT             saveAROF = 0;
         BIT             saveBROF = 0;
         unsigned        temp;
+        BIT             save_dotrcmem = dotrcmem;
 
-        printf("*** initiate ***\n");
+        DPRINTF("*\t%s: initiate forTest=%u\n", cpu->id, forTest);
+        dotrcmem = TRCMEM;
 
         if (cpu->r.AROF) {
                 cpu->r.B = bw = cpu->r.A;
@@ -109,6 +114,7 @@ void initiate(CPU *cpu, BIT forTest)
         }
 
         // restore the Interrupt Return Control Word (IRCW)
+        DPRINTF("\tIRCW");
         loadBviaS(cpu); // B = [S]
         --cpu->r.S;
         bw = cpu->r.B;
@@ -119,12 +125,14 @@ void initiate(CPU *cpu, BIT forTest)
         cpu->r.L = (bw & MASK_LREG) >> SHFT_LREG;
         cpu->r.V = (bw & MASK_VREG) >> SHFT_VREG;
         cpu->r.H = (bw & MASK_HREG) >> SHFT_HREG;
+        DPRINTF("\tloadP");
         loadPviaC(cpu); // load program word to P
         if (cpu->r.CWMF || forTest) {
                 saveBROF = (bw & MASK_RCWBROF) ? true : false;
         }
 
         // restore the Interrupt Control Word (ICW)
+        DPRINTF("\tICW ");
         loadBviaS(cpu); // B = [S]
         --cpu->r.S;
         bw = cpu->r.B;
@@ -138,6 +146,7 @@ void initiate(CPU *cpu, BIT forTest)
                 cpu->r.N = (bw & MASK_NREG) >> SHFT_NREG;
 
                 // restore the CM Interrupt Loop Control Word (ILCW)
+                DPRINTF("\tILCW");
                 loadBviaS(cpu); // B = [S]
                 --cpu->r.S;
                 bw = cpu->r.B;
@@ -146,12 +155,14 @@ void initiate(CPU *cpu, BIT forTest)
 
                 // restore the B register
                 if (saveBROF || forTest) {
+                        DPRINTF("\tload B");
                         loadBviaS(cpu); // B = [S]
                         --cpu->r.S;
                 }
 
                 // restore the A register
                 if (saveAROF || forTest) {
+                        DPRINTF("\tload A");
                         loadAviaS(cpu); // A = [S]
                         --cpu->r.S;
                 }
@@ -184,6 +195,7 @@ void initiate(CPU *cpu, BIT forTest)
         } else {
                 cpu->r.NCSF = 1;
         }
+        dotrcmem = save_dotrcmem;
 }
 
 /*
@@ -192,15 +204,13 @@ void initiate(CPU *cpu, BIT forTest)
  */
 void initiateP2(CPU *cpu)
 {
-        printf("*** initiateP2 ***\n");
-
+        DPRINTF("*\t%s: initiateP2\n", cpu->id);
         cpu->r.NCSF = 0;        // make sure P2 is in Control State to execute the IP1 & access low mem
         cpu->r.M = 0x08;        // address of the INCW
         loadBviaM(cpu); // B = [M]
         cpu->r.AROF = 0;        // make sure A is invalid
         cpu->r.T = 04111;       // inject 4111=IP1 into P2's T register
         cpu->r.TROF = 1;
-
         // Now start scheduling P2 on the Javascript thread
         start(cpu);
 }
@@ -210,8 +220,7 @@ void initiateP2(CPU *cpu)
  */
 void start(CPU *cpu)
 {
-        printf("*** start ***\n");
-
+        DPRINTF("*\t%s: start\n", cpu->id);
         cpu->busy = true;
 }
 
@@ -220,8 +229,7 @@ void start(CPU *cpu)
  */
 void stop(CPU *cpu)
 {
-        printf("*** stop ***\n");
-
+        DPRINTF("*\t%s: stop\n", cpu->id);
         //cpu->r.T = 0;
         //cpu->r.TROF = 0;      // idle the processor
         //cpu->r.PROF = 0;
@@ -231,8 +239,7 @@ void stop(CPU *cpu)
 
 void haltP2(CPU *cpu)
 {
-        printf("*** haltP2 ***\n");
-
+        DPRINTF("*\t%s: haltP2\n", cpu->id);
 }
 
 /*
@@ -240,7 +247,7 @@ void haltP2(CPU *cpu)
  */
 void preset(CPU *cpu, ADDR15 runAddr)
 {
-        printf("*** preset ***\n");
+        DPRINTF("*\t%s: preset %05o\n", cpu->id, runAddr);
 
         cpu->r.C = runAddr;     // starting execution address
         cpu->r.L = 1;           // preset L to point to the second syllable
@@ -277,9 +284,9 @@ void run(CPU *cpu)
 ***************************************************************/
 
                 // is there an interrupt
-                if ((cpu->isP1 ?
-                        CC->IAR : (cpu->r.I || CC->HP2F))
-                                && cpu->r.NCSF) {
+                if (cpu->r.NCSF && (cpu->isP1 ?
+                        CC->IAR :
+                        (cpu->r.I || CC->HP2F))) {
                         // there's an interrupt and we're in Normal State
                         // reset Q09F (R-relative adder mode) and
                         // set Q07F (hardware-induced SFI) (for display only)
@@ -288,7 +295,7 @@ void run(CPU *cpu)
                         cpu->r.T = 03011; // inject 3011=SFI into T
                         // call directly to avoid resetting registers at top
                         // of loop
-                        storeForInterrupt(cpu, true, false);
+                        storeForInterrupt(cpu, true, false, "atSECL");
                 } else {
                         // otherwise, fetch the next instruction
                         if (!cpu->r.PROF) {
@@ -314,7 +321,7 @@ void run(CPU *cpu)
                                 cpu->r.PROF = 0;
                                 // assume no Inhibit Fetch for now and bump C
                                 if (++cpu->r.C > 077777) {
-                                        printf("C reached end of memory\n");
+                                        DPRINTF("C reached end of memory\n");
                                         cpu->r.C = 0;
                                         stop(cpu);
                                 }

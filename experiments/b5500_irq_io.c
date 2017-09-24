@@ -22,6 +22,9 @@
 #include <stdlib.h>
 #include "b5500_common.h"
 
+#define DPRINTF if(0)printf
+#define TRCMEM false
+
 /*
  * Tests and returns the presence bit [2:1] of the "word" parameter,
  * which it assumes is a control word. If [2:1] is 0, the p-bit interrupt
@@ -32,9 +35,12 @@ BIT presenceTest(CPU *cpu, WORD48 word)
         if (word & MASK_PBIT)
                 return true;
 
+#if DEBUG
+        DPRINTF("*\t%s: presenceTest failed %016llo\n", cpu->id, word);
+#endif
         if (cpu->r.NCSF) {
                 cpu->r.I = (cpu->r.I & 0x0F) | 0x70; // set I05/6/7: p-bit
-                signalInterrupt();
+                signalInterrupt(cpu->id, "NOT PBIT");
         }
         return false;
 }
@@ -44,13 +50,17 @@ BIT presenceTest(CPU *cpu, WORD48 word)
  * common to it. "forced" implies Q07F: a hardware-induced SFI syllable.
  * "forTest" implies use from SFT
  */
-void storeForInterrupt(CPU *cpu, BIT forced, BIT forTest)
+void storeForInterrupt(CPU *cpu, BIT forced, BIT forTest, const char *cause)
 {
         BIT             saveAROF = cpu->r.AROF;
         BIT             saveBROF = cpu->r.BROF;
         unsigned        temp;
+        BIT             save_dotrcmem = dotrcmem;
 
-        printf("*** storeForInterrupt ***\n");
+#if DEBUG
+        DPRINTF("*\t%s: %s storeForInterrupt forced=%u forTest=%u\n", cpu->id, cause, forced, forTest);
+#endif
+        dotrcmem = TRCMEM;
 
         if (forced || forTest) {
                 cpu->r.NCSF = 0; // switch to Control State
@@ -58,17 +68,20 @@ void storeForInterrupt(CPU *cpu, BIT forced, BIT forTest)
 
         if (cpu->r.CWMF) {
                 // in Character Mode, get the correct TOS address from X
+                // exchange S with F-field of X
                 temp = cpu->r.S;
                 cpu->r.S = (cpu->r.X & MASK_FREG) >> SHFT_FREG;
-                cpu->r.X = (cpu->r.X & MASK_CREG) | (temp << SHFT_FREG);
+                cpu->r.X = (cpu->r.X & ~MASK_FREG) | (temp << SHFT_FREG);
 
                 if (saveAROF || forTest) {
                         ++cpu->r.S;
+                        DPRINTF("\tsave A");
                         storeAviaS(cpu); // [S] = A
                 }
 
                 if (saveBROF || forTest) {
                         ++cpu->r.S;
+                        DPRINTF("\tsave B");
                         storeBviaS(cpu); // [S] = B
                 }
 
@@ -80,18 +93,19 @@ void storeForInterrupt(CPU *cpu, BIT forced, BIT forTest)
                 if (saveAROF)
                         cpu->r.B |= MASK_ILCWAROF;
                 ++cpu->r.S;
-                if (dotrcins)
-                        printf("ILCW:");
+                DPRINTF("\tILCW");
                 storeBviaS(cpu); // [S] = ILCW
         } else {
                 // in word mode, save B and A if not empty
                 if (saveBROF || forTest) {
                         ++cpu->r.S;
+                        DPRINTF("\tsave B");
                         storeBviaS(cpu); // [S] = B
                 }
 
                 if (saveAROF || forTest) {
                         ++cpu->r.S;
+                        DPRINTF("\tsave A");
                         storeAviaS(cpu); // [S] = A
                 }
         }
@@ -111,8 +125,7 @@ void storeForInterrupt(CPU *cpu, BIT forced, BIT forTest)
         if (cpu->r.MSFF)
                 cpu->r.B |= MASK_MSFF;
         ++cpu->r.S;
-        if (dotrcins)
-                printf("ICW: ");
+        DPRINTF("\tICW ");
         storeBviaS(cpu); // [S] = ICW
 
         // store Interrupt Return Control Word (IRCW)
@@ -130,19 +143,21 @@ void storeForInterrupt(CPU *cpu, BIT forced, BIT forTest)
         if (saveBROF)
                 cpu->r.B |= MASK_RCWBROF;
         ++cpu->r.S;
-        if (dotrcins)
-                printf("IRCW:");
+        DPRINTF("\tIRCW");
         storeBviaS(cpu); // [S] = IRCW
 
         if (cpu->r.CWMF) {
                 // if CM, get correct R value from last MSCW
+                // exchange S with F
                 temp = cpu->r.F;
                 cpu->r.F = cpu->r.S;
                 cpu->r.S = temp;
 
+                DPRINTF("\tlast RCW ");
                 loadBviaS(cpu); // B = [S]: get last RCW
                 cpu->r.S = (cpu->r.B & MASK_FREG) >> SHFT_FREG;
 
+                DPRINTF("\tlast MSCW");
                 loadBviaS(cpu); // B = [S]: get last MSCW
                 cpu->r.R = (cpu->r.B & MASK_RREG) >> SHFT_RREG;
                 cpu->r.S = cpu->r.F;
@@ -178,46 +193,45 @@ void storeForInterrupt(CPU *cpu, BIT forced, BIT forTest)
         if (cpu->r.Q09F)
                 cpu->r.B |= MASK_INCWQ09F;
         cpu->r.M = (cpu->r.R<<6) + 8; // store initiate word at R+@10
-        if (dotrcins)
-                printf("INCW:");
+        DPRINTF("\tINCW");
         storeBviaM(cpu); // [M] = INCW
 
         cpu->r.M = 0;
         cpu->r.R = 0;
-        cpu->r.MSFF = 0;
-        cpu->r.SALF = 0;
-        cpu->r.BROF = 0;
-        cpu->r.AROF = 0;
+        cpu->r.MSFF = false;
+        cpu->r.SALF = false;
+        cpu->r.BROF = false;
+        cpu->r.AROF = false;
         if (forTest) {
                 cpu->r.TM = 0;
-                cpu->r.MROF = 0;
-                cpu->r.MWOF = 0;
+                cpu->r.MROF = false;
+                cpu->r.MWOF = false;
         }
 
         if (forced || forTest) {
-                cpu->r.CWMF = 0;
+                cpu->r.CWMF = false;
         }
 
         if (cpu->isP1) {
                 // if it's P1
                 if (forTest) {
+                        DPRINTF("\tload DD");
                         loadBviaM(cpu); // B = [M]: load DD for test
                         cpu->r.C = (cpu->r.B & MASK_CREG) >> SHFT_CREG;
                         cpu->r.L = 0;
-                        cpu->r.PROF = 0; // require fetch at SECL
+                        cpu->r.PROF = false; // require fetch at SECL
                         cpu->r.G = 0;
                         cpu->r.H = 0;
                         cpu->r.K = 0;
                         cpu->r.V = 0;
                 } else {
-                        if (dotrcins)
-                                printf("injected ITI\n");
                         cpu->r.T = 0211; // inject 0211=ITI into P1's T register
                 }
         } else {
                 // if it's P2
                 stop(cpu); // idle the P2 processor
-                CC->P2BF = 0; // tell CC and P1 we've stopped
+                CC->P2BF = false; // tell CC and P1 we've stopped
         }
+        dotrcmem = save_dotrcmem;
 }
 

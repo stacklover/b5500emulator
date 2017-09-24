@@ -431,7 +431,7 @@ void singlePrecisionAdd(CPU *cpu, BIT add)
                         // signal overflow here
                         // set I05/6/8: exponent-overflow
                         cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_EXPO;
-                        signalInterrupt();
+                        signalInterrupt(cpu->id, "ADD EXP OFL");
                 }
         }
         // underflow cannot happen here
@@ -590,7 +590,7 @@ exit1:
                         if (cpu->r.NCSF) {
                                 // set I05/6/8: exponent-overflow
                                 cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_EXPO;
-                                signalInterrupt();
+                                signalInterrupt(cpu->id, "MUL EXP OFL");
                         }
                 } else if (B.e < -63) {
                         // mod the exponent
@@ -598,7 +598,7 @@ exit1:
                         if (cpu->r.NCSF) {
                                 // set I06/8: exponent-underflow
                                 cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_EXPU;
-                                signalInterrupt();
+                                signalInterrupt(cpu->id, "MUL EXP UFL");
                         }
                 }
         }
@@ -641,7 +641,7 @@ void singlePrecisionDivide(CPU *cpu)
                 if (cpu->r.NCSF) {
                         // set I05/7/8: divide by zero
                         cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_DIVZ;
-                        signalInterrupt();
+                        signalInterrupt(cpu->id, "DIV BY ZERO");
                 }
                 return;
         }
@@ -744,7 +744,7 @@ void singlePrecisionDivide(CPU *cpu)
                 if (cpu->r.NCSF) {
                         // set I05/6/8: exponent-overflow
                         cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_EXPO;
-                        signalInterrupt();
+                        signalInterrupt(cpu->id, "DIV EXP OFL");
                 }
         } else if (B.e < -63) {
                 // mod the exponent
@@ -752,7 +752,7 @@ void singlePrecisionDivide(CPU *cpu)
                 if (cpu->r.NCSF) {
                         // set I06/8: exponent-underflow
                         cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_EXPU;
-                        signalInterrupt();
+                        signalInterrupt(cpu->id, "DIV EXP UFL");
                 }
         }
 
@@ -796,7 +796,7 @@ void integerDivide(CPU *cpu)
                 if (cpu->r.NCSF) {
                         // set I05/7/8: divide by zero
                         cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_DIVZ;
-                        signalInterrupt();
+                        signalInterrupt(cpu->id, "IDIV BY ZERO");
                 }
                 return;
         }
@@ -885,7 +885,7 @@ void integerDivide(CPU *cpu)
                         // integer overflow result
                         // set I07/8: integer-overflow
                         cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_INTO;
-                        signalInterrupt();
+                        signalInterrupt(cpu->id, "IDIV INT OFL");
                 }
                 B.e = (B.e-A.e) & 63;
         }
@@ -934,7 +934,7 @@ void remainderDivide(CPU *cpu)
                 if (cpu->r.NCSF) {
                         // set I05/7/8: divide by zero
                         cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_DIVZ;
-                        signalInterrupt();
+                        signalInterrupt(cpu->id, "REM BY ZERO");
                 }
                 return;
         }
@@ -1025,7 +1025,7 @@ void remainderDivide(CPU *cpu)
                 if (cpu->r.NCSF) {
                         // set I06/8: exponent-underflow
                         cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_EXPU;
-                        signalInterrupt();
+                        signalInterrupt(cpu->id, "REM EXP UFL");
                 }
         } else if (A.e == B.e) {
                 // integer result developed
@@ -1042,7 +1042,7 @@ void remainderDivide(CPU *cpu)
                         // integer overflow result
                         // set I07/8: integer-overflow
                         cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_INTO;
-                        signalInterrupt();
+                        signalInterrupt(cpu->id, "REM INT OFL");
                 }
                 // result in B will be all zeroes
                 B.m = 0;

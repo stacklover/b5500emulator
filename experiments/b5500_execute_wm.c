@@ -15,7 +15,12 @@
 *   changed "this" to "cpu" to avoid errors when using g++
 ***********************************************************************/
 
+#include <stdio.h>
 #include "b5500_common.h"
+
+#define DEBUG_TRB false
+#define DEBUG_FCE true
+#define DEBUG_FCL true
 
 void b5500_execute_wm(CPU *cpu)
 {
@@ -143,7 +148,7 @@ void b5500_execute_wm(CPU *cpu)
                                                 // set I07/5: program release
                                                 cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_PREL;
                                         }
-                                        signalInterrupt();
+                                        signalInterrupt(cpu->id, "PRL");
                                         cpu->r.A = cpu->r.M;
                                         // store IOD address in PRT[9]
                                         cpu->r.M = (cpu->r.R<<6) + 9;
@@ -189,7 +194,7 @@ void b5500_execute_wm(CPU *cpu)
                                 }
                                 // set I07: communicate
                                 cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_COM;
-                                signalInterrupt();
+                                signalInterrupt(cpu->id, "COM");
                         }
                         break;
                 case 021: // 2111: IOR=I/O Release
@@ -230,10 +235,10 @@ void b5500_execute_wm(CPU *cpu)
                         }
                         break;
                 case 030: // 3011: SFI=Store for Interrupt
-                        storeForInterrupt(cpu, false, false);
+                        storeForInterrupt(cpu, false, false, "wmSFI");
                         break;
                 case 034: // 3411: SFT=Store for Test
-                        storeForInterrupt(cpu, false, true);
+                        storeForInterrupt(cpu, false, true, "wmSFT");
                         break;
                 case 041: // 4111: IP1=Initiate Processor 1
                         // control-state only
@@ -800,14 +805,14 @@ common_branch_word:
                 }
                 break;
         case 055: // XX55: NOP & DIA=Dial A ops
-                if (opcode & 0xFC0) {
+                if (variant) {
                         cpu->r.G = variant >> 3;
                         cpu->r.H = variant & 7;
-                // else // 0055: NOP=no operation (the official one, at least)
+                } else { // 0055: NOP=no operation (the official one, at least)
                 }
                 break;
         case 061: // XX61: XRT & DIB=Dial B ops
-                if (opcode & 0xFC0) {
+                if (variant) {
                         cpu->r.K = variant >> 3;
                         cpu->r.V = variant & 7;
                 } else { // 0061=XRT: temporarily set full PRT addressing mode
@@ -816,60 +821,109 @@ common_branch_word:
                 }
                 break;
         case 065: // XX65: TRB=Transfer Bits
-                adjustABFull(cpu);
-                if (variant > 0) {
-                        t1 = cpu->r.G*6 + cpu->r.H; // A register starting bit nr
-                        if (t1+variant > 48) {
-                                variant = 48-t1;
-                        }
-                        t2 = cpu->r.K*6 + cpu->r.V; // B register starting bit nr
-                        if (t2+variant > 48) {
-                                variant = 48-t2;
-                        }
-                        fieldTransfer(&cpu->r.B, t2, variant, cpu->r.A, t1);
+#if DEBUG_TRB
+                printf("TRB %2u S=%02u..%02u D=%02u..%02u A=%016llo B=%016llo", variant,
+                        47-(cpu->r.G*6+cpu->r.H), 47-(cpu->r.G*6+cpu->r.H)-variant+1,
+                        47-(cpu->r.K*6+cpu->r.V), 47-(cpu->r.K*6+cpu->r.V)-variant+1,
+                        cpu->r.A, cpu->r.B);
+#endif
+                // transfer bits from A to B
+                // starting in A at position G/H
+                // starting in B at position K/V
+                // stopping when either variant(aka count) is exhausted
+                // or the last bit of either A or B is reached
+                // note: bit numbering is 1..48
+                adjustABFull(cpu);  // makes sure A and B are filled
+                // do it the hard way.. BIT-WISE!
+                t1 = MASK_FLAG >> (cpu->r.G*6 + cpu->r.H); // A register starting bit mask
+                t2 = MASK_FLAG >> (cpu->r.K*6 + cpu->r.V); // B register starting bit mask
+                // note: t1/t2 turn zero when the test bit is shifted out at the right
+                while (variant && t1 && t2) {
+                        if (cpu->r.A & t1)
+                                cpu->r.B |= t2;
+                        else
+                                cpu->r.B &= ~t2;
+                        --variant;
+                        t1 >>= 1;
+                        t2 >>= 1;
+                        ++cpu->cycleCount; // approximate the shift counts
                 }
                 cpu->r.AROF = false;
-                cpu->cycleCount += variant + cpu->r.G + cpu->r.K;       // approximate the shift counts
+#if DEBUG_TRB
+                printf(" B=%016llo\n", cpu->r.B);
+#endif
                 break;
         case 071: // XX71: FCL=Compare Field Low
+#if DEBUG_FCL
+                printf("FCL %2u S=%02u..%02u D=%02u..%02u A=%016llo B=%016llo", variant,
+                        47-(cpu->r.G*6+cpu->r.H), 47-(cpu->r.G*6+cpu->r.H)-variant+1,
+                        47-(cpu->r.K*6+cpu->r.V), 47-(cpu->r.K*6+cpu->r.V)-variant+1,
+                        cpu->r.A, cpu->r.B);
+#endif
+                // compare bits from A with B
+                // starting in A at position G/H
+                // starting in B at position K/V
+                // stopping when either variant(aka count) is exhausted
+                // or the last bit of either A or B is reached
+                // or A > B is detected
+                // note: bit numbering is 1..48
                 adjustABFull(cpu);
-                t1 = cpu->r.G*6 + cpu->r.H;     // A register starting bit nr
-                if (t1+variant > 48) {
-                        variant = 48-t1;
+                // do it the hard way.. BIT-WISE!
+                t1 = MASK_FLAG >> (cpu->r.G*6 + cpu->r.H); // A register starting bit mask
+                t2 = MASK_FLAG >> (cpu->r.K*6 + cpu->r.V); // B register starting bit mask
+                // note: t1/t2 turn zero when the test bit is shifted out at the right
+                while (variant && t1 && t2) {
+                        if (cpu->r.A & t1 && !(cpu->r.B & t2)) {
+                                // A > B
+                                cpu->r.A = true;
+                                goto exit_fcl;
+                        }
+                        --variant;
+                        t1 >>= 1;
+                        t2 >>= 1;
+                        ++cpu->cycleCount; // approximate the shift counts
                 }
-                t2 = cpu->r.K*6 + cpu->r.V;     // B register starting bit nr
-                if (t2+variant > 48) {
-                        variant = 48-t2;
-                }
-                if (variant == 0) {
-                        cpu->r.A = true;
-                } else if (fieldIsolate(cpu->r.B, t2, variant) < fieldIsolate(cpu->r.A, t1, variant)) {
-                        cpu->r.A = true;
-                } else {
-                        cpu->r.A = false;
-                }
-                cpu->cycleCount += variant + cpu->r.G + cpu->r.K;       // approximate the shift counts
+                cpu->r.A = false;
+exit_fcl:
+#if DEBUG_FCL
+                printf(" A=%llo\n", cpu->r.A);
+#endif
                 break;
         case 075: // XX75: FCE=Compare Field Equal
+#if DEBUG_FCE
+                printf("FCE %2u S=%02u..%02u D=%02u..%02u A=%016llo B=%016llo", variant,
+                        47-(cpu->r.G*6+cpu->r.H), 47-(cpu->r.G*6+cpu->r.H)-variant+1,
+                        47-(cpu->r.K*6+cpu->r.V), 47-(cpu->r.K*6+cpu->r.V)-variant+1,
+                        cpu->r.A, cpu->r.B);
+#endif
+                // compare bits from A with B
+                // starting in A at position G/H
+                // starting in B at position K/V
+                // stopping when either variant(aka count) is exhausted
+                // or the last bit of either A or B is reached
+                // or A <> B is detected
+                // note: bit numbering is 1..48
                 adjustABFull(cpu);
-                t1 = cpu->r.G*6 + cpu->r.H;     // A register starting bit nr
-                if (t1+variant > 48) {
-                        variant = 48-t1;
+                // do it the hard way.. BIT-WISE!
+                t1 = MASK_FLAG >> (cpu->r.G*6 + cpu->r.H); // A register starting bit mask
+                t2 = MASK_FLAG >> (cpu->r.K*6 + cpu->r.V); // B register starting bit mask
+                // note: t1/t2 turn zero when the test bit is shifted out at the right
+                while (variant && t1 && t2) {
+                        if (!(cpu->r.A & t1) != !(cpu->r.B & t2)) {
+                                // A <> B
+                                cpu->r.A = false;
+                                goto exit_fce;
+                        }
+                        --variant;
+                        t1 >>= 1;
+                        t2 >>= 1;
+                        ++cpu->cycleCount; // approximate the shift counts
                 }
-                t2 = cpu->r.K*6 + cpu->r.V;     // B register starting bit nr
-                if (t2+variant > 48) {
-                        variant = 48-t2;
-                }
-                if (variant == 0) {
-                        cpu->r.A = true;
-                } else if (fieldIsolate(cpu->r.B, t2, variant) == fieldIsolate(cpu->r.A, t1, variant)) {
-                        cpu->r.A = true;
-                } else {
-                        cpu->r.A = false;
-                }
-                cpu->cycleCount += variant + cpu->r.G + cpu->r.K;       // approximate the shift counts
-                break;
-        default:
+                cpu->r.A = true;
+exit_fce:
+#if DEBUG_FCE
+                printf(" A=%llo\n", cpu->r.A);
+#endif
                 break;
                 // anything else is a no-op
         } // end switch for non-LITC/OPDC/DESC operators
