@@ -1,0 +1,8 @@
+? EXECUTE ESPOL/DISK
+? FILE DISK=COLD/NEW SERIAL
+? FILE TAPE=SYMBOL/COOL SERIAL
+? DATA CARD
+$ TAPE LIST SINGLE DECK PRT DEBUGN
+$ SET COOL=FALSE
+                                                                        99999999
+? END

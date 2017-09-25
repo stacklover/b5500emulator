@@ -30,6 +30,8 @@ int dotrcmem     = false;       /* trace memory accesses */
 int dolistsource = false;       /* list source line */
 int dotrcins     = false;       /* trace instruction execution */
 int realspo      = false;       /* print to real SPO */
+int cardload     = false;       /* card load select switch */
+
 // never set
 int dotrcmat     = false;       /* trace math operations */
 int emode        = false;       /* emode math */
@@ -103,6 +105,61 @@ UNIT unit[32][2] = {
         /*29*/ {{"MTS", 47-33}, {"MTS", 47-33}},
         /*30*/ {{"SPO", 47-22}, {"SPO", 47-22}},
         /*31*/ {{"MTT", 47-32}, {"MTT", 47-32}},
+};
+
+/*
+ * table of IRQs
+ * indexed by cell address - 020
+ */
+IRQ irq[48] = {
+        /*20*/ "NA20",
+        /*21*/ "NA21",
+        /*22*/ "TIMER",
+        /*23*/ "I/O BUSY",
+        /*24*/ "KBD REQ",
+        /*25*/ "PTR1 FIN",
+        /*26*/ "PTR2 FIN",
+        /*27*/ "I/O1 FIN",
+        /*30*/ "I/O2 FIN",
+        /*31*/ "I/O3 FIN",
+        /*32*/ "I/O4 FIN",
+        /*33*/ "P2 BUSY",
+        /*34*/ "DCT IRQ",
+        /*35*/ "NA35",
+        /*36*/ "DF1 RCHK FIN",
+        /*37*/ "DF2 RCHK FIN",
+        /*40*/ "P2 MPE",
+        /*41*/ "P2 INVA",
+        /*42*/ "P2 SOVF",
+        /*43*/ "NA43",
+        /*44*/ "P2 COM",
+        /*45*/ "P2 PRL",
+        /*46*/ "P2 CONT",
+        /*47*/ "P2 PBIT",
+        /*50*/ "P2 FLAG",
+        /*51*/ "P2 INVIDX",
+        /*52*/ "P2 EXPO",
+        /*53*/ "P2 EXPU",
+        /*54*/ "P2 INTO",
+        /*55*/ "P2 DIV0",
+        /*56*/ "NA56",
+        /*57*/ "NA57",
+        /*60*/ "P1 MPE",
+        /*61*/ "P1 INVA",
+        /*62*/ "P1 SOVF",
+        /*63*/ "NA63",
+        /*64*/ "P1 COM",
+        /*65*/ "P1 PRL",
+        /*66*/ "P1 CONT",
+        /*67*/ "P1 PBIT",
+        /*70*/ "P1 FLAG",
+        /*71*/ "P1 INVIDX",
+        /*72*/ "P1 EXPO",
+        /*73*/ "P1 EXPU",
+        /*74*/ "P1 INTO",
+        /*75*/ "P1 DIV0",
+        /*76*/ "NA76",
+        /*77*/ "NA77",
 };
 
 int openfile(FILEHANDLE *f, const char *mode) {
@@ -188,7 +245,7 @@ void signalInterrupt(const char *id, const char *cause) {
                 CC->interruptMask |= (1ll << CC->IAR);
                 CC->interruptLatch |= (1ll << CC->IAR);
         }
-
+#if 1
         if (spiofile.trace) {
                 fprintf(spiofile.trace, "%08u %s signalInterrupt %s P1.I=%02x P2.I=%02x MASK=%012llx LATCH=%012llx\n",
                         instr_count, id, cause,
@@ -196,6 +253,7 @@ void signalInterrupt(const char *id, const char *cause) {
                         CC->interruptMask,
                         CC->interruptLatch);
         }
+#endif
 }
 
 void getlin(FILEHANDLE *f) { /* get next line */
@@ -263,8 +321,10 @@ WORD48 card_read(WORD48 iocw) {
         acc.id = "CRA";
         acc.MAIL = false;
         acc.addr = iocw & MASK_ADDR;
-        if (cardfile.fp == NULL)
-                return result | MASK_IORNRDY | (acc.addr << SHFT_ADDR);
+        if (cardfile.fp == NULL) {
+                //unitsready &= ~(1ll << unit[10][1].readybit);
+                return result | MASK_IORD21 | (acc.addr << SHFT_ADDR);
+        }
         if (iocw & MASK_IODMI)
                 return result | (acc.addr << SHFT_ADDR);
         if (iocw & MASK_IODBINARY)
@@ -274,8 +334,7 @@ WORD48 card_read(WORD48 iocw) {
 
         getlin(&cardfile);
         if (cardfile.eof) {
-                unitsready &= ~(1ll << unit[10][1].readybit);
-                return result | MASK_IORNRDY | (acc.addr << SHFT_ADDR);
+                return result | MASK_IORD21 | (acc.addr << SHFT_ADDR);
         }
         if (cardfile.trace) {
                 fprintf(cardfile.trace, "%08u %s -> %05o\n", instr_count, linebuf, acc.addr);
@@ -287,6 +346,8 @@ WORD48 card_read(WORD48 iocw) {
                 printf("*\tERROR: binary card incorrect length(%u). abort\n", strlen(linebuf));
                 exit(0);
         }
+        if (linebuf[0] == '?')
+                result |= MASK_IORD19;
         while (chars > 0) {
                 acc.word = getword(060);
                 chars -= 8;
@@ -348,6 +409,54 @@ done:   *linep++ = 0;
                 }
         }
         return (iocw & (MASK_IODUNIT | MASK_IODREAD)) | acc.addr;
+}
+
+char spoinbuf[80];
+char *spoinp;
+
+WORD48 spo_read(WORD48 iocw) {
+        int count;
+        ACCESSOR acc;
+
+        acc.id = "SPO";
+        acc.MAIL = false;
+        acc.addr = iocw & MASKMEM;
+        spoinp = spoinbuf;
+
+        // convert until EOL or any other control char found
+        // checking at end of loop ensures at least one word with GM is written to memory
+        do {
+                acc.word = 0ll;
+                for (count=0; count<8; count++) {
+                          acc.word <<= 6;
+                          if (*spoinp >= ' ') {
+                                  // printable char
+                                  acc.word |= translatetable_ascii2bic[*spoinp++ & 0x7f];
+                          } else {
+                                  // EOL or other char, fill word with GM
+                                  acc.word |= 037;
+                          }
+                }
+                // store the complete word
+                store(&acc);
+                acc.addr++;
+        } while (*spoinp >= ' ');
+        return (iocw & (MASK_IODUNIT | MASK_IODREAD)) | acc.addr;
+}
+
+void spo_test(void) {
+        // check, if a user has entered a line on stdin
+        struct timeval tv = {0, 0};
+        fd_set fds;
+        FD_ZERO(&fds);
+        FD_SET(0, &fds);
+        if (select(1, &fds, NULL, NULL, &tv)) {
+                spoinp = fgets(spoinbuf, sizeof spoinbuf, stdin);
+                // signal input request
+                CC->CCI05F = true;
+                signalInterrupt("SPO", "INPUT REQUEST");
+                // the input line is read later, once the IRQ is handled by the MCP
+        }
 }
 
 BIT readcheck = false;
@@ -705,7 +814,7 @@ retresult:
 
 void clearInterrupt(void) {
         // Resets an interrupt based on the current setting of CC->IAR, then
-        // reprioritices any remaining interrupts, leaving the new vector address
+        // re-prioritices any remaining interrupts, leaving the new vector address
         // in CC->IAR
         if (CC->IAR) {
                 // current active IRQ
@@ -799,12 +908,12 @@ void clearInterrupt(void) {
                         break;
                 }
         }
-
+#if 0
         if (spiofile.trace) {
                 fprintf(spiofile.trace, "%08u clearInterrupt P1.I=%02x P2.I=%02x MASK=%012llx LATCH=%012llx\n",
                         instr_count, P[0]->r.I, P[1]->r.I, CC->interruptMask, CC->interruptLatch);
         }
-
+#endif
         signalInterrupt("CC", "AGAIN");
 };
 
@@ -813,8 +922,8 @@ void interrogateInterrupt(CPU *cpu) {
         // control-state only
         if (CC->IAR && !cpu->r.NCSF) {
                 if (spiofile.trace) {
-                        fprintf(spiofile.trace, "%08u ITI IAR=%05o\n",
-                                instr_count, CC->IAR);
+                        fprintf(spiofile.trace, "%08u ITI IAR=%03o(%s)\n",
+                                instr_count, CC->IAR, irq[CC->IAR-020].name);
                 }
                 cpu->r.C = CC->IAR;
                 cpu->r.L = 0;
@@ -826,12 +935,13 @@ void interrogateInterrupt(CPU *cpu) {
                 cpu->r.PROF = false;
                 return;
         }
-
+#if 0
         // elaborate trace
         if (spiofile.trace) {
                 fprintf(spiofile.trace, "%08u ITI NO IRQ PENDING\n",
                         instr_count);
         }
+#endif
 }
 
 void initiateIO(CPU *cpu) {
@@ -924,7 +1034,7 @@ void initiateIO(CPU *cpu) {
                 break;
         case 30: // SPO
                 if (iocw & MASK_IODREAD)
-                        ;
+                        result = spo_read(iocw);
                 else
                         result = spo_write(iocw);
                 break;
@@ -945,10 +1055,11 @@ void initiateIO(CPU *cpu) {
 
 WORD48 interrogateUnitStatus(CPU *cpu) {
         static int td = 0;
+#if 0
         // elaborate trace
         if (spiofile.trace)
                 fprintf(spiofile.trace, "%08u TUS=%016llo\n", instr_count, unitsready);
-
+#endif
         // simulate timer
         if (++td > 20000) {
                 CC->TM++;
@@ -969,9 +1080,11 @@ WORD48 interrogateIOChannel(CPU *cpu) {
         // report I/O control unit 1
         result = 1ll;
 
+#if 0
         // elaborate trace
         if (spiofile.trace)
                 fprintf(spiofile.trace, "%08u TIO=%llu\n", instr_count, result);
+#endif
         return result;
 }
 
@@ -983,10 +1096,13 @@ WORD48 readTimer(CPU *cpu) {
         else
                 result =  CC->TM;
 
+#if 0
         // elaborate trace
         if (spiofile.trace)
                 fprintf(spiofile.trace, "%08u RTR=%03llo\n", instr_count, result);
-        return result;}
+#endif
+        return result;
+}
 
 const char *relsym(unsigned offset, BIT cEnabled) {
         static char buf[32];
@@ -1079,17 +1195,9 @@ void codesym(ADDR15 c, WORD2 l) {
                 printf("%08u (%05o:%o) ", instr_count, c, l);
 }
 
-void printinstr(ADDR15 wc, WORD2 sc, BIT cwmf)
+void printinstr(WORD12 code, BIT cwmf)
 {
         const INSTRUCTION *ip;
-        WORD12 code = 0;
-
-        switch (sc) {
-        case 0: code = (MAIN[wc] >> 36) & 0xfff; break;
-        case 1: code = (MAIN[wc] >> 24) & 0xfff; break;
-        case 2: code = (MAIN[wc] >> 12) & 0xfff; break;
-        case 3: code = (MAIN[wc] >> 0) & 0xfff; break;
-        }
         // search instruction table
         ip = instruction_table;
         while (ip->name != 0) {
@@ -1230,7 +1338,7 @@ printf("runn: C=%05o L=%o T=%04o\n", cpu->r.C, cpu->r.L, cpu->r.T);
                 instr_count++;
 #if 0
                 // check for instruction count
-                if (instr_count > 100) {
+                if (instr_count > 800000) {
                         dotrcmem = dodmpins = dotrcins = false;
                         memdump();
                         closefile(&tapefile);
@@ -1238,7 +1346,7 @@ printf("runn: C=%05o L=%o T=%04o\n", cpu->r.C, cpu->r.L, cpu->r.T);
                         closefile(&cardfile);
                         closefile(&spiofile);
                         exit (0);
-                } else if (instr_count >= 0) {
+                } else if (instr_count >= 680000) {
                         dotrcmem = dodmpins = dotrcins = true;
                 }
 #endif
@@ -1255,13 +1363,15 @@ printf("runn: C=%05o L=%o T=%04o\n", cpu->r.C, cpu->r.L, cpu->r.T);
                         }
                         printf("\n");
                         codesym(c, l);
-                        printinstr(c, l, cpu->r.CWMF);
+                        printinstr(cpu->r.T, cpu->r.CWMF);
                         printf("\n");
                 }
 
                 // end check for instruction count
                 cpu->cycleLimit = 1;
                 run(cpu);
+                if (cpu->r.T == 03011)
+                        printf("\tgotcha 3011!\n");
                 if (dotrcins) {
                         if (cpu->r.CWMF) {
                                 printf("\tSI(M:G:H)=%05o:%o:%o A=%s (%u) Y=%02o\n",
@@ -1272,17 +1382,17 @@ printf("runn: C=%05o L=%o T=%04o\n", cpu->r.C, cpu->r.L, cpu->r.T);
                                         cpu->r.S, cpu->r.K, cpu->r.V,
                                         word2string(cpu->r.B), cpu->r.BROF,
                                         cpu->r.Z);
-                                printf("\tR=%03o N=%d F=%05o TFFF=%u SALF=%u NCSF=%u\n",
+                                printf("\tR=%03o N=%d F=%05o TFFF=%u SALF=%u NCSF=%u T=%04o\n",
                                         cpu->r.R, cpu->r.N, cpu->r.F,
-                                        cpu->r.TFFF, cpu->r.SALF, cpu->r.NCSF);
+                                        cpu->r.TFFF, cpu->r.SALF, cpu->r.NCSF, cpu->r.T);
                                 printf("\tX=__%014llo %s\n", cpu->r.X, lcw2string(cpu->r.X));
                         } else {
-                                printf("\tA=%016llo(%u) GH=%o%o Y=%02o M=%05o F=%05o N=%d NCSF=%u\n",
+                                printf("\tA=%016llo(%u) GH=%o%o Y=%02o M=%05o F=%05o N=%d NCSF=%u T=%04o\n",
                                         cpu->r.A, cpu->r.AROF,
                                         cpu->r.G, cpu->r.H,
                                         cpu->r.Y, cpu->r.M,
                                         cpu->r.F,
-                                        cpu->r.N, cpu->r.NCSF);
+                                        cpu->r.N, cpu->r.NCSF, cpu->r.T);
                                 printf("\tB=%016llo(%u) KV=%o%o Z=%02o S=%05o R=%03o MSFF=%u SALF=%u\n",
                                         cpu->r.B, cpu->r.BROF,
                                         cpu->r.K, cpu->r.V,
@@ -1291,7 +1401,8 @@ printf("runn: C=%05o L=%o T=%04o\n", cpu->r.C, cpu->r.L, cpu->r.T);
                                         cpu->r.MSFF, cpu->r.SALF);
                         }
                 }
-                //sleep(1);
+                // check console input
+                spo_test();
         }
         // CPU stopped
         printf("\n\n***** CPU stopped *****\nContinue?  ");
@@ -1317,7 +1428,7 @@ int main(int argc, char *argv[])
         cpu->acc.id = cpu->id;
         cpu->isP1 = true;
 
-        while ((opt = getopt(argc, argv, "imsezrl:I:c:C:t:T:d:D:")) != -1) {
+        while ((opt = getopt(argc, argv, "imsezrSl:I:c:C:t:T:d:D:")) != -1) {
                 switch (opt) {
                 case 'i':
                         dodmpins = true; /* I/O trace */
@@ -1336,6 +1447,9 @@ int main(int argc, char *argv[])
                         break;
                 case 'r':
                         realspo = true; /* print to real SPO */
+                        break;
+                case 'S':
+                        cardload = true; /* load from CARD else from DISK */
                         break;
                 case 'l':
                         listfile.name = optarg; /* file with listing */
@@ -1374,6 +1488,7 @@ int main(int argc, char *argv[])
                                 "\t-e\t\ttrace execution\n"
                                 "\t-z\t\tstop at ZPI instruction\n"
                                 "\t-r\t\tuse real SPO\n"
+                                "\t-S\t\tcard load select\n"
                                 "\t-l <file>\tspecify listing file name\n"
                                 "\t-c <file>\tspecify card file name\n"
                                 "\t-t <file>\tspecify tape file name\n"
@@ -1381,6 +1496,7 @@ int main(int argc, char *argv[])
                                 "\t-C <file>\tspecify trace card file name\n"
                                 "\t-T <file>\tspecify trace tape file name\n"
                                 "\t-D <file>\tspecify trace disk file name\n"
+                                "\t-I <file>\tspecify I/O and special instruction trace file name\n"
                                 , argv[0]);
                         exit(2);
                 }
@@ -1441,10 +1557,15 @@ int main(int argc, char *argv[])
 
         start(cpu);
 
-        // load first card to 020
-        addr = 020;
-        card_read(0240000540000020);
-        execute(020);
+        if (cardload) {
+                // binary read first card to 00020
+                addr = 020;
+                card_read  (0240000540000020);
+        } else {
+                // load disk segment 1..63 to 00020
+                disk_access(0140000047700017, 0, 1);
+        }
+        execute(00020);
 
         fclose(cardfile.fp);
 

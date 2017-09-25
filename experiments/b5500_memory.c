@@ -76,6 +76,7 @@ void store(ACCESSOR *acc)
  */
 void accessError(CPU *cpu)
 {
+        printf("*\t%s accessError addr=%05o\n", cpu->id, cpu->acc.addr);
         if (cpu->acc.MAED) {
                 // set I02F: memory address/inhibit error
                 cpu->r.I |= 0x02;
@@ -85,7 +86,7 @@ void accessError(CPU *cpu)
                 cpu->r.I |= 0x01;
                 signalInterrupt(cpu->id, "MPE");
                 if (cpu->isP1 && !cpu->r.NCSF) {
-                        // P1 memory parity in Control State stops the proc
+                        // P1 memory parity in Control State stops the processor
                         stop(cpu);
                 }
         }

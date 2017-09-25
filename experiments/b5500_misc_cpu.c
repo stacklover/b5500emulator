@@ -87,7 +87,7 @@ void initiate(CPU *cpu, BIT forTest)
 
         // restore the Initiate Control Word (INCW) or Initiate Test Control Word
         cpu->r.S = (bw & MASK_INCWrS) >> SHFT_INCWrS;
-        cpu->r.CWMF = (bw & MASK_MODE) ? true : false;
+        cpu->r.CWMF = (bw & MASK_INCWMODE) ? true : false;
         if (forTest) {
                 cpu->r.TM = (bw & MASK_INCWrTM) >> SHFT_INCWrTM;
 #if 0
@@ -292,9 +292,10 @@ void run(CPU *cpu)
                         // set Q07F (hardware-induced SFI) (for display only)
                         cpu->r.Q09F = false;
                         cpu->r.Q07F = true;
+                        // the following is for display only, since we ...
                         cpu->r.T = 03011; // inject 3011=SFI into T
-                        // call directly to avoid resetting registers at top
-                        // of loop
+                        // ... call directly to avoid resetting registers at top
+                        // of loop. And SFI will inject a 0211 (ITI)
                         storeForInterrupt(cpu, true, false, "atSECL");
                 } else {
                         // otherwise, fetch the next instruction
@@ -327,10 +328,6 @@ void run(CPU *cpu)
                                 }
                                 break;
                         }
-//printf("SECL: C=%05o L=%o T=%04o TROF=%u P=%016llo PROF=%u\n",
-//      cpu->r.C, cpu->r.L, cpu->r.T, cpu->r.TROF,
-//      cpu->r.P, cpu->r.PROF);
-
                 }
 
         // Accumulate Normal and Control State cycles for use by Console in

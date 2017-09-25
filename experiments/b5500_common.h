@@ -205,6 +205,13 @@ typedef struct unit {
 } UNIT;
 
 /*
+ * structure defining interrupts
+ */
+typedef struct irq {
+        const char      *name;          // printable IRQ name
+} IRQ;
+
+/*
  * shared memory and message names
  * those are used with IPC based implementations
  */
