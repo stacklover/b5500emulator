@@ -95,11 +95,11 @@ UNIT unit[32][2] = {
         /*19*/ {{"MTL", 47-38}, {"MTL", 47-38}},
         /*20*/ {{"PPA", 47-19}, {"PRA", 47-18}},
         /*21*/ {{"MTM", 47-37}, {"MTM", 47-37}},
-        /*22*/ {{"LP1", 47-27}, {NULL, 0}},
+        /*22*/ {{"LPA", 47-27}, {NULL, 0}},
         /*23*/ {{"MTN", 47-36}, {"MTN", 47-36}},
         /*24*/ {{NULL, 0},      {NULL, 0}},
         /*25*/ {{"MTP", 47-35}, {"MTP", 47-35}},
-        /*26*/ {{"LP1", 47-27}, {NULL, 0}},
+        /*26*/ {{"LPB", 47-27}, {NULL, 0}},
         /*27*/ {{"MTR", 47-34}, {"MTR", 47-34}},
         /*28*/ {{NULL, 0},      {NULL, 0}},
         /*29*/ {{"MTS", 47-33}, {"MTS", 47-33}},
@@ -322,8 +322,8 @@ WORD48 card_read(WORD48 iocw) {
         acc.MAIL = false;
         acc.addr = iocw & MASK_ADDR;
         if (cardfile.fp == NULL) {
-                //unitsready &= ~(1ll << unit[10][1].readybit);
-                return result | MASK_IORD21 | (acc.addr << SHFT_ADDR);
+notready:       unitsready &= ~(1ll << unit[10][1].readybit);
+                return result | MASK_IORNRDY | (acc.addr << SHFT_ADDR);
         }
         if (iocw & MASK_IODMI)
                 return result | (acc.addr << SHFT_ADDR);
@@ -334,7 +334,8 @@ WORD48 card_read(WORD48 iocw) {
 
         getlin(&cardfile);
         if (cardfile.eof) {
-                return result | MASK_IORD21 | (acc.addr << SHFT_ADDR);
+                goto notready;
+                //return result | MASK_IORD21 | (acc.addr << SHFT_ADDR);
         }
         if (cardfile.trace) {
                 fprintf(cardfile.trace, "%08u %s -> %05o\n", instr_count, linebuf, acc.addr);
@@ -346,7 +347,7 @@ WORD48 card_read(WORD48 iocw) {
                 printf("*\tERROR: binary card incorrect length(%u). abort\n", strlen(linebuf));
                 exit(0);
         }
-        if (linebuf[0] == '?')
+        if (linebuf[0] == '?' && !(iocw & MASK_IODBINARY))
                 result |= MASK_IORD19;
         while (chars > 0) {
                 acc.word = getword(060);
@@ -655,8 +656,6 @@ WORD48 tape_access(WORD48 iocw) {
 
         if (unitdes != 1 || tapefile.fp == NULL) {
                 result |= MASK_IORNRDY | (core << SHFT_ADDR);
-                CC->CCI08F = true;
-                signalInterrupt(acc.id, "NOT READY");
                 return  result;
         }
 
@@ -809,6 +808,66 @@ retresult:
                 fprintf(tapefile.trace, "\tIO RESULT=%016llo\n\n", result);
                 fflush(tapefile.trace);
         }
+        return result;
+}
+
+WORD48 lp_write(WORD48 iocw) {
+        unsigned unitdes, count;
+        BIT mi;
+        WORD2 space;
+        WORD4 skip;
+        // prepare result with unit and read flag and MOD III DESC bit
+        WORD48 result = iocw & (MASK_IODUNIT | MASK_IODREAD);
+        ACCESSOR acc;
+        int i;
+
+        acc.id = "LPA";
+        acc.MAIL = false;
+
+        unitdes = (iocw & MASK_IODUNIT) >> SHFT_IODUNIT;
+        mi = (iocw & MASK_IODMI) ? true : false;
+        space = (iocw & 06000000) >> 19;
+        skip = (iocw & 01700000) >> 15;
+        acc.addr = (iocw & MASK_ADDR) >> SHFT_ADDR;
+        if (iocw & MASK_IODUSEWC)
+                count = (iocw & MASK_WCNT) >> SHFT_WCNT;
+        else
+                count = 0;
+
+        if (unitdes != 22) {
+                result |= MASK_IORNRDY | (acc.addr << SHFT_ADDR);
+                return  result;
+        }
+
+        printf("*\tLPA: ");
+        if (skip) {
+                // skip to stop
+                printf("S%X ", skip);
+        } else {
+                // space
+                switch (space) {
+                case 0: printf("F0 "); break;
+                case 1: case 3: printf("F2 "); break;
+                case 2: printf("F1 "); break;
+                }
+        }
+        if (!mi) {
+                // print
+                while (count > 0) {
+                        fetch(&acc);
+                        for (i=42; i>=0; i-=6)
+                                putc(translatetable_bic2ascii[(acc.word>>i)&077], stdout);
+                        acc.addr++;
+                        count--;
+                }
+        }
+        printf ("\n");
+
+        result |= (acc.addr << SHFT_ADDR);
+        // set printer 1 finished IRQ
+        CC->CCI06F = true;
+        signalInterrupt(acc.id, "FIN");
+
         return result;
 }
 
@@ -1032,6 +1091,10 @@ void initiateIO(CPU *cpu) {
                 if (reading)
                         result = card_read(iocw);
                 break;
+        case 22: // LPA
+                if (!(iocw & MASK_IODREAD))
+                        result = lp_write(iocw);
+                break;
         case 30: // SPO
                 if (iocw & MASK_IODREAD)
                         result = spo_read(iocw);
@@ -1060,8 +1123,10 @@ WORD48 interrogateUnitStatus(CPU *cpu) {
         if (spiofile.trace)
                 fprintf(spiofile.trace, "%08u TUS=%016llo\n", instr_count, unitsready);
 #endif
+        // check console input
+        spo_test();
         // simulate timer
-        if (++td > 20000) {
+        if (++td > 200) {
                 CC->TM++;
                 if (CC->TM >= 63) {
                         CC->TM = 0;
@@ -1401,8 +1466,6 @@ printf("runn: C=%05o L=%o T=%04o\n", cpu->r.C, cpu->r.L, cpu->r.T);
                                         cpu->r.MSFF, cpu->r.SALF);
                         }
                 }
-                // check console input
-                spo_test();
         }
         // CPU stopped
         printf("\n\n***** CPU stopped *****\nContinue?  ");
@@ -1554,6 +1617,9 @@ int main(int argc, char *argv[])
         opt = openfile(&spiofile, "r");
         if (opt)
                 exit(2);
+
+        // printer
+        unitsready |= 1ll << unit[22][0].readybit;
 
         start(cpu);
 

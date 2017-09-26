@@ -5,8 +5,19 @@ BEGIN
   FILE LINE 18 (1, 17);
   INTEGER I;
   REAL X;
-  I ~ 7;
-  X ~ I/30;
-  WRITE (LINE, <"X = ",F8.5>, X);
+  FOR I:=10 STEP -1 UNTIL 0 DO BEGIN
+    WRITE (LINE, <"I = ",I8>, I);
+    X ~ I;
+    %WRITE (LINE, <"X = ",F8.5>, X);
+    X ~ 30;
+    %WRITE (LINE, <"X = ",F8.5>, X);
+    X ~ I/30;
+    %WRITE (LINE, <"X = ",F8.5>, X);
+  END;
+  I:=8;
+  WRITE (LINE, <"THE",I1,"QUICK",I1,"BROWN",I1,
+                "FOX",I1,"JUMPS",I1,"OVER",I1,
+                "THE",I1,"LAZY",I1,"DOGS",I1,"BACK">,
+                I,I,I,I,I,I,I,I,I);
 END.
 ? END

@@ -286,10 +286,10 @@ int singlePrecisionCompare(CPU *cpu)
         }
 }
 
-// TODO:
-//   should really implement the X register to be 100% correct,
-//   right now we use a 9 bit extension which should be good enough for
-//   rounding purposes :)
+/* Adds the contents of the A register to the B register, leaving the
+ * result in B and invalidating A. If "adding" is not true, the sign of A is complemented
+ * to accomplish subtraction instead of addition.
+ */
 void singlePrecisionAdd(CPU *cpu, BIT add)
 {
         NUM             A;      // extracted A register
