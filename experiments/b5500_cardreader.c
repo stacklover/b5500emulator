@@ -56,6 +56,9 @@ FILEHANDLE    spiofile;         /* file with special instruction and I/O trace *
 char    linebuf[MAXLINELENGTH];
 char    *linep;
 
+/* file for CANbus */
+int     canfile = -1;
+
 /* NAME entries */
 #define MAXNAME 1000
 char name[MAXNAME][29];
@@ -382,7 +385,7 @@ loop:   fetch(&acc);
         goto loop;
 
 done:   *linep++ = 0;
-        printf ("*\tSPO: %s\n", linebuf+1);
+        printf ("SPO: %s\n", linebuf+1);
         // also write this to all open trace files
         if (cardfile.trace) {
                 fprintf(cardfile.trace, "*** SPO: %s\n", linebuf+1);
@@ -402,11 +405,10 @@ done:   *linep++ = 0;
         }
         // print to REAL SPO
         if (realspo) {
-                count = open("/dev/ttyS4", O_RDWR);
-                if (count >= 0) {
+                if (canfile >= 0) {
                         linep--; *linep++ = 0x0d; *linep++ = 0;
-                        write(count, linebuf, linep-linebuf);
-                        close(count);
+                        write(canfile, linebuf, linep-linebuf);
+                        sleep(3);
                 }
         }
         return (iocw & (MASK_IODUNIT | MASK_IODREAD)) | acc.addr;
@@ -839,7 +841,7 @@ WORD48 lp_write(WORD48 iocw) {
                 return  result;
         }
 
-        printf("*\tLPA: ");
+        printf("LPA: ");
         if (skip) {
                 // skip to stop
                 printf("S%X ", skip);
@@ -1580,6 +1582,8 @@ int main(int argc, char *argv[])
 
         // report SPO as ready
         unitsready |= 1ll << unit[30][1].readybit;
+        if (realspo)
+               canfile = open("/dev/ttyS4", O_RDWR);
 
         opt = openfile(&listfile, "r");
 

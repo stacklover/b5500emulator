@@ -44,16 +44,10 @@
     <file file_name="testing/test1.asm" />
     <file file_name="testing/testfp.asm" />
     <file file_name="testing/charmode_test.asm" />
-    <file file_name="testing/COLD13-fromDisk.lst" />
-    <file file_name="experiments/diskfile1.txt" />
     <file file_name="testing/COLDSTART-XIII-modified.card.txt" />
-    <file file_name="experiments/cardtrace.txt" />
-    <file file_name="experiments/disktrace.txt" />
-    <file file_name="experiments/tapetrace.txt" />
-    <file file_name="experiments/coredump.txt" />
-    <file file_name="experiments/iotrace.txt" />
     <configuration Name="Common" build_exclude_from_build="Yes" />
-    <file file_name="experiments/test.txt" />
     <file file_name="testing/algol1.card" />
+    <file file_name="testing/compile cool.card" />
+    <file file_name="testing/compile mcp.card" />
   </project>
 </solution>
