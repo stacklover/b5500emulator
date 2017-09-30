@@ -21,8 +21,8 @@
 #include "common.h"
 
 #define DEBUG_TRB false
-#define DEBUG_FCE true
-#define DEBUG_FCL true
+#define DEBUG_FCE false
+#define DEBUG_FCL false
 
 void b5500_execute_wm(CPU *cpu)
 {

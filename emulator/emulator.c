@@ -5,7 +5,7 @@
 * Licensed under the MIT License,
 *       see LICENSE
 ************************************************************************
-* b5500 assembler
+* b5500 emulator main rountine
 ************************************************************************
 * 2017-09-08  R.Meyer
 *   Started from b5500_asm.c
@@ -53,6 +53,7 @@ FILEHANDLE    tapefile;         /* file with tape */
 FILEHANDLE    diskfile;         /* file with disk */
 FILEHANDLE    listfile;         /* file with listing */
 FILEHANDLE    spiofile;         /* file with special instruction and I/O trace */
+FILEHANDLE    printfile;	/* file to print output into */
 
 /* input/output buffer */
 char    linebuf[MAXLINELENGTH];
@@ -176,6 +177,7 @@ int openfile(FILEHANDLE *f, const char *mode) {
                 }
                 f->eof = false;
                 f->line = 0;
+		printf("opened %s\n", f->name);
         } else {
                 f->fp = NULL;
                 f->eof = true;
@@ -187,6 +189,7 @@ int openfile(FILEHANDLE *f, const char *mode) {
                 if (f->trace == NULL) {
                         perror(f->tracename);
                         return 0;
+		printf("traces to %s\n", f->tracename);
                 }
         } else
                 f->trace = NULL;
@@ -219,32 +222,32 @@ void signalInterrupt(const char *id, const char *cause) {
         // an updated vector address in the IAR. Can also be called to reprioritize
         // any remaining interrupts after an interrupt is handled. If no interrupt
         // condition exists, CC->IAR is set to zero
-        if (P[0]->r.I & 0x01) CC->IAR = 060; // P1 memory parity error
-        else if (P[0]->r.I & 0x02) CC->IAR = 061; // P1 invalid address error
+        if (P[0]->r.I & 0x01) CC->IAR = 060;		// P1 memory parity error
+        else if (P[0]->r.I & 0x02) CC->IAR = 061;	// P1 invalid address error
 
-        else if (CC->CCI03F) CC->IAR = 022; // Time interval
-        else if (CC->CCI04F) CC->IAR = 023; // I/O busy
-        else if (CC->CCI05F) CC->IAR = 024; // Keyboard request
-        else if (CC->CCI08F) CC->IAR = 027; // I/O 1 finished
-        else if (CC->CCI09F) CC->IAR = 030; // I/O 2 finished
-        else if (CC->CCI10F) CC->IAR = 031; // I/O 3 finished
-        else if (CC->CCI11F) CC->IAR = 032; // I/O 4 finished
-        else if (CC->CCI06F) CC->IAR = 025; // Printer 1 finished
-        else if (CC->CCI07F) CC->IAR = 026; // Printer 2 finished
-        else if (CC->CCI12F) CC->IAR = 033; // P2 busy
-        else if (CC->CCI13F) CC->IAR = 034; // Inquiry request
-        else if (CC->CCI14F) CC->IAR = 035; // Special interrupt 1
-        else if (CC->CCI15F) CC->IAR = 036; // Disk file 1 read check finished
-        else if (CC->CCI16F) CC->IAR = 037; // Disk file 2 read check finished
+        else if (CC->CCI03F) CC->IAR = 022;	// Time interval
+        else if (CC->CCI04F) CC->IAR = 023;	// I/O busy
+        else if (CC->CCI05F) CC->IAR = 024;	// Keyboard request
+        else if (CC->CCI08F) CC->IAR = 027;	// I/O 1 finished
+        else if (CC->CCI09F) CC->IAR = 030;	// I/O 2 finished
+        else if (CC->CCI10F) CC->IAR = 031;	// I/O 3 finished
+        else if (CC->CCI11F) CC->IAR = 032;	// I/O 4 finished
+        else if (CC->CCI06F) CC->IAR = 025;	// Printer 1 finished
+        else if (CC->CCI07F) CC->IAR = 026;	// Printer 2 finished
+        else if (CC->CCI12F) CC->IAR = 033;	// P2 busy
+        else if (CC->CCI13F) CC->IAR = 034;	// Inquiry request
+        else if (CC->CCI14F) CC->IAR = 035;	// Special interrupt 1
+        else if (CC->CCI15F) CC->IAR = 036;	// Disk file 1 read check finished
+        else if (CC->CCI16F) CC->IAR = 037;	// Disk file 2 read check finished
 
-        else if (P[0]->r.I & 0x04) CC->IAR = 062; // P1 stack overflow
-        else if (P[0]->r.I & 0xF0) CC->IAR = (P[0]->r.I >> 4) + 060; // P1 syllable-dependent
+        else if (P[0]->r.I & 0x04) CC->IAR = 062;			// P1 stack overflow
+        else if (P[0]->r.I & 0xF0) CC->IAR = (P[0]->r.I >> 4) + 060;	// P1 syllable-dependent
 
-        else if (P[1]->r.I & 0x01) CC->IAR = 040; // P2 memory parity error
-        else if (P[1]->r.I & 0x02) CC->IAR = 041; // P2 invalid address error
-        else if (P[1]->r.I & 0x04) CC->IAR = 042; // P2 stack overflow
-        else if (P[1]->r.I & 0xF0) CC->IAR = (P[1]->r.I >> 4) + 040; // P2 syllable-dependent
-        else CC->IAR = 0; // no interrupt set
+        else if (P[1]->r.I & 0x01) CC->IAR = 040;	// P2 memory parity error
+        else if (P[1]->r.I & 0x02) CC->IAR = 041;	// P2 invalid address error
+        else if (P[1]->r.I & 0x04) CC->IAR = 042;	// P2 stack overflow
+        else if (P[1]->r.I & 0xF0) CC->IAR = (P[1]->r.I >> 4) + 040;	// P2 syllable-dependent
+        else CC->IAR = 0;// no interrupt set
 
         if (CC->IAR) {
                 CC->interruptMask |= (1ll << CC->IAR);
@@ -372,7 +375,6 @@ WORD48 spo_write(WORD48 iocw) {
         acc.addr = iocw & MASKMEM;
 
         linep = linebuf;
-        *linep++ = '!';
 
 loop:   fetch(&acc);
         for (count=0; count<8; count++) {
@@ -387,31 +389,26 @@ loop:   fetch(&acc);
         goto loop;
 
 done:   *linep++ = 0;
-        printf ("SPO: %s\n", linebuf+1);
+        printf ("%s\n", linebuf);
         // also write this to all open trace files
         if (cardfile.trace) {
-                fprintf(cardfile.trace, "*** SPO: %s\n", linebuf+1);
+                fprintf(cardfile.trace, "*** SPO: %s\n", linebuf);
                 fflush(cardfile.trace);
         }
         if (tapefile.trace) {
-                fprintf(tapefile.trace, "*** SPO: %s\n", linebuf+1);
+                fprintf(tapefile.trace, "*** SPO: %s\n", linebuf);
                 fflush(tapefile.trace);
         }
         if (diskfile.trace) {
-                fprintf(diskfile.trace, "*** SPO: %s\n", linebuf+1);
+                fprintf(diskfile.trace, "*** SPO: %s\n", linebuf);
                 fflush(diskfile.trace);
         }
         if (spiofile.trace) {
-                fprintf(spiofile.trace, "*** SPO: %s\n", linebuf+1);
+                fprintf(spiofile.trace, "*** SPO: %s\n", linebuf);
                 fflush(spiofile.trace);
         }
         // print to REAL SPO
         if (realspo) {
-                if (canfile >= 0) {
-                        linep--; *linep++ = 0x0d; *linep++ = 0;
-                        (void)write(canfile, linebuf, linep-linebuf);
-                        sleep(3);
-                }
         }
         return (iocw & (MASK_IODUNIT | MASK_IODREAD)) | acc.addr;
 }
@@ -422,6 +419,7 @@ char *spoinp;
 WORD48 spo_read(WORD48 iocw) {
         int count;
         ACCESSOR acc;
+	BIT gmset = false;
 
         acc.id = "SPO";
         acc.MAIL = false;
@@ -429,8 +427,7 @@ WORD48 spo_read(WORD48 iocw) {
         spoinp = spoinbuf;
 
         // convert until EOL or any other control char found
-        // checking at end of loop ensures at least one word with GM is written to memory
-        do {
+        while (*spoinp >= ' ') {
                 acc.word = 0ll;
                 for (count=0; count<8; count++) {
                           acc.word <<= 6;
@@ -440,12 +437,19 @@ WORD48 spo_read(WORD48 iocw) {
                           } else {
                                   // EOL or other char, fill word with GM
                                   acc.word |= 037;
+				  gmset = true;
                           }
                 }
                 // store the complete word
                 store(&acc);
                 acc.addr++;
-        } while (*spoinp >= ' ');
+        }
+	// store one word with GM, if no GM was entered
+	if (!gmset) {
+		acc.word = 03737373737373737LL;
+                store(&acc);
+                acc.addr++;
+	}
         return (iocw & (MASK_IODUNIT | MASK_IODREAD)) | acc.addr;
 }
 
@@ -820,7 +824,7 @@ WORD48 lp_write(WORD48 iocw) {
         BIT mi;
         WORD2 space;
         WORD4 skip;
-        // prepare result with unit and read flag and MOD III DESC bit
+        // prepare result with unit and read flag
         WORD48 result = iocw & (MASK_IODUNIT | MASK_IODREAD);
         ACCESSOR acc;
         int i;
@@ -838,21 +842,20 @@ WORD48 lp_write(WORD48 iocw) {
         else
                 count = 0;
 
-        if (unitdes != 22) {
+        if (printfile.fp == NULL || unitdes != 22) {
                 result |= MASK_IORNRDY | (acc.addr << SHFT_ADDR);
-                return  result;
+                goto retresult;
         }
 
-        printf("LPA: ");
         if (skip) {
                 // skip to stop
-                printf("S%X ", skip);
+                fprintf(printfile.fp, "%c", '@'+skip);
         } else {
                 // space
                 switch (space) {
-                case 0: printf("F0 "); break;
-                case 1: case 3: printf("F2 "); break;
-                case 2: printf("F1 "); break;
+                case 0: fprintf(printfile.fp, "0"); break;
+                case 1: case 3: fprintf(printfile.fp, "2"); break;
+                case 2: fprintf(printfile.fp, "1"); break;
                 }
         }
         if (!mi) {
@@ -860,14 +863,16 @@ WORD48 lp_write(WORD48 iocw) {
                 while (count > 0) {
                         fetch(&acc);
                         for (i=42; i>=0; i-=6)
-                                putc(translatetable_bic2ascii[(acc.word>>i)&077], stdout);
+                                fputc(translatetable_bic2ascii[(acc.word>>i)&077], printfile.fp);
                         acc.addr++;
                         count--;
                 }
         }
-        printf ("\n");
+        fprintf(printfile.fp, "\n");
+	fflush(printfile.fp);
 
         result |= (acc.addr << SHFT_ADDR);
+retresult:
         // set printer 1 finished IRQ
         CC->CCI06F = true;
         signalInterrupt(acc.id, "FIN");
@@ -1402,7 +1407,7 @@ void execute(ADDR15 addr) {
 
 runagain:
         start(cpu);
-printf("runn: C=%05o L=%o T=%04o\n", cpu->r.C, cpu->r.L, cpu->r.T);
+	//printf("runn: C=%05o L=%o T=%04o\n", cpu->r.C, cpu->r.L, cpu->r.T);
         while (cpu->busy) {
                 instr_count++;
 #if 0
@@ -1483,7 +1488,7 @@ int main(int argc, char *argv[])
         int opt;
         ADDR15 addr;
 
-        printf("B5500 Card Reader\n");
+        printf("B5500 Emulator Main Thread\n");
         diskfile.name = (char*)"./disk/dka.dat";
 
         b5500_init_shares();
@@ -1495,7 +1500,7 @@ int main(int argc, char *argv[])
         cpu->acc.id = cpu->id;
         cpu->isP1 = true;
 
-        while ((opt = getopt(argc, argv, "imsezrSl:I:c:C:t:T:d:D:")) != -1) {
+        while ((opt = getopt(argc, argv, "imsezrSl:I:c:C:t:T:d:D:p:")) != -1) {
                 switch (opt) {
                 case 'i':
                         dodmpins = true; /* I/O trace */
@@ -1546,6 +1551,10 @@ int main(int argc, char *argv[])
                 case 'D':
                         diskfile.tracename = optarg; /* trace file for disk image */
                         break;
+                // DISK
+                case 'p':
+                        printfile.name = optarg; /* file for print output */
+                        break;
                 default: /* '?' */
                         fprintf(stderr,
                                 "Usage: %s [-b] [-m] [-s] [-e] [-l <file>] [-c <file>] [-t <file>] [-d <file>]\n"
@@ -1560,6 +1569,7 @@ int main(int argc, char *argv[])
                                 "\t-c <file>\tspecify card file name\n"
                                 "\t-t <file>\tspecify tape file name\n"
                                 "\t-d <file>\tspecify disk file name\n"
+                                "\t-p <file>\tspecify print file name\n"
                                 "\t-C <file>\tspecify trace card file name\n"
                                 "\t-T <file>\tspecify trace tape file name\n"
                                 "\t-D <file>\tspecify trace disk file name\n"
@@ -1616,6 +1626,10 @@ int main(int argc, char *argv[])
         if (opt)
                 unitsready |= 1ll << unit[ 1][1].readybit;
 
+        opt = openfile(&printfile, "w");
+        if (opt)
+                unitsready |= 1ll << unit[22][0].readybit;
+
         opt = openfile(&diskfile, "r+");
         if (opt)
                 unitsready |= 1ll << unit[ 6][1].readybit;
@@ -1623,9 +1637,6 @@ int main(int argc, char *argv[])
         opt = openfile(&spiofile, "r");
         if (opt)
                 exit(2);
-
-        // printer
-        unitsready |= 1ll << unit[22][0].readybit;
 
         start(cpu);
 

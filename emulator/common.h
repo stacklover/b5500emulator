@@ -1,7 +1,7 @@
 /***********************************************************************
 * b5500emulator
 ************************************************************************
-* Copyright (c) 2016, Reinhard Meyer, DL5UY
+* Copyright (c) 2016-2017, Reinhard Meyer, DL5UY
 * Licensed under the MIT License,
 *       see LICENSE
 * based on work by Nigel Williams and Paul Kimpel

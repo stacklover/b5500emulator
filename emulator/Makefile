@@ -17,48 +17,48 @@
 #   overhaul of file names
 #**********************************************************************/
 
-ALL =		processor_panel.exe \
-		asm-n-run.exe \
-		sptest.exe \
-		emulator.exe
+ALL =		$(ODIR)/processor_panel.exe \
+		$(ODIR)/asm-n-run.exe \
+		$(ODIR)/sptest.exe \
+		$(ODIR)/emulator.exe
 
-OBJTEST	=	test.o \
-		sp_compare.o \
-		sp_add.o \
-		pdp_text.o init_shares.o \
-		execute_cm.o execute_wm.o \
-		stack.o memory.o jump_call.o \
-		irq_io.o single.o double.o \
-		misc_cpu.o bitfield.o stream.o \
-		instr_table.o
+OBJTEST	=	$(ODIR)/test.o \
+		$(ODIR)/sp_compare.o \
+		$(ODIR)/sp_add.o \
+		$(ODIR)/pdp_text.o $(ODIR)/init_shares.o \
+		$(ODIR)/execute_cm.o $(ODIR)/execute_wm.o \
+		$(ODIR)/stack.o $(ODIR)/memory.o $(ODIR)/jump_call.o \
+		$(ODIR)/irq_io.o $(ODIR)/single.o $(ODIR)/double.o \
+		$(ODIR)/misc_cpu.o $(ODIR)/bitfield.o $(ODIR)/stream.o \
+		$(ODIR)/instr_table.o
 
-OBJPANEL =	processor_panel.o pdp_text.o init_shares.o
+OBJPANEL =	$(ODIR)/processor_panel.o $(ODIR)/pdp_text.o $(ODIR)/init_shares.o
 
-OBJEMULATOR =	emulator.o init_shares.o \
-		execute_cm.o execute_wm.o \
-		stack.o memory.o jump_call.o \
-		irq_io.o single.o double.o \
-		misc_cpu.o bitfield.o stream.o \
-		translatetables.o	\
-		instr_table.o
+OBJEMULATOR =	$(ODIR)/emulator.o $(ODIR)/init_shares.o \
+		$(ODIR)/execute_cm.o $(ODIR)/execute_wm.o \
+		$(ODIR)/stack.o $(ODIR)/memory.o $(ODIR)/jump_call.o \
+		$(ODIR)/irq_io.o $(ODIR)/single.o $(ODIR)/double.o \
+		$(ODIR)/misc_cpu.o $(ODIR)/bitfield.o $(ODIR)/stream.o \
+		$(ODIR)/translatetables.o	\
+		$(ODIR)/instr_table.o
 
-OBJASMNRUN =	asm-n-run.o \
-		pdp_text.o init_shares.o \
-		execute_cm.o execute_wm.o \
-		stack.o memory.o jump_call.o \
-		irq_io.o single.o double.o \
-		misc_cpu.o bitfield.o stream.o \
-		translatetables.o	\
-		instr_table.o
+OBJASMNRUN =	$(ODIR)/asm-n-run.o \
+		$(ODIR)/pdp_text.o $(ODIR)/init_shares.o \
+		$(ODIR)/execute_cm.o $(ODIR)/execute_wm.o \
+		$(ODIR)/stack.o $(ODIR)/memory.o $(ODIR)/jump_call.o \
+		$(ODIR)/irq_io.o $(ODIR)/single.o $(ODIR)/double.o \
+		$(ODIR)/misc_cpu.o $(ODIR)/bitfield.o $(ODIR)/stream.o \
+		$(ODIR)/translatetables.o	\
+		$(ODIR)/instr_table.o
 
-OBJSPTEST =	sptest.o \
-		pdp_text.o init_shares.o \
-		execute_cm.o execute_wm.o \
-		stack.o memory.o jump_call.o \
-		irq_io.o single.o double.o \
-		misc_cpu.o bitfield.o stream.o \
-		translatetables.o	\
-		instr_table.o
+OBJSPTEST =	$(ODIR)/sptest.o \
+		$(ODIR)/pdp_text.o $(ODIR)/init_shares.o \
+		$(ODIR)/execute_cm.o $(ODIR)/execute_wm.o \
+		$(ODIR)/stack.o $(ODIR)/memory.o $(ODIR)/jump_call.o \
+		$(ODIR)/irq_io.o $(ODIR)/single.o $(ODIR)/double.o \
+		$(ODIR)/misc_cpu.o $(ODIR)/bitfield.o $(ODIR)/stream.o \
+		$(ODIR)/translatetables.o	\
+		$(ODIR)/instr_table.o
 
 INC =		common.h
 
@@ -70,27 +70,27 @@ LFLAGS		= #-lfltk_images -lfltk	-lpng -lz -ljpeg  -lXext -lXft \
 
 all: $(ALL)
 
-test.exe:	 $(OBJTEST) Makefile
+$(ODIR)/test.exe:	 $(OBJTEST) Makefile
 	@echo "*** Linking $@..."
-	$(CXX) $(LFLAGS) -o test.exe $(OBJTEST)
+	$(CXX) $(LFLAGS) -o $(ODIR)/test.exe $(OBJTEST)
 
-processor_panel.exe:	 $(OBJPANEL) Makefile
+$(ODIR)/processor_panel.exe:	 $(OBJPANEL) Makefile
 	@echo "*** Linking $@..."
-	$(CXX) $(LFLAGS) -o processor_panel.exe $(OBJPANEL)
+	$(CXX) $(LFLAGS) -o $(ODIR)/processor_panel.exe $(OBJPANEL)
 
-emulator.exe:	 $(OBJEMULATOR) Makefile
+$(ODIR)/emulator.exe:	 $(OBJEMULATOR) Makefile
 	@echo "*** Linking $@..."
-	$(CXX) $(LFLAGS) -o emulator.exe $(OBJEMULATOR)
+	$(CXX) $(LFLAGS) -o $(ODIR)/emulator.exe $(OBJEMULATOR)
 
-asm-n-run.exe:	$(OBJASMNRUN) Makefile
+$(ODIR)/asm-n-run.exe:	$(OBJASMNRUN) Makefile
 	@echo "*** Linking $@..."
-	$(CXX) $(LFLAGS) -o asm-n-run.exe $(OBJASMNRUN)
+	$(CXX) $(LFLAGS) -o $(ODIR)/asm-n-run.exe $(OBJASMNRUN)
 
-sptest.exe:  $(OBJSPTEST)	Makefile
+$(ODIR)/sptest.exe:  $(OBJSPTEST)	Makefile
 	@echo "*** Linking $@..."
-	$(CXX) $(LFLAGS) -o sptest.exe $(OBJSPTEST)
+	$(CXX) $(LFLAGS) -o $(ODIR)/sptest.exe $(OBJSPTEST)
 
-%.o: %.c $(INC)	Makefile
+$(ODIR)/%.o: %.c $(INC)	Makefile
 	@echo "*** Compiling $<..."
 	$(CXX) $(CFLAGS) -c $< -o $@
 

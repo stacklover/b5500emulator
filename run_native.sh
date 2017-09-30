@@ -1,3 +1,3 @@
 # run the native emulator with H/L from DKA
-./emulator/emulator.exe
+./emulator/i386/emulator.exe
 
