@@ -33,3 +33,10 @@
 
 # Editor backups
 *~
+
+# all emulated disk files
+disk/*
+
+# tapes
+tapes/*
+

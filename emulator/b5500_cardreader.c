@@ -1482,7 +1482,7 @@ int main(int argc, char *argv[])
         ADDR15 addr;
 
         printf("B5500 Card Reader\n");
-        diskfile.name = (char*)"./diskfile1.txt";
+        diskfile.name = (char*)"./disk/dka.dat";
 
         b5500_init_shares();
 
@@ -1630,10 +1630,10 @@ int main(int argc, char *argv[])
         if (cardload) {
                 // binary read first card to 00020
                 addr = 020;
-                card_read  (0240000540000020);
+                card_read  (0240000540000020LL);
         } else {
                 // load disk segment 1..63 to 00020
-                disk_access(0140000047700017, 0, 1);
+                disk_access(0140000047700017LL, 0, 1);
         }
         execute(00020);
 
