@@ -11,10 +11,12 @@
 ************************************************************************
 * 2017-09-08    R.Meyer
 *   Converted Paul's work from Javascript to C
+* 2017-09-30  R.Meyer
+*   overhaul of file names
 ***********************************************************************/
 
 
-#include "b5500_common.h"
+#include "common.h"
 
 const WORD6 translatetable_ascii2bic[128] = { // Index by 8-bit ASCII to get 6-bit BIC (upcased, invalid=>"?")
         0x0C,0x0C,0x0C,0x0C,0x0C,0x0C,0x0C,0x0C,0x0C,0x0C,0x0C,0x0C,0x0C,0x0C,0x0C,0x0C,  // 00-0F

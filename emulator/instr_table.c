@@ -9,9 +9,11 @@
 ************************************************************************
 * 2016-02-29  R.Meyer
 *   From thin air (based on my Pascal P5 assembler).
+* 2017-09-30  R.Meyer
+*   overhaul of file names
 ***********************************************************************/
 
-#include "b5500_common.h"
+#include "common.h"
 
 const INSTRUCTION instruction_table[] =	{
 //

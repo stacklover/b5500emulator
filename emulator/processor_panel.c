@@ -11,6 +11,8 @@
 ************************************************************************
 * 2016-02-19  R.Meyer
 *   from thin air.
+* 2017-09-30  R.Meyer
+*   overhaul of file names
 ***********************************************************************/
 
 #include <stdio.h>
@@ -19,7 +21,7 @@
 #include <math.h>
 #include <errno.h>
 #include <unistd.h>
-#include "b5500_common.h"
+#include "common.h"
 
 int main(int argc, char	*argv[])
 {

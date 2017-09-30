@@ -13,12 +13,14 @@
 *   from thin air.
 * 2017-07-17  R.Meyer
 *   changed "this" to "cpu" to avoid errors when using g++
+* 2017-09-30  R.Meyer
+*   overhaul of file names
 ***********************************************************************/
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <strings.h>
-#include "b5500_common.h"
+#include "common.h"
 
 void b5500_pdp_text(CPU *cpu)
 {

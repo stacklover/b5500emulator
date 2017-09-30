@@ -15,12 +15,14 @@
 *   changed "this" to "cpu" to avoid errors when using g++
 * 2017-09-17 R.Meyer
 *   added unit table
+* 2017-09-30  R.Meyer
+*   overhaul of file names
 ***********************************************************************/
 
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
-#include "b5500_common.h"
+#include "common.h"
 
 #define DPRINTF if(0)printf
 #define TRCMEM false

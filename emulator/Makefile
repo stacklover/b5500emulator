@@ -13,52 +13,54 @@
 #   from thin air.
 # 2017-07-17  R.Meyer
 #   changes for	cross compilation
+# 2017-09-30  R.Meyer
+#   overhaul of file names
 #**********************************************************************/
 
-ALL =		b5500_view.exe \
-		b5500_asm.exe \
-		b5500_sptest.exe \
-		b5500_cardreader.exe
+ALL =		processor_panel.exe \
+		asm-n-run.exe \
+		sptest.exe \
+		emulator.exe
 
-OBJTEST	=	b5500_test.o \
-		b5500_sp_compare.o \
-		b5500_sp_add.o \
-		b5500_pdp_text.o b5500_init_shares.o \
-		b5500_execute_cm.o b5500_execute_wm.o \
-		b5500_stack.o b5500_memory.o b5500_jump_call.o \
-		b5500_irq_io.o b5500_single.o b5500_double.o \
-		b5500_misc_cpu.o b5500_bitfield.o b5500_stream.o \
-		b5500_instr_table.o
+OBJTEST	=	test.o \
+		sp_compare.o \
+		sp_add.o \
+		pdp_text.o init_shares.o \
+		execute_cm.o execute_wm.o \
+		stack.o memory.o jump_call.o \
+		irq_io.o single.o double.o \
+		misc_cpu.o bitfield.o stream.o \
+		instr_table.o
 
-OBJVIEW	=	b5500_view.o b5500_pdp_text.o b5500_init_shares.o
+OBJPANEL =	processor_panel.o pdp_text.o init_shares.o
 
-OBJCARDREADER =	b5500_cardreader.o b5500_init_shares.o \
-		b5500_execute_cm.o b5500_execute_wm.o \
-		b5500_stack.o b5500_memory.o b5500_jump_call.o \
-		b5500_irq_io.o b5500_single.o b5500_double.o \
-		b5500_misc_cpu.o b5500_bitfield.o b5500_stream.o \
-		b5500_translatetables.o	\
-		b5500_instr_table.o
+OBJEMULATOR =	emulator.o init_shares.o \
+		execute_cm.o execute_wm.o \
+		stack.o memory.o jump_call.o \
+		irq_io.o single.o double.o \
+		misc_cpu.o bitfield.o stream.o \
+		translatetables.o	\
+		instr_table.o
 
-OBJASM =	b5500_asm.o \
-		b5500_pdp_text.o b5500_init_shares.o \
-		b5500_execute_cm.o b5500_execute_wm.o \
-		b5500_stack.o b5500_memory.o b5500_jump_call.o \
-		b5500_irq_io.o b5500_single.o b5500_double.o \
-		b5500_misc_cpu.o b5500_bitfield.o b5500_stream.o \
-		b5500_translatetables.o	\
-		b5500_instr_table.o
+OBJASMNRUN =	asm-n-run.o \
+		pdp_text.o init_shares.o \
+		execute_cm.o execute_wm.o \
+		stack.o memory.o jump_call.o \
+		irq_io.o single.o double.o \
+		misc_cpu.o bitfield.o stream.o \
+		translatetables.o	\
+		instr_table.o
 
-OBJSPTEST =	b5500_sptest.o \
-		b5500_pdp_text.o b5500_init_shares.o \
-		b5500_execute_cm.o b5500_execute_wm.o \
-		b5500_stack.o b5500_memory.o b5500_jump_call.o \
-		b5500_irq_io.o b5500_single.o b5500_double.o \
-		b5500_misc_cpu.o b5500_bitfield.o b5500_stream.o \
-		b5500_translatetables.o	\
-		b5500_instr_table.o
+OBJSPTEST =	sptest.o \
+		pdp_text.o init_shares.o \
+		execute_cm.o execute_wm.o \
+		stack.o memory.o jump_call.o \
+		irq_io.o single.o double.o \
+		misc_cpu.o bitfield.o stream.o \
+		translatetables.o	\
+		instr_table.o
 
-INC =		b5500_common.h
+INC =		common.h
 
 CFLAGS		= -D_LARGEFILE64_SOURCE	-D_FILE_OFFSET_BITS=64 -pipe -Os \
 		  -D_THREAD_SAFE -D_REENTRANT -Wall
@@ -68,25 +70,25 @@ LFLAGS		= #-lfltk_images -lfltk	-lpng -lz -ljpeg  -lXext -lXft \
 
 all: $(ALL)
 
-b5500_test.exe:	 $(OBJTEST) Makefile
+test.exe:	 $(OBJTEST) Makefile
 	@echo "*** Linking $@..."
-	$(CXX) $(LFLAGS) -o b5500_test.exe $(OBJTEST)
+	$(CXX) $(LFLAGS) -o test.exe $(OBJTEST)
 
-b5500_view.exe:	 $(OBJVIEW) Makefile
+processor_panel.exe:	 $(OBJPANEL) Makefile
 	@echo "*** Linking $@..."
-	$(CXX) $(LFLAGS) -o b5500_view.exe $(OBJVIEW)
+	$(CXX) $(LFLAGS) -o processor_panel.exe $(OBJPANEL)
 
-b5500_cardreader.exe:	 $(OBJCARDREADER) Makefile
+emulator.exe:	 $(OBJEMULATOR) Makefile
 	@echo "*** Linking $@..."
-	$(CXX) $(LFLAGS) -o b5500_cardreader.exe $(OBJCARDREADER)
+	$(CXX) $(LFLAGS) -o emulator.exe $(OBJEMULATOR)
 
-b5500_asm.exe:	$(OBJASM) Makefile
+asm-n-run.exe:	$(OBJASMNRUN) Makefile
 	@echo "*** Linking $@..."
-	$(CXX) $(LFLAGS) -o b5500_asm.exe $(OBJASM)
+	$(CXX) $(LFLAGS) -o asm-n-run.exe $(OBJASMNRUN)
 
-b5500_sptest.exe:  $(OBJSPTEST)	Makefile
+sptest.exe:  $(OBJSPTEST)	Makefile
 	@echo "*** Linking $@..."
-	$(CXX) $(LFLAGS) -o b5500_sptest.exe $(OBJSPTEST)
+	$(CXX) $(LFLAGS) -o sptest.exe $(OBJSPTEST)
 
 %.o: %.c $(INC)	Makefile
 	@echo "*** Compiling $<..."

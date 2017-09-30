@@ -14,9 +14,11 @@
 * 2017-07-17  R.Meyer
 *   Added "long long" qualifier to constants with long long value
 *   changed "this" to "cpu" to avoid errors when using g++
+* 2017-09-30  R.Meyer
+*   overhaul of file names
 ***********************************************************************/
 
-#include "b5500_common.h"
+#include "common.h"
 
 /***********************************************************
 *  Character Mode Syllables                                *

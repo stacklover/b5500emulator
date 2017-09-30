@@ -11,9 +11,11 @@
 ************************************************************************
 * 2016-02-13  R.Meyer
 *   Inspired by Paul's work, rest from thin air.
+* 2017-09-30  R.Meyer
+*   overhaul of file names
 ***********************************************************************/
 
-#include "b5500_common.h"
+#include "common.h"
 
 #if DEBUG
 # include <stdio.h>

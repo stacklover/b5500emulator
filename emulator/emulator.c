@@ -9,6 +9,8 @@
 ************************************************************************
 * 2017-09-08  R.Meyer
 *   Started from b5500_asm.c
+* 2017-09-30  R.Meyer
+*   overhaul of file names
 ***********************************************************************/
 
 #include <stdio.h>
@@ -20,7 +22,7 @@
 #include <ctype.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include "b5500_common.h"
+#include "common.h"
 
 #define MAXLINELENGTH   (264)   /* maximum line length for all devices - must be multiple of 8 */
 
@@ -115,54 +117,54 @@ UNIT unit[32][2] = {
  * indexed by cell address - 020
  */
 IRQ irq[48] = {
-        /*20*/ "NA20",
-        /*21*/ "NA21",
-        /*22*/ "TIMER",
-        /*23*/ "I/O BUSY",
-        /*24*/ "KBD REQ",
-        /*25*/ "PTR1 FIN",
-        /*26*/ "PTR2 FIN",
-        /*27*/ "I/O1 FIN",
-        /*30*/ "I/O2 FIN",
-        /*31*/ "I/O3 FIN",
-        /*32*/ "I/O4 FIN",
-        /*33*/ "P2 BUSY",
-        /*34*/ "DCT IRQ",
-        /*35*/ "NA35",
-        /*36*/ "DF1 RCHK FIN",
-        /*37*/ "DF2 RCHK FIN",
-        /*40*/ "P2 MPE",
-        /*41*/ "P2 INVA",
-        /*42*/ "P2 SOVF",
-        /*43*/ "NA43",
-        /*44*/ "P2 COM",
-        /*45*/ "P2 PRL",
-        /*46*/ "P2 CONT",
-        /*47*/ "P2 PBIT",
-        /*50*/ "P2 FLAG",
-        /*51*/ "P2 INVIDX",
-        /*52*/ "P2 EXPO",
-        /*53*/ "P2 EXPU",
-        /*54*/ "P2 INTO",
-        /*55*/ "P2 DIV0",
-        /*56*/ "NA56",
-        /*57*/ "NA57",
-        /*60*/ "P1 MPE",
-        /*61*/ "P1 INVA",
-        /*62*/ "P1 SOVF",
-        /*63*/ "NA63",
-        /*64*/ "P1 COM",
-        /*65*/ "P1 PRL",
-        /*66*/ "P1 CONT",
-        /*67*/ "P1 PBIT",
-        /*70*/ "P1 FLAG",
-        /*71*/ "P1 INVIDX",
-        /*72*/ "P1 EXPO",
-        /*73*/ "P1 EXPU",
-        /*74*/ "P1 INTO",
-        /*75*/ "P1 DIV0",
-        /*76*/ "NA76",
-        /*77*/ "NA77",
+        /*20*/ {"NA20"},
+        /*21*/ {"NA21"},
+        /*22*/ {"TIMER"},
+        /*23*/ {"I/O BUSY"},
+        /*24*/ {"KBD REQ"},
+        /*25*/ {"PTR1 FIN"},
+        /*26*/ {"PTR2 FIN"},
+        /*27*/ {"I/O1 FIN"},
+        /*30*/ {"I/O2 FIN"},
+        /*31*/ {"I/O3 FIN"},
+        /*32*/ {"I/O4 FIN"},
+        /*33*/ {"P2 BUSY"},
+        /*34*/ {"DCT IRQ"},
+        /*35*/ {"NA35"},
+        /*36*/ {"DF1 RCHK FIN"},
+        /*37*/ {"DF2 RCHK FIN"},
+        /*40*/ {"P2 MPE"},
+        /*41*/ {"P2 INVA"},
+        /*42*/ {"P2 SOVF"},
+        /*43*/ {"NA43"},
+        /*44*/ {"P2 COM"},
+        /*45*/ {"P2 PRL"},
+        /*46*/ {"P2 CONT"},
+        /*47*/ {"P2 PBIT"},
+        /*50*/ {"P2 FLAG"},
+        /*51*/ {"P2 INVIDX"},
+        /*52*/ {"P2 EXPO"},
+        /*53*/ {"P2 EXPU"},
+        /*54*/ {"P2 INTO"},
+        /*55*/ {"P2 DIV0"},
+        /*56*/ {"NA56"},
+        /*57*/ {"NA57"},
+        /*60*/ {"P1 MPE"},
+        /*61*/ {"P1 INVA"},
+        /*62*/ {"P1 SOVF"},
+        /*63*/ {"NA63"},
+        /*64*/ {"P1 COM"},
+        /*65*/ {"P1 PRL"},
+        /*66*/ {"P1 CONT"},
+        /*67*/ {"P1 PBIT"},
+        /*70*/ {"P1 FLAG"},
+        /*71*/ {"P1 INVIDX"},
+        /*72*/ {"P1 EXPO"},
+        /*73*/ {"P1 EXPU"},
+        /*74*/ {"P1 INTO"},
+        /*75*/ {"P1 DIV0"},
+        /*76*/ {"NA76"},
+        /*77*/ {"NA77"},
 };
 
 int openfile(FILEHANDLE *f, const char *mode) {
@@ -407,7 +409,7 @@ done:   *linep++ = 0;
         if (realspo) {
                 if (canfile >= 0) {
                         linep--; *linep++ = 0x0d; *linep++ = 0;
-                        write(canfile, linebuf, linep-linebuf);
+                        (void)write(canfile, linebuf, linep-linebuf);
                         sleep(3);
                 }
         }
@@ -1471,7 +1473,7 @@ printf("runn: C=%05o L=%o T=%04o\n", cpu->r.C, cpu->r.L, cpu->r.T);
         }
         // CPU stopped
         printf("\n\n***** CPU stopped *****\nContinue?  ");
-        fgets(linebuf, sizeof linebuf, stdin);
+        (void)fgets(linebuf, sizeof linebuf, stdin);
         if (linebuf[0] != 'n')
                 goto runagain;
 }

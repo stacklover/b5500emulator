@@ -15,10 +15,12 @@
 *   Added "long long" qualifier to constants with long long value
 * 2017-09-22  R.Meyer
 *   Added comments and some cosmetic changes
+* 2017-09-30  R.Meyer
+*   overhaul of file names
 ***********************************************************************/
 
-#ifndef B5500_COMMON_H
-#define B5500_COMMON_H
+#ifndef COMMON_H
+#define COMMON_H
 
 /*
  * first, we define some types representing the typical register
@@ -666,4 +668,4 @@ extern int emode;       // emode math
 extern const INSTRUCTION instruction_table[];
 extern unsigned instr_count;
 
-#endif /* B5500_COMMON_H */
+#endif /* COMMON_H */

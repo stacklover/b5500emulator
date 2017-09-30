@@ -13,10 +13,12 @@
 *   Converted Paul's work from Javascript to C
 * 2017-07-17  R.Meyer
 *   Added "long long" qualifier to constants with long long value
+* 2017-09-30  R.Meyer
+*   overhaul of file names
 ***********************************************************************/
 
 #include <stdio.h>
-#include "b5500_common.h"
+#include "common.h"
 
 /*
  * Note: Bits are numbered 0..47 from most significant to least significant!

@@ -15,6 +15,8 @@
 *   added Central Control and message queues
 * 2017-07-17  R.Meyer
 *   added proper casts to return values	of shmat
+* 2017-09-30  R.Meyer
+*   overhaul of file names
 ***********************************************************************/
 
 #include <stdio.h>
@@ -24,7 +26,7 @@
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <sys/msg.h>
-#include "b5500_common.h"
+#include "common.h"
 
 /*
  * storage declared here

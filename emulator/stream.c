@@ -16,10 +16,12 @@
 *   changed "compl" to "compla" to avoid errors when using g++
 * 2017-09-23 R.Meyer
 *   some recoding and checking
+* 2017-09-30  R.Meyer
+*   overhaul of file names
 ***********************************************************************/
 
 #include <stdio.h>
-#include "b5500_common.h"
+#include "common.h"
 
 /*
  * Generally

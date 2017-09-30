@@ -13,10 +13,12 @@
 *   Converted Paul's work from Javascript to C
 * 2017-07-17  R.Meyer
 *   changed "this" to "cpu" to avoid errors when using g++
+* 2017-09-30  R.Meyer
+*   overhaul of file names
 ***********************************************************************/
 
 #include <stdio.h>
-#include "b5500_common.h"
+#include "common.h"
 #define DEBUG 1
 
 /*
