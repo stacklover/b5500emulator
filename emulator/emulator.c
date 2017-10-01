@@ -54,13 +54,11 @@ FILEHANDLE    diskfile;         /* file with disk */
 FILEHANDLE    listfile;         /* file with listing */
 FILEHANDLE    spiofile;         /* file with special instruction and I/O trace */
 FILEHANDLE    printfile;	/* file to print output into */
+enum printtype {pt_file=0, pt_lc10} printtype;
 
 /* input/output buffer */
 char    linebuf[MAXLINELENGTH];
 char    *linep;
-
-/* file for CANbus */
-int     canfile = -1;
 
 /* NAME entries */
 #define MAXNAME 1000
@@ -819,6 +817,8 @@ retresult:
         return result;
 }
 
+int lpa_lineno;
+
 WORD48 lp_write(WORD48 iocw) {
         unsigned unitdes, count;
         BIT mi;
@@ -849,13 +849,33 @@ WORD48 lp_write(WORD48 iocw) {
 
         if (skip) {
                 // skip to stop
-                fprintf(printfile.fp, "%c", '@'+skip);
+		switch (printtype) {
+		case pt_file:
+			fprintf(printfile.fp, "%c", '@'+skip);
+			break;
+		case pt_lc10:
+			if (skip == 1 && lpa_lineno != 1)
+				fprintf(printfile.fp, "\014");
+			break;
+		}
+		lpa_lineno = 1;
         } else {
                 // space
-                switch (space) {
-                case 0: fprintf(printfile.fp, "0"); break;
-                case 1: case 3: fprintf(printfile.fp, "2"); break;
-                case 2: fprintf(printfile.fp, "1"); break;
+		switch (printtype) {
+		case pt_file:
+		        switch (space) {
+		        case 0: fprintf(printfile.fp, "0"); break;
+		        case 1: case 3: fprintf(printfile.fp, "2"); break;
+		        case 2: fprintf(printfile.fp, "1"); break;
+			}
+			break;
+		case pt_lc10:
+		        switch (space) {
+		        case 0: fprintf(printfile.fp, "\033P\017"); break;
+		        case 1: case 3: fprintf(printfile.fp, "\n\n\033P\017"); lpa_lineno += 2; break;
+		        case 2: fprintf(printfile.fp, "\n\033P\017"); lpa_lineno ++; break;
+			}
+			break;
                 }
         }
         if (!mi) {
@@ -868,8 +888,20 @@ WORD48 lp_write(WORD48 iocw) {
                         count--;
                 }
         }
-        fprintf(printfile.fp, "\n");
+	switch (printtype) {
+	case pt_file:
+	        fprintf(printfile.fp, "\n");
+		break;
+	case pt_lc10:
+	        fprintf(printfile.fp, "\r");
+		break;
+	}
 	fflush(printfile.fp);
+
+	// end of  page reached?
+	if (lpa_lineno >= 66) {
+		result |= MASK_IORD21;
+	}
 
         result |= (acc.addr << SHFT_ADDR);
 retresult:
@@ -1490,6 +1522,7 @@ int main(int argc, char *argv[])
 
         printf("B5500 Emulator Main Thread\n");
         diskfile.name = (char*)"./disk/dka.dat";
+	printtype = pt_file;
 
         b5500_init_shares();
 
@@ -1500,7 +1533,7 @@ int main(int argc, char *argv[])
         cpu->acc.id = cpu->id;
         cpu->isP1 = true;
 
-        while ((opt = getopt(argc, argv, "imsezrSl:I:c:C:t:T:d:D:p:")) != -1) {
+        while ((opt = getopt(argc, argv, "imsezrSl:I:c:C:t:T:d:D:p:P:")) != -1) {
                 switch (opt) {
                 case 'i':
                         dodmpins = true; /* I/O trace */
@@ -1551,9 +1584,19 @@ int main(int argc, char *argv[])
                 case 'D':
                         diskfile.tracename = optarg; /* trace file for disk image */
                         break;
-                // DISK
+                // LINE PRINTER
                 case 'p':
                         printfile.name = optarg; /* file for print output */
+                        break;
+                case 'P':
+                        if (strcmp(optarg, "file") == 0)
+				printtype = pt_file;
+			else if (strcmp(optarg, "lc10") == 0)
+				printtype = pt_lc10;
+			else {
+				fprintf(stderr, "unknown printer type\n");
+				exit(2);
+			}
                         break;
                 default: /* '?' */
                         fprintf(stderr,
@@ -1564,6 +1607,7 @@ int main(int argc, char *argv[])
                                 "\t-e\t\ttrace execution\n"
                                 "\t-z\t\tstop at ZPI instruction\n"
                                 "\t-r\t\tuse real SPO\n"
+                                "\t-P\t\tprinter type (file, lc10)\n"
                                 "\t-S\t\tcard load select\n"
                                 "\t-l <file>\tspecify listing file name\n"
                                 "\t-c <file>\tspecify card file name\n"
@@ -1594,8 +1638,6 @@ int main(int argc, char *argv[])
 
         // report SPO as ready
         unitsready |= 1ll << unit[30][1].readybit;
-        if (realspo)
-               canfile = open("/dev/ttyS4", O_RDWR);
 
         opt = openfile(&listfile, "r");
 
