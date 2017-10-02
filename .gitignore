@@ -30,13 +30,14 @@
 
 # Debug files
 *.dSYM/
+*.txt
 
 # Editor backups
 *~
 
-# all emulated disk files
+# all emulated disk files since they are a) huge and b) contain non public data
 disk/*
 
-# tapes
-tapes/*
+# original B5500 tapes since they are not public
+tapes/B5500*
 

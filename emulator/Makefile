@@ -39,6 +39,11 @@ OBJEMULATOR =	$(ODIR)/emulator.o $(ODIR)/init_shares.o \
 		$(ODIR)/stack.o $(ODIR)/memory.o $(ODIR)/jump_call.o \
 		$(ODIR)/irq_io.o $(ODIR)/single.o $(ODIR)/double.o \
 		$(ODIR)/misc_cpu.o $(ODIR)/bitfield.o $(ODIR)/stream.o \
+		$(ODIR)/dev_spo.o \
+		$(ODIR)/dev_cr.o \
+		$(ODIR)/dev_mt.o \
+		$(ODIR)/dev_lp.o \
+		$(ODIR)/dev_dk.o \
 		$(ODIR)/translatetables.o	\
 		$(ODIR)/instr_table.o
 

@@ -200,6 +200,7 @@ typedef struct cpu {
 typedef struct unit {
         const char      *name;          // printable unit name
         const unsigned  readybit;       // B5500 bit number of ready status bit in TUS
+	const unsigned	index;		// enumeration of several units of same type
         // handling functions (not yet used, may need reconsideration)
         BIT             (*isready)(unsigned);     // function to check for ready
         WORD48          (*ioaccess)(WORD48);      // function to actually perform IO
@@ -592,6 +593,29 @@ extern void preset(CPU *, ADDR15 runAddr);
 extern void b5500_execute_cm(CPU *);
 extern void b5500_execute_wm(CPU *);
 extern void run(CPU *);
+
+/* devices */
+extern int spo_init(const char *info);
+extern void spo_term(void);
+extern BIT spo_ready(unsigned index);
+extern WORD48 spo_write(WORD48 iocw);
+extern WORD48 spo_read(WORD48 iocw);
+extern int cr_init(const char *info);
+extern void cr_term(void);
+extern BIT cr_ready(unsigned index);
+extern WORD48 cr_read(WORD48 iocw);
+extern int lp_init(const char *info);
+extern void lp_term(void);
+extern BIT lp_ready(unsigned index);
+extern WORD48 lp_write(WORD48 iocw);
+extern int mt_init(const char *info);
+extern void mt_term(void);
+extern BIT mt_ready(unsigned index);
+extern WORD48 mt_access(WORD48 iocw);
+extern int dk_init(const char *info);
+extern void dk_term(void);
+extern BIT dk_ready(unsigned index);
+extern WORD48 dk_access(WORD48 iocw);
 
 /* translate tables */
 extern const WORD6 translatetable_ascii2bic[128];
