@@ -57,10 +57,10 @@ int lp_init(const char *option) {
 	const char *op = option;
 	printf("printer option(s): %s\n", op);
 	while (*op != 0) {
-		if (strncmp(op, "lpa:", 4) == 0) {
+		if (strncmp(op, "lpa=", 4) == 0) {
 			lpx = lp+0;
 			op += 4;
-		} else if (strncmp(op, "lpb:", 4) == 0) {
+		} else if (strncmp(op, "lpb=", 4) == 0) {
 			lpx = lp+1;
 			op += 4;
 		} else if (strncmp(op, "file=", 5) == 0) {

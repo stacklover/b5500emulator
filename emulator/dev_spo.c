@@ -41,30 +41,6 @@ char	*spooutp;
 int spo_init(const char *option) {
 	const char *op = option;
 	printf("spo option(s): %s\n", op);
-	while (*op != 0) {
-#if 0
-		if (strncmp(op, "file=", 5) == 0) {
-			lpx->type = pt_file;
-			op += 5;
-		} else if (strncmp(op, "lc10=", 5) == 0) {
-			lpx->type = pt_lc10;
-			op += 5;
-		} else {
-			// assume rest is a filename
-			strncpy(lpx->filename, op, NAMELEN);
-			lpx->filename[NAMELEN-1] = 0;
-			lpx->fp = fopen(lpx->filename, "w");
-			if (lpx->fp) {
-				lpx->ready = true;
-				break;
-			} else {
-				// cannot open
-				perror(lpx->filename);
-				return 2; // fatal
-			}
-		}
-#endif
-	}
 	ready = true;
 	return 0; // OK
 }

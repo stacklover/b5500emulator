@@ -64,103 +64,6 @@ unsigned instr_count;
 CPU *cpu;
 
 
-WORD48 unitsready;
-
-/*
- * table of I/O units
- * indexed by unit designator and read bit of I/O descriptor
- */
-UNIT unit[32][2] = {
-	/*NO     NAME RDYBIT INDEX READYF    WRITEF    NULL     NAME RDYBIT INDEX READYF    READF     BOOTF */
-        /*00*/ {{NULL, 0, 0},                                  {NULL, 0, 0}},
-        /*01*/ {{"MTA", 47-47, 0, mt_ready, mt_access, NULL},  {"MTA", 47-47, 0, mt_ready, mt_access, NULL}},
-        /*02*/ {{NULL, 0, 0},                                  {NULL, 0, 0}},
-        /*03*/ {{"MTB", 47-46, 1, mt_ready, mt_access, NULL},  {"MTB", 47-46, 1, mt_ready, mt_access, NULL}},
-        /*04*/ {{"DRA", 47-31, 0},                             {"DRA", 47-31, 0}},         
-        /*05*/ {{"MTC", 47-45, 2, mt_ready, mt_access, NULL},  {"MTC", 47-45, 2, mt_ready, mt_access, NULL}},
-        /*06*/ {{"DKA", 47-29, 0, dk_ready, dk_access, NULL},  {"DKA", 47-29, 0, dk_ready, dk_access, NULL}},
-        /*07*/ {{"MTD", 47-44, 3, mt_ready, mt_access, NULL},  {"MTD", 47-44, 3, mt_ready, mt_access, NULL}},
-        /*08*/ {{"DRB", 47-30, 1},                             {"DRB", 47-30, 1}},
-        /*09*/ {{"MTE", 47-43, 4, mt_ready, mt_access, NULL},  {"MTE", 47-43, 4, mt_ready, mt_access, NULL}},
-        /*10*/ {{"CPA", 47-25, 0},                             {"CRA", 47-24, 0, cr_ready, cr_read, NULL}},
-        /*11*/ {{"MTF", 47-42, 5, mt_ready, mt_access, NULL},  {"MTF", 47-42, 5, mt_ready, mt_access, NULL}},
-        /*12*/ {{"DKB", 47-28, 1, dk_ready, dk_access, NULL},  {"DKB", 47-28, 1, dk_ready, dk_access, NULL}},
-        /*13*/ {{"MTH", 47-41, 6, mt_ready, mt_access, NULL},  {"MTH", 47-41, 6, mt_ready, mt_access, NULL}},
-        /*14*/ {{NULL, 0, 0},                                  {"CRB", 47-23, 1, cr_ready, cr_read, NULL}},
-        /*15*/ {{"MTJ", 47-40, 7, mt_ready, mt_access, NULL},  {"MTJ", 47-40, 7, mt_ready, mt_access, NULL}},
-        /*16*/ {{"DCC", 47-17, 0},                             {"DCC", 47-17, 0}},
-        /*17*/ {{"MTK", 47-39, 8, mt_ready, mt_access, NULL},  {"MTK", 47-39, 8, mt_ready, mt_access, NULL}},
-        /*18*/ {{"PPA", 47-21, 0},                             {"PRA", 47-20, 0}},
-        /*19*/ {{"MTL", 47-38, 9, mt_ready, mt_access, NULL},  {"MTL", 47-38, 9, mt_ready, mt_access, NULL}},
-        /*20*/ {{"PPB", 47-19, 1},                             {"PRB", 47-18, 1}},
-        /*21*/ {{"MTM", 47-37, 10, mt_ready, mt_access, NULL}, {"MTM", 47-37, 10, mt_ready, mt_access, NULL}},
-        /*22*/ {{"LPA", 47-27, 0, lp_ready, lp_write, NULL},   {NULL, 0, 0}},
-        /*23*/ {{"MTN", 47-36, 11, mt_ready, mt_access, NULL}, {"MTN", 47-36, 11, mt_ready, mt_access, NULL}},
-        /*24*/ {{NULL, 0, 0},                                  {NULL, 0, 0}},
-        /*25*/ {{"MTP", 47-35, 12, mt_ready, mt_access, NULL}, {"MTP", 47-35, 12, mt_ready, mt_access, NULL}},
-        /*26*/ {{"LPB", 47-26, 1, lp_ready, lp_write, NULL},   {NULL, 0, 0}},
-        /*27*/ {{"MTR", 47-34, 13, mt_ready, mt_access, NULL}, {"MTR", 47-34, 13, mt_ready, mt_access, NULL}},
-        /*28*/ {{NULL, 0, 0},                                  {NULL, 0, 0}},
-        /*29*/ {{"MTS", 47-33, 14, mt_ready, mt_access, NULL}, {"MTS", 47-33, 14, mt_ready, mt_access, NULL}},
-        /*30*/ {{"SPO", 47-22, 0, spo_ready, spo_write, NULL}, {"SPO", 47-22, 0, NULL, spo_read, NULL}},
-        /*31*/ {{"MTT", 47-32, 15, mt_ready, mt_access, NULL}, {"MTT", 47-32, 15, mt_ready, mt_access, NULL}},
-};
-
-/*
- * table of IRQs
- * indexed by cell address - 020
- */
-IRQ irq[48] = {
-        /*20*/ {"NA20"},
-        /*21*/ {"NA21"},
-        /*22*/ {"TIMER"},
-        /*23*/ {"I/O BUSY"},
-        /*24*/ {"KBD REQ"},
-        /*25*/ {"PTR1 FIN"},
-        /*26*/ {"PTR2 FIN"},
-        /*27*/ {"I/O1 FIN"},
-        /*30*/ {"I/O2 FIN"},
-        /*31*/ {"I/O3 FIN"},
-        /*32*/ {"I/O4 FIN"},
-        /*33*/ {"P2 BUSY"},
-        /*34*/ {"DCT IRQ"},
-        /*35*/ {"NA35"},
-        /*36*/ {"DF1 RCHK FIN"},
-        /*37*/ {"DF2 RCHK FIN"},
-        /*40*/ {"P2 MPE"},
-        /*41*/ {"P2 INVA"},
-        /*42*/ {"P2 SOVF"},
-        /*43*/ {"NA43"},
-        /*44*/ {"P2 COM"},
-        /*45*/ {"P2 PRL"},
-        /*46*/ {"P2 CONT"},
-        /*47*/ {"P2 PBIT"},
-        /*50*/ {"P2 FLAG"},
-        /*51*/ {"P2 INVIDX"},
-        /*52*/ {"P2 EXPO"},
-        /*53*/ {"P2 EXPU"},
-        /*54*/ {"P2 INTO"},
-        /*55*/ {"P2 DIV0"},
-        /*56*/ {"NA56"},
-        /*57*/ {"NA57"},
-        /*60*/ {"P1 MPE"},
-        /*61*/ {"P1 INVA"},
-        /*62*/ {"P1 SOVF"},
-        /*63*/ {"NA63"},
-        /*64*/ {"P1 COM"},
-        /*65*/ {"P1 PRL"},
-        /*66*/ {"P1 CONT"},
-        /*67*/ {"P1 PBIT"},
-        /*70*/ {"P1 FLAG"},
-        /*71*/ {"P1 INVIDX"},
-        /*72*/ {"P1 EXPO"},
-        /*73*/ {"P1 EXPU"},
-        /*74*/ {"P1 INTO"},
-        /*75*/ {"P1 DIV0"},
-        /*76*/ {"NA76"},
-        /*77*/ {"NA77"},
-};
-
 int openfile(FILEHANDLE *f, const char *mode) {
         if (f->name != NULL) {
                 f->fp = fopen(f->name, mode);
@@ -202,54 +105,6 @@ int closefile(FILEHANDLE *f) {
         return 0;
 }
 
-void signalInterrupt(const char *id, const char *cause) {
-        // Called by all modules to signal that an interrupt has occurred and
-        // to invoke the interrupt prioritization mechanism. This will result in
-        // an updated vector address in the IAR. Can also be called to reprioritize
-        // any remaining interrupts after an interrupt is handled. If no interrupt
-        // condition exists, CC->IAR is set to zero
-        if (P[0]->r.I & 0x01) CC->IAR = 060;		// P1 memory parity error
-        else if (P[0]->r.I & 0x02) CC->IAR = 061;	// P1 invalid address error
-
-        else if (CC->CCI03F) CC->IAR = 022;	// Time interval
-        else if (CC->CCI04F) CC->IAR = 023;	// I/O busy
-        else if (CC->CCI05F) CC->IAR = 024;	// Keyboard request
-        else if (CC->CCI08F) CC->IAR = 027;	// I/O 1 finished
-        else if (CC->CCI09F) CC->IAR = 030;	// I/O 2 finished
-        else if (CC->CCI10F) CC->IAR = 031;	// I/O 3 finished
-        else if (CC->CCI11F) CC->IAR = 032;	// I/O 4 finished
-        else if (CC->CCI06F) CC->IAR = 025;	// Printer 1 finished
-        else if (CC->CCI07F) CC->IAR = 026;	// Printer 2 finished
-        else if (CC->CCI12F) CC->IAR = 033;	// P2 busy
-        else if (CC->CCI13F) CC->IAR = 034;	// Inquiry request
-        else if (CC->CCI14F) CC->IAR = 035;	// Special interrupt 1
-        else if (CC->CCI15F) CC->IAR = 036;	// Disk file 1 read check finished
-        else if (CC->CCI16F) CC->IAR = 037;	// Disk file 2 read check finished
-
-        else if (P[0]->r.I & 0x04) CC->IAR = 062;			// P1 stack overflow
-        else if (P[0]->r.I & 0xF0) CC->IAR = (P[0]->r.I >> 4) + 060;	// P1 syllable-dependent
-
-        else if (P[1]->r.I & 0x01) CC->IAR = 040;	// P2 memory parity error
-        else if (P[1]->r.I & 0x02) CC->IAR = 041;	// P2 invalid address error
-        else if (P[1]->r.I & 0x04) CC->IAR = 042;	// P2 stack overflow
-        else if (P[1]->r.I & 0xF0) CC->IAR = (P[1]->r.I >> 4) + 040;	// P2 syllable-dependent
-        else CC->IAR = 0;// no interrupt set
-
-        if (CC->IAR) {
-                CC->interruptMask |= (1ll << CC->IAR);
-                CC->interruptLatch |= (1ll << CC->IAR);
-        }
-#if 1
-        if (spiofile.trace) {
-                fprintf(spiofile.trace, "%08u %s signalInterrupt %s P1.I=%02x P2.I=%02x MASK=%012llx LATCH=%012llx\n",
-                        instr_count, id, cause,
-                        P[0]->r.I, P[1]->r.I,
-                        CC->interruptMask,
-                        CC->interruptLatch);
-        }
-#endif
-}
-
 void getlin(FILEHANDLE *f) { /* get next line */
         if (f->eof)
                 return;
@@ -264,267 +119,6 @@ void getlin(FILEHANDLE *f) { /* get next line */
         while (linep >= linebuf && *linep <= ' ')
                 *linep-- = 0;
         linep = linebuf;
-}
-
-void fileheaderanalyze(FILEHANDLE *f, WORD48 *hdr) {
-        int i;
-        if (!f->trace) return;
-        fprintf(f->trace, "\tFH[00]=%016llo RECLEN=%llu BLKLEN=%llu RECSPERBLK=%llu SEGSPERBLK=%llu\n",
-                hdr[0], (hdr[0]>>33)&077777, (hdr[0]>>18)&077777, (hdr[0]>>6)&07777, hdr[0]&077);
-        fprintf(f->trace, "\tFH[01]=%016llo DATE=%llu TIME=%llu\n",
-                hdr[1], (hdr[1]>>24)&0777777, hdr[1]&037777777);
-        fprintf(f->trace, "\tFH[07]=%016llo RECORDS=%llu\n",
-                hdr[7], hdr[7]);
-        fprintf(f->trace, "\tFH[08]=%016llo SEGSPERROW=%llu\n",
-                hdr[8], hdr[8]);
-        fprintf(f->trace, "\tFH[09]=%016llo MAXROWS=%llu\n",
-                hdr[9], hdr[9]&037);
-        for (i=10; i<29; i++) {
-                if (hdr[i] > 0) {
-                        fprintf(f->trace, "\tFH[%02d]=%016llo DFA=%llu\n", i, hdr[i], hdr[i]);
-                }
-        }
-}
-
-void clearInterrupt(void) {
-        // Resets an interrupt based on the current setting of CC->IAR, then
-        // re-prioritices any remaining interrupts, leaving the new vector address
-        // in CC->IAR
-        if (CC->IAR) {
-                // current active IRQ
-                CC->interruptMask &= ~(1ll << CC->IAR);
-                switch (CC->IAR) {
-                case 022: // Time interval
-                        CC->CCI03F = false;
-                        break;
-                case 027: // I/O 1 finished
-                        CC->CCI08F = false;
-                        CC->AD1F = false; // make unit non-busy
-                        CC->iouMask &= ~1;
-                        break;
-                case 030: // I/O 2 finished
-                        CC->CCI09F = false;
-                        CC->AD2F = false; // make unit non-busy
-                        CC->iouMask &= ~2;
-                        break;
-                case 031: // I/O 3 finished
-                        CC->CCI10F = false;
-                        CC->AD3F = false; // make unit non-busy
-                        CC->iouMask &= ~4;
-                        break;
-                case 032: // I/O 4 finished
-                        CC->CCI11F = false;
-                        CC->AD4F = false; // make unit non-busy
-                        CC->iouMask &= ~8;
-                        break;
-                case 025: // Printer 1 finished
-                        CC->CCI06F = false;
-                        break;
-                case 026: // Printer 2 finished
-                        CC->CCI07F = false;
-                        break;
-                // 64-75: P1 syllable-dependent
-                case 064: case 065: case 066: case 067:
-                case 070: case 071: case 072: case 073:
-                case 074: case 075:
-                        P[0]->r.I &= 0x0F;
-                        break;
-
-                case 034: // Inquiry request
-                        CC->CCI13F = false;
-                        break;
-                case 024: // Keyboard request
-                        CC->CCI05F = false;
-                        break;
-                // 44-55: P2 syllable-dependent
-                case 044: case 045: case 046: case 047:
-                case 050: case 051: case 052: case 053:
-                case 054: case 055:
-                        if (P[1]) P[1]->r.I &= 0x0F;
-                        break;
-
-                case 060: // P1 memory parity error
-                        P[0]->r.I &= 0xFE;
-                        break;
-                case 061: // P1 invalid address error
-                        P[0]->r.I &= 0xFD;
-                        break;
-                case 062: // P1 stack overflow
-                        P[0]->r.I &= 0xFB;
-                        break;
-
-                case 040: // P2 memory parity error
-                        if (P[1]) P[1]->r.I &= 0xFE;
-                        break;
-                case 041: // P2 invalid address error
-                        if (P[1]) P[1]->r.I &= 0xFD;
-                        break;
-                case 042: // P2 stack overflow
-                        if (P[1]) P[1]->r.I &= 0xFB;
-                        break;
-
-                case 036: // Disk file 1 read check finished
-                        CC->CCI15F = false;
-                        break;
-                case 037: // Disk file 2 read check finished
-                        CC->CCI16F = false;
-                        break;
-                case 023: // I/O busy
-                        CC->CCI04F = false;
-                        break;
-                case 033: // P2 busy
-                        CC->CCI12F = false;
-                        break;
-                case 035: // Special interrupt 1
-                        CC->CCI14F = false;
-                        break;
-                default: // no interrupt vector was set
-                        break;
-                }
-        }
-#if 0
-        if (spiofile.trace) {
-                fprintf(spiofile.trace, "%08u clearInterrupt P1.I=%02x P2.I=%02x MASK=%012llx LATCH=%012llx\n",
-                        instr_count, P[0]->r.I, P[1]->r.I, CC->interruptMask, CC->interruptLatch);
-        }
-#endif
-        signalInterrupt("CC", "AGAIN");
-};
-
-
-void interrogateInterrupt(CPU *cpu) {
-        // control-state only
-        if (CC->IAR && !cpu->r.NCSF) {
-                if (spiofile.trace) {
-                        fprintf(spiofile.trace, "%08u ITI IAR=%03o(%s)\n",
-                                instr_count, CC->IAR, irq[CC->IAR-020].name);
-                }
-                cpu->r.C = CC->IAR;
-                cpu->r.L = 0;
-                // stack address @100
-                cpu->r.S = AA_IRQSTACK;
-                // clear IRQ
-                clearInterrupt();
-                // require fetch at SECL
-                cpu->r.PROF = false;
-                return;
-        }
-#if 0
-        // elaborate trace
-        if (spiofile.trace) {
-                fprintf(spiofile.trace, "%08u ITI NO IRQ PENDING\n",
-                        instr_count);
-        }
-#endif
-}
-
-void initiateIO(CPU *cpu) {
-        ACCESSOR acc;
-        WORD48 iocw;
-        WORD48 result;
-        unsigned unitdes, wc;
-        ADDR15 core;
-        BIT reading;
-
-        // get address of IOCW
-        acc.id = "IO";
-        acc.addr = 010;
-        acc.MAIL = false;
-        fetch(&acc);
-        // get IOCW itself
-        acc.addr = acc.word;
-        acc.MAIL = false;
-        fetch(&acc);
-        iocw = acc.word;
-
-        // analyze IOCW
-        unitdes = (iocw & MASK_IODUNIT) >> SHFT_IODUNIT;
-        reading = (iocw & MASK_IODREAD) ? true : false;
-        wc = (iocw & MASK_WCNT) >> SHFT_WCNT;
-        core = (iocw & MASK_ADDR) >> SHFT_ADDR;
-
-        // elaborate trace
-        if (spiofile.trace) {
-                fprintf(spiofile.trace, "%08u IOCW=%016llo\n", instr_count, iocw);
-                fprintf(spiofile.trace, "\tunit=%u(%s) core=%05o", unitdes, unit[unitdes][reading].name, core);
-                if (iocw & MASK_IODMI) fprintf(spiofile.trace, " inhibit");
-                if (iocw & MASK_IODBINARY) fprintf(spiofile.trace, " binary"); else fprintf(spiofile.trace, " alpha");
-                if (iocw & MASK_IODTAPEDIR)  fprintf(spiofile.trace, " reverse");
-                if (reading) fprintf(spiofile.trace, " read"); else fprintf(spiofile.trace, " write");
-                if (iocw & MASK_IODSEGCNT) fprintf(spiofile.trace, " segments=%llu", (iocw & MASK_IODSEGCNT) >> SHFT_IODSEGCNT);
-                if (iocw & MASK_IODUSEWC) fprintf(spiofile.trace, " wc=%u", wc);
-                fprintf(spiofile.trace, "\n");
-        }
-
-	// check for entry in unit table
-	if (unit[unitdes][reading].ioaccess) {
-		// handle I/O
-		result = (*unit[unitdes][reading].ioaccess)(iocw);
-	} else {
-	        // prepare result descriptor with not ready set
-	        result = iocw | MASK_IORNRDY;
-	}
-
-        if (spiofile.trace) {
-                fprintf(spiofile.trace, "\tRSLT=%016llo\n", result);
-                fflush(spiofile.trace);
-        }
-
-        // return IO RESULT
-        acc.addr = 014;
-        acc.word = result;
-        store(&acc);
-        CC->CCI08F = true;
-        signalInterrupt("IO", "COMPLETE");
-}
-
-WORD48 interrogateUnitStatus(CPU *cpu) {
-	int i, j;
-	BIT b;
-        static int td = 0;
-#if 0
-        // elaborate trace
-        if (spiofile.trace)
-                fprintf(spiofile.trace, "%08u TUS=%016llo\n", instr_count, unitsready);
-#endif
-        // simulate timer
-        if (++td > 200) {
-                CC->TM++;
-                if (CC->TM >= 63) {
-                        CC->TM = 0;
-                        CC->CCI03F = true;
-                        signalInterrupt("CC", "TIMER");
-                } else {
-                        CC->TM++;
-                }
-                td = 0;
-        }
-
-	// go through all units
-	for (i=0; i<32; i++) for (j=0; j<2; j++) {
-		if (unit[i][j].isready) {
-			b = (*unit[i][j].isready)(unit[i][j].index);
-			if (b)
-				unitsready |= (1LL << unit[i][j].readybit);
-			else
-				unitsready &= ~(1LL << unit[i][j].readybit);
-		}
-	}
-	// return the mask
-        return unitsready;
-}
-
-WORD48 interrogateIOChannel(CPU *cpu) {
-        WORD48 result = 0;
-        // report I/O control unit 1
-        result = 1ll;
-
-#if 0
-        // elaborate trace
-        if (spiofile.trace)
-                fprintf(spiofile.trace, "%08u TIO=%llu\n", instr_count, result);
-#endif
-        return result;
 }
 
 WORD48 readTimer(CPU *cpu) {
@@ -862,7 +456,7 @@ int main(int argc, char *argv[])
         cpu->acc.id = cpu->id;
         cpu->isP1 = true;
 
-        while ((opt = getopt(argc, argv, "imsezSl:I:r:c:p:t:d:")) != -1) {
+        while ((opt = getopt(argc, argv, "imsezSl:I:")) != -1) {
                 switch (opt) {
                 case 'i':
                         dodmpins = true; /* I/O trace */
@@ -889,26 +483,6 @@ int main(int argc, char *argv[])
                 case 'I':
                         spiofile.tracename = optarg; /* trace file for special instructions and I/O */
                         break;
-                // CARD READER
-                case 'c':
-                        if ((opt = cr_init(optarg))) exit(opt);  /* card reader emulation options */
-                        break;
-                // TAPE DRIVE
-                case 't':
-                        if ((opt = mt_init(optarg))) exit(opt); /* tape emulation options */
-                        break;
-                // DISK FILE
-                case 'd':
-                        if ((opt = dk_init(optarg))) exit(opt); /* disk file emulation options */
-                        break;
-		// OPERATOR CONSOLE
-                case 'r':
-                        if ((opt = spo_init(optarg))) exit(opt); /* console emulation options */
-                        break;
-                // LINE PRINTER
-                case 'p':
-                        if ((opt = lp_init(optarg))) exit(opt); /* printer emulation options */
-                        break;
                 default: /* '?' */
                         fprintf(stderr,
                                 "Usage: %s\n"
@@ -919,11 +493,6 @@ int main(int argc, char *argv[])
                                 "\t-z\t\tstop at ZPI instruction\n"
                                 "\t-S\t\tcard load select\n"
                                 "\t-l <file>\tspecify listing file name\n"
-                                "\t-c <file>\tspecify CRA/CRB options\n"
-                                "\t-t <file>\tspecify tape file name\n"
-                                "\t-d <file>\tspecify DKA/DKB options\n"
-                                "\t-r <opts>\tspecify SPO options\n"
-                                "\t-p <opts>\tspecify LPA/LPB options\n"
                                 "\t-I <file>\tspecify I/O and special instruction trace file name\n"
                                 , argv[0]);
                         exit(2);
@@ -936,13 +505,22 @@ int main(int argc, char *argv[])
                         printf("tranlatetable error at bic=%02o\n", addr);
         }
 
-        if (argc - optind != 0) {
-                fprintf(stderr, "extra parameters on command line\n");
-                exit (2);
+        while (argc > 1) {
+		argv++;
+		argc--;
+		//printf("argc=%d *argv=%s\n", argc, *argv);
+		if (strncmp(*argv, "spo", 3) == 0) {
+                        if ((opt = spo_init(*argv))) exit(opt); /* console emulation options */
+		} else if (strncmp(*argv, "cr", 2) == 0) {
+                        if ((opt = cr_init(*argv))) exit(opt);  /* card reader emulation options */
+		} else if (strncmp(*argv, "mt", 2) == 0) {
+                        if ((opt = mt_init(*argv))) exit(opt); /* tape emulation options */
+		} else if (strncmp(*argv, "dk", 2) == 0) {
+                        if ((opt = dk_init(*argv))) exit(opt); /* disk file emulation options */
+		} else if (strncmp(*argv, "lp", 2) == 0) {
+                        if ((opt = lp_init(*argv))) exit(opt); /* printer emulation options */
+		}
         }
-
-	// nothing is ready now
-        unitsready = 0LL;
 
         opt = openfile(&listfile, "r");
 

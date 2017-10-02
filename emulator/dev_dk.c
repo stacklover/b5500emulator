@@ -57,10 +57,10 @@ int dk_init(const char *option) {
 	const char *op = option;
 	printf("disk drive option(s): %s\n", op);
 	while (*op != 0) {
-		if (strncmp(op, "dka:", 4) == 0) {
+		if (strncmp(op, "dka=", 4) == 0) {
 			dkx = dk+0;
 			op += 4;
-		} else if (strncmp(op, "dkb:", 4) == 0) {
+		} else if (strncmp(op, "dkb=", 4) == 0) {
 			dkx = dk+1;
 			op += 4;
 		} else if (strncmp(op, "trace=", 6) == 0) {

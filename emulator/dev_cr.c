@@ -44,10 +44,10 @@ int cr_init(const char *option) {
 	const char *op = option;
 	printf("card reader option(s): %s\n", op);
 	while (*op != 0) {
-		if (strncmp(op, "cra:", 4) == 0) {
+		if (strncmp(op, "cra=", 4) == 0) {
 			crx = cr+0;
 			op += 4;
-		} else if (strncmp(op, "crb:", 4) == 0) {
+		} else if (strncmp(op, "crb=", 4) == 0) {
 			crx = cr+1;
 			op += 4;
 		} else {

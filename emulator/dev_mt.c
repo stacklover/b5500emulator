@@ -53,52 +53,52 @@ int mt_init(const char *option) {
 	const char *op = option;
 	printf("magnetic tape option(s): %s\n", op);
 	while (*op != 0) {
-		if (strncmp(op, "mta:", 4) == 0) {
+		if (strncmp(op, "mta=", 4) == 0) {
 			mtx = mt+0;
 			op += 4;
-		} else if (strncmp(op, "mtb:", 4) == 0) {
+		} else if (strncmp(op, "mtb=", 4) == 0) {
 			mtx = mt+1;
 			op += 4;
-		} else if (strncmp(op, "mtc:", 4) == 0) {
+		} else if (strncmp(op, "mtc=", 4) == 0) {
 			mtx = mt+2;
 			op += 4;
-		} else if (strncmp(op, "mtd:", 4) == 0) {
+		} else if (strncmp(op, "mtd=", 4) == 0) {
 			mtx = mt+3;
 			op += 4;
-		} else if (strncmp(op, "mte:", 4) == 0) {
+		} else if (strncmp(op, "mte=", 4) == 0) {
 			mtx = mt+4;
 			op += 4;
-		} else if (strncmp(op, "mtf:", 4) == 0) {
+		} else if (strncmp(op, "mtf=", 4) == 0) {
 			mtx = mt+5;
 			op += 4;
-		} else if (strncmp(op, "mth:", 4) == 0) {
+		} else if (strncmp(op, "mth=", 4) == 0) {
 			mtx = mt+6;
 			op += 4;
-		} else if (strncmp(op, "mtj:", 4) == 0) {
+		} else if (strncmp(op, "mtj=", 4) == 0) {
 			mtx = mt+7;
 			op += 4;
-		} else if (strncmp(op, "mtk:", 4) == 0) {
+		} else if (strncmp(op, "mtk=", 4) == 0) {
 			mtx = mt+8;
 			op += 4;
-		} else if (strncmp(op, "mtl:", 4) == 0) {
+		} else if (strncmp(op, "mtl=", 4) == 0) {
 			mtx = mt+9;
 			op += 4;
-		} else if (strncmp(op, "mtm:", 4) == 0) {
+		} else if (strncmp(op, "mtm=", 4) == 0) {
 			mtx = mt+10;
 			op += 4;
-		} else if (strncmp(op, "mtn:", 4) == 0) {
+		} else if (strncmp(op, "mtn=", 4) == 0) {
 			mtx = mt+11;
 			op += 4;
-		} else if (strncmp(op, "mtp:", 4) == 0) {
+		} else if (strncmp(op, "mtp=", 4) == 0) {
 			mtx = mt+12;
 			op += 4;
-		} else if (strncmp(op, "mtr:", 4) == 0) {
+		} else if (strncmp(op, "mtr=", 4) == 0) {
 			mtx = mt+13;
 			op += 4;
-		} else if (strncmp(op, "mts:", 4) == 0) {
+		} else if (strncmp(op, "mts=", 4) == 0) {
 			mtx = mt+14;
 			op += 4;
-		} else if (strncmp(op, "mtt:", 4) == 0) {
+		} else if (strncmp(op, "mtt=", 4) == 0) {
 			mtx = mt+15;
 			op += 4;
 		} else {
