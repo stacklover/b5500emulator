@@ -440,6 +440,21 @@ runagain:
                 goto runagain;
 }
 
+int handle_option(const char *option) {
+	if (strncmp(option, "spo", 3) == 0) {
+                return spo_init(option); /* console emulation options */
+	} else if (strncmp(option, "cr", 2) == 0) {
+                return cr_init(option);  /* card reader emulation options */
+	} else if (strncmp(option, "mt", 2) == 0) {
+                return mt_init(option); /* tape emulation options */
+	} else if (strncmp(option, "dk", 2) == 0) {
+                return dk_init(option); /* disk file emulation options */
+	} else if (strncmp(option, "lp", 2) == 0) {
+                return lp_init(option); /* printer emulation options */
+	}
+	return 1; // WARNING
+}
+
 int main(int argc, char *argv[])
 {
         int opt;
@@ -509,17 +524,9 @@ int main(int argc, char *argv[])
 		argv++;
 		argc--;
 		//printf("argc=%d *argv=%s\n", argc, *argv);
-		if (strncmp(*argv, "spo", 3) == 0) {
-                        if ((opt = spo_init(*argv))) exit(opt); /* console emulation options */
-		} else if (strncmp(*argv, "cr", 2) == 0) {
-                        if ((opt = cr_init(*argv))) exit(opt);  /* card reader emulation options */
-		} else if (strncmp(*argv, "mt", 2) == 0) {
-                        if ((opt = mt_init(*argv))) exit(opt); /* tape emulation options */
-		} else if (strncmp(*argv, "dk", 2) == 0) {
-                        if ((opt = dk_init(*argv))) exit(opt); /* disk file emulation options */
-		} else if (strncmp(*argv, "lp", 2) == 0) {
-                        if ((opt = lp_init(*argv))) exit(opt); /* printer emulation options */
-		}
+		opt = handle_option(*argv);
+		if (opt)
+			exit (opt);
         }
 
         opt = openfile(&listfile, "r");

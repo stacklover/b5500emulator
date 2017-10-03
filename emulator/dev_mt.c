@@ -49,7 +49,7 @@ static FILE *trace = NULL;
  * Initialize command from argv scanner or special SPO input
  */
 int mt_init(const char *option) {
-	struct mt *mtx = mt;
+	struct mt *mtx = NULL; // require specification of a tape drive
 	const char *op = option;
 	printf("magnetic tape option(s): %s\n", op);
 	while (*op != 0) {
@@ -101,25 +101,41 @@ int mt_init(const char *option) {
 		} else if (strncmp(op, "mtt=", 4) == 0) {
 			mtx = mt+15;
 			op += 4;
-		} else {
+		} else if (mtx != NULL) {
 			// assume rest is a filename
 			strncpy(mtx->filename, op, NAMELEN);
 			mtx->filename[NAMELEN-1] = 0;
-			mtx->fp = fopen(mtx->filename, "r");
-			if (mtx->fp) {
-				mtx->line = 0;
-				mtx->lastpos = -1;
-				mtx->eof = false;
-				mtx->ready = true;
-				break;
-			} else {
-				// cannot open
-				perror(mtx->filename);
-				return 2; // fatal
+
+			// if we are ready, close current file
+			if (mtx->ready) {
+				fclose(mtx->fp);
+				mtx->fp = NULL;
+				mtx->ready = false;
 			}
+
+			// now open the new file, if any name was given
+			// if none given, the tape drive just stays unready
+			if (mtx->filename[0] != '#') {
+				mtx->fp = fopen(mtx->filename, "r");
+				if (mtx->fp) {
+					mtx->line = 0;
+					mtx->lastpos = -1;
+					mtx->eof = false;
+					mtx->ready = true;
+					return 0; // OK
+				} else {
+					// cannot open
+					perror(mtx->filename);
+					return 2; // FATAL
+				}
+			}
+			return 0;
+		} else {
+			// bogus information
+			return 1; // WARNING
 		}
 	}
-	return 0; // OK
+	return 1; // WARNING
 }
 
 /*

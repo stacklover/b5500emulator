@@ -60,10 +60,23 @@ BIT spo_ready(unsigned index) {
         FD_SET(0, &fds);
         if (select(1, &fds, NULL, NULL, &tv)) {
                 spoinp = fgets(spoinbuf, sizeof spoinbuf, stdin);
-                // signal input request
-                CC->CCI05F = true;
-                signalInterrupt("SPO", "INPUT REQUEST");
-                // the input line is read later, once the IRQ is handled by the MCP
+		// any input ?
+		if (spoinp != NULL) {
+			// remove trailing control codes
+			spoinp = spoinbuf + strlen(spoinbuf);
+			while (spoinp >= spoinbuf && *spoinp <= ' ')
+				*spoinp-- = 0;
+			spoinp = spoinbuf;
+			// divert input starting with '#' to our scanner
+			if (*spoinp == '#') {
+				handle_option(spoinp+1);
+			} else {
+				// signal input request
+				CC->CCI05F = true;
+				signalInterrupt("SPO", "INPUT REQUEST");
+				// the input line is read later, once the IRQ is handled by the MCP
+			}
+		}
         }
 
 	// finally return always ready

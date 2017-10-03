@@ -40,7 +40,7 @@ struct cr {
  * Initialize command from argv scanner or special SPO input
  */
 int cr_init(const char *option) {
-	struct cr *crx = cr;
+	struct cr *crx = NULL; // require specification of a reader
 	const char *op = option;
 	printf("card reader option(s): %s\n", op);
 	while (*op != 0) {
@@ -50,22 +50,38 @@ int cr_init(const char *option) {
 		} else if (strncmp(op, "crb=", 4) == 0) {
 			crx = cr+1;
 			op += 4;
-		} else {
+		} else if (crx != NULL) {
 			// assume rest is a filename
 			strncpy(crx->filename, op, NAMELEN);
 			crx->filename[NAMELEN-1] = 0;
-			crx->fp = fopen(crx->filename, "r");
-			if (crx->fp) {
-				crx->ready = true;
-				break;
-			} else {
-				// cannot open
-				perror(crx->filename);
-				return 2; // fatal
+
+			// if we are ready, close current file
+			if (crx->ready) {
+				fclose(crx->fp);
+				crx->fp = NULL;
+				crx->ready = false;
 			}
+
+			// now open the new file, if any name was given
+			// if none given, the reader just stays unready
+			if (crx->filename[0] != '#') {
+				crx->fp = fopen(crx->filename, "r");
+				if (crx->fp) {
+					crx->ready = true;
+					return 0; // OK
+				} else {
+					// cannot open - stay unready
+					perror(crx->filename);
+					return 2; // ERROR
+				}
+			}
+			return 0;
+		} else {
+			// bogus information
+			return 1; // WARNING
 		}
 	}
-	return 0; // OK
+	return 1; // WARNING
 }
 
 /*

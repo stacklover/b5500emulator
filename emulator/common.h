@@ -617,6 +617,9 @@ extern void dk_term(void);
 extern BIT dk_ready(unsigned index);
 extern WORD48 dk_access(WORD48 iocw);
 
+/* console and command line options */
+int handle_option(const char *option);
+
 /* translate tables */
 extern const WORD6 translatetable_ascii2bic[128];
 extern const WORD8 translatetable_bic2ascii[64];

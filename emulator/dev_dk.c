@@ -53,7 +53,7 @@ static FILE *trace = NULL;
  * Initialize command from argv scanner or special SPO input
  */
 int dk_init(const char *option) {
-	struct dk *dkx = dk;
+	struct dk *dkx = NULL; // require specification of a drive
 	const char *op = option;
 	printf("disk drive option(s): %s\n", op);
 	while (*op != 0) {
@@ -65,25 +65,51 @@ int dk_init(const char *option) {
 			op += 4;
 		} else if (strncmp(op, "trace=", 6) == 0) {
 			op += 6;
-			trace = fopen(op, "w");
+			// close existing trace file
+			if (trace) {
+				fclose(trace);
+				trace = NULL;
+			}
+			// open new trace, if name was given
+			if (strlen(op) > 0) {
+				trace = fopen(op, "w");
+			}
 			return 0;
-		} else {
+		} else if (dkx != NULL) {
 			// assume rest is a filename
 			strncpy(dkx->filename, op, NAMELEN);
 			dkx->filename[NAMELEN-1] = 0;
-			dkx->fp = fopen(dkx->filename, "r+");
-			if (dkx->fp) {
-				dkx->readcheck = false;
-				dkx->ready = true;
-				break;
-			} else {
-				// cannot open
-				perror(dkx->filename);
-				return 2; // fatal
+
+			// if we are ready, close current file
+			if (dkx->ready) {
+				fclose(dkx->fp);
+				dkx->fp = NULL;
+				dkx->ready = false;
 			}
+
+			// reset flags
+			dkx->readcheck = false;
+
+			// now open the new file, if any name was given
+			// if none given, the drive just stays unready
+			if (dkx->filename[0] != '#') {
+				dkx->fp = fopen(dkx->filename, "r+");
+				if (dkx->fp) {
+					dkx->ready = true;
+					return 0; // OK
+				} else {
+					// cannot open
+					perror(dkx->filename);
+					return 2; // FATAL
+				}
+			}
+			return 0;
+		} else {
+			// bogus information
+			return 1; // WARNING
 		}
 	}
-	return 0; // OK
+	return 1; // WARNING
 }
 
 /*
