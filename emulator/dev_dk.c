@@ -23,100 +23,153 @@
 #include "common.h"
 
 /*
- * note: a DRIVE here is an array of upto 100 disk drives with 48MB each
- * giving a total capacity of 480MB
- * we emulate two DRIVES
+ * notes:
+ * smallest entity: B475 Disk File Storage Module
+ *   4x Disks (8 sides) of 50 Tracks of 24000 characters = 9,600,000 characters or 40,000 segments
+ * next entity: B471 Disk File Electronics Unit
+ *   controls upto 5x B475 = 48,000,000 characters or 200,000 segments
+ * top entity: B5470 Disk File Control Unit
+ *   controls upto 10x B471 = 480,000,000 characters or 2,000,000 segments
+ * system max: 2x B5470 = 960,000,000 characters or 4,000,000 segments
+ *
+ * DKA and DKB therefore each provide access to 2,000,000 segments
+ *
+ * we emulate using 256 bytes per segment, the physical disk space required is 512,000,000 bytes
+ * (each for DKA and DKB)
+ * 
  */
-#define DRIVES 2
+#define DFCU_PER_SYSTEM	2
+#define	DFEU_PER_DFCU	10
+#define	DFSM_PER_DFEU	5
+
+#define	SEGS_PER_DFSM	40000
+#define	SEGS_PER_DFEU	(DFSM_PER_DFEU*SEGS_PER_DFSM) //   200,000
+#define	SEGS_PER_DFCU	(DFEU_PER_DFCU*SEGS_PER_DFEU) // 2,000,000
+
 #define NAMELEN 100
 #define	DBUFLEN	257
 
 /*
- * for each supported tape drive
+ * for each supported disk drive
  */
 struct dk {
 	char	filename[NAMELEN];
 	FILE	*fp;
 	BIT	ready;
 	BIT	readcheck;
+	int	eus;
 	char	dbuf[DBUFLEN];
 	char	*dbufp;
-} dk[DRIVES];
+} dk[DFCU_PER_SYSTEM];
 
 /*
  * optional open file to write debugging traces into
  */
 static FILE *trace = NULL;
+static struct dk *dkx = NULL;
 
+/*
+ * set to dka/dkb
+ */
+int set_dk(const char *v, void *data) {dkx = dk+(int)data; return 0; }
+
+/*
+ * specify or close the trace file
+ */
+int set_dktrace(const char *v, void *) {
+	// if open, close existing trace file
+	if (trace) {
+		fclose(trace);
+		trace = NULL;
+	}
+	// if a name is given, open new trace
+	if (strlen(v) > 0) {
+		trace = fopen(v, "w");
+		if (!trace)
+			return 2; // FATAL
+	}
+	return 0; // OK
+}
+
+/*
+ * set number of simulated eus for a DFCU
+ */
+int set_dkeus(const char *v, void *) {
+	char *p;
+	if (!dkx) {
+		printf("dk not specified\n");
+		return 2; // FATAL
+	}
+	dkx->eus = strtol(v, &p, 10);
+	if (*p) {
+		printf("num numeric data\n");
+		return 2; // FATAL
+	}
+	return 0; // OK
+}
+
+/*
+ * specify or close the file for emulation
+ */
+int set_dkfile(const char *v, void *) {
+	if (!dkx) {
+		printf("dk not specified\n");
+		return 2; // FATAL
+	}
+	strncpy(dkx->filename, v, NAMELEN);
+	dkx->filename[NAMELEN-1] = 0;
+
+	// if we are ready, close current file
+	if (dkx->ready) {
+		fclose(dkx->fp);
+		dkx->fp = NULL;
+		dkx->ready = false;
+	}
+
+	// reset flags
+	dkx->readcheck = false;
+
+	// now open the new file, if any name was given
+	// if none given, the drive just stays unready
+	if (dkx->filename[0]) {
+		dkx->fp = fopen(dkx->filename, "r+");
+		if (dkx->fp) {
+			dkx->ready = true;
+			return 0; // OK
+		} else {
+			// cannot open
+			perror(dkx->filename);
+			return 2; // FATAL
+		}
+	}
+	return 0; // OK
+}
+
+/*
+ * command table
+ */
+const command_t dk_commands[] = {
+	{"dka",		set_dk,	(void *) 0},
+	{"dkb", 	set_dk, (void *) 1},
+	{"trace",	set_dktrace},
+	{"eus",		set_dkeus},
+	{"file",	set_dkfile},
+	{NULL,		NULL},
+};
 
 /*
  * Initialize command from argv scanner or special SPO input
  */
 int dk_init(const char *option) {
-	struct dk *dkx = NULL; // require specification of a drive
-	const char *op = option;
-	printf("disk drive option(s): %s\n", op);
-	while (*op != 0) {
-		if (strncmp(op, "dka=", 4) == 0) {
-			dkx = dk+0;
-			op += 4;
-		} else if (strncmp(op, "dkb=", 4) == 0) {
-			dkx = dk+1;
-			op += 4;
-		} else if (strncmp(op, "trace=", 6) == 0) {
-			op += 6;
-			// close existing trace file
-			if (trace) {
-				fclose(trace);
-				trace = NULL;
-			}
-			// open new trace, if name was given
-			if (strlen(op) > 0) {
-				trace = fopen(op, "w");
-			}
-			return 0;
-		} else if (dkx != NULL) {
-			// assume rest is a filename
-			strncpy(dkx->filename, op, NAMELEN);
-			dkx->filename[NAMELEN-1] = 0;
-
-			// if we are ready, close current file
-			if (dkx->ready) {
-				fclose(dkx->fp);
-				dkx->fp = NULL;
-				dkx->ready = false;
-			}
-
-			// reset flags
-			dkx->readcheck = false;
-
-			// now open the new file, if any name was given
-			// if none given, the drive just stays unready
-			if (dkx->filename[0] != '#') {
-				dkx->fp = fopen(dkx->filename, "r+");
-				if (dkx->fp) {
-					dkx->ready = true;
-					return 0; // OK
-				} else {
-					// cannot open
-					perror(dkx->filename);
-					return 2; // FATAL
-				}
-			}
-			return 0;
-		} else {
-			// bogus information
-			return 1; // WARNING
-		}
-	}
-	return 1; // WARNING
+	dkx = NULL; // require specification of a drive
+	return command_parser(dk_commands, option);
 }
 
 /*
  * query ready status
  */
 BIT dk_ready(unsigned index) {
-	if (index < DRIVES)
+	if (index < DFCU_PER_SYSTEM)
 		return dk[index].ready;
 	return false;
 }
@@ -170,11 +223,11 @@ WORD48 dk_access(WORD48 iocw) {
                 fprintf(trace, "%08u UNIT=%u IOCW=%016llo, EU:DFA=%d:%06d", instr_count, unitdes, iocw, eu, diskfileaddr);
         }
 
-        if (eu < 0 || eu > 9 || diskfileaddr < 0 || diskfileaddr > 199999) {
+        if (eu < 0 || eu >= dkx->eus || diskfileaddr < 0 || diskfileaddr >= SEGS_PER_DFEU) {
                 // not supported
                 if (trace)
                         fprintf(trace, " NOT SUPPORTED\n");
-                result |= MASK_IORNRDY;
+                result |= MASK_IORNRDY | MASK_IORD21;
         } else if (iocw & MASK_IODMI) {
                 // special case when memory inhibit
                 dkx->readcheck = true;
@@ -192,7 +245,7 @@ WORD48 dk_access(WORD48 iocw) {
                 // read until word count exhausted
                 while (words > 0) {
                         // get the physical record
-                        fseek(dkx->fp, (eu*200000+diskfileaddr)*256, SEEK_SET);
+                        fseek(dkx->fp, (eu*SEGS_PER_DFEU+diskfileaddr)*256, SEEK_SET);
                         dkx->dbufp = dkx->dbuf;
                         // on read problems or if the signature is missing or wrong, this record has never been written
                         if (fread(dkx->dbuf, sizeof(char), 256, dkx->fp) != 256 ||
@@ -285,7 +338,7 @@ WORD48 dk_access(WORD48 iocw) {
                         }
 
                         // write record to physical file
-                        fseek(dkx->fp, (eu*200000+diskfileaddr)*256, SEEK_SET);
+                        fseek(dkx->fp, (eu*SEGS_PER_DFEU+diskfileaddr)*256, SEEK_SET);
                         fwrite(dkx->dbuf, sizeof(char), 256, dkx->fp);
                         fflush(dkx->fp);
 

@@ -94,6 +94,8 @@ typedef struct central_control {
 // flags from processor 2
         BIT             HP2F;   // HALT CPU #2 flag
         BIT             P2BF;   // CPU #2 busy flag
+// operator panel
+	BIT		CLS;	// CARD LOAD SELECT
 // some helper variables
         WORD48          interruptMask;
         WORD48          interruptLatch;
@@ -618,7 +620,17 @@ extern BIT dk_ready(unsigned index);
 extern WORD48 dk_access(WORD48 iocw);
 
 /* console and command line options */
-int handle_option(const char *option);
+/*
+ * command analyzing structure
+ */
+typedef struct command {
+	const char	*cmd;
+	int		(*func)(const char *value, void *data);
+	void		*data;
+} command_t;
+
+extern int command_parser(const command_t *table, const char *op);
+extern int handle_option(const char *option);
 
 /* translate tables */
 extern const WORD6 translatetable_ascii2bic[128];

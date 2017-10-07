@@ -18,6 +18,7 @@
 *   overhaul of file names
 ***********************************************************************/
 
+#include <stdio.h>
 #include "common.h"
 
 /***********************************************************
@@ -68,6 +69,8 @@ again:
                 cpu->r.N = 0;
                 cpu->r.CWMF = 0;
                 break;
+	case 001:	// XX01: unknown
+		break;
 
         case 002:       // XX02: BSD=Skip bit destination
                 cpu->cycleCount += variant;
@@ -854,6 +857,8 @@ again:
                 break;
 
         default:        // everything else is a no-op
+		// warn about it
+		printf("*\tWARNING: charmode opcode %04o execute as no-op\n", opcode);
                 break;
 
         } // end switch for character mode operators

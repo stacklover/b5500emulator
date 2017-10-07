@@ -36,13 +36,39 @@ char	spooutbuf[80];
 char	*spooutp;
 
 /*
+ * set spo (no function)
+ */
+int set_spo(const char *, void *) {return 0; }
+
+/*
+ * specify load type
+ */
+int set_spoload(const char *v, void *) {
+	if (strcmp(v, "disk") == 0) {
+		CC->CLS = false;
+	} else if (strcmp(v, "card") == 0) {
+		CC->CLS = true;
+	} else {
+		printf("unknown load type\n");
+		return 2; // FATAL
+	}
+	return 0; // OK
+}
+/*
+ * command table
+ */
+const command_t spo_commands[] = {
+	{"spo", set_spo},
+	{"load", set_spoload},
+	{NULL, NULL},
+};
+
+/*
  * Initialize command from argv scanner or special SPO input
  */
 int spo_init(const char *option) {
-	const char *op = option;
-	printf("spo option(s): %s\n", op);
 	ready = true;
-	return 0; // OK
+	return command_parser(spo_commands, option);
 }
 
 /*
@@ -52,7 +78,8 @@ BIT spo_ready(unsigned index) {
         struct timeval tv = {0, 0};
 
 	// initialize SPO if not ready
-	if (!ready) spo_init("");
+	if (!ready)
+		spo_init("");
 
 	// check for user input ready
         fd_set fds;

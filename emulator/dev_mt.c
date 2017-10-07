@@ -43,99 +43,97 @@ struct mt {
  * optional open file to write debugging traces into
  */
 static FILE *trace = NULL;
+static struct mt *mtx = NULL;
 
+/*
+ * set to mta..mtt
+ */
+int set_mt(const char *v, void *data) {mtx = mt+(int)data; return 0; }
+
+/*
+ * specify or close the trace file
+ */
+int set_mttrace(const char *v, void *) {
+	// if open, close existing trace file
+	if (trace) {
+		fclose(trace);
+		trace = NULL;
+	}
+	// if a name is given, open new trace
+	if (strlen(v) > 0) {
+		trace = fopen(v, "w");
+		if (!trace)
+			return 2; // FATAL
+	}
+	return 0; // OK
+}
+
+/*
+ * specify or close the file for emulation
+ */
+int set_mtfile(const char *v, void *) {
+	if (!mtx) {
+		printf("mt not specified\n");
+		return 2; // FATAL
+	}
+	strncpy(mtx->filename, v, NAMELEN);
+	mtx->filename[NAMELEN-1] = 0;
+
+	// if we are ready, close current file
+	if (mtx->ready) {
+		fclose(mtx->fp);
+		mtx->fp = NULL;
+		mtx->ready = false;
+	}
+
+	// now open the new file, if any name was given
+	// if none given, the drive just stays unready
+	if (mtx->filename[0]) {
+		mtx->fp = fopen(mtx->filename, "r"); // currently tapes are always read only
+		if (mtx->fp) {
+			mtx->ready = true;
+			mtx->eof = false;
+			return 0; // OK
+		} else {
+			// cannot open
+			perror(mtx->filename);
+			return 2; // FATAL
+		}
+	}
+	return 0; // OK
+}
+
+/*
+ * command table
+ */
+const command_t mt_commands[] = {
+	{"mta",		set_mt,	(void *) 0},
+	{"mtb", 	set_mt, (void *) 1},
+	{"mtc",		set_mt, (void *) 2},
+	{"mtd",		set_mt, (void *) 3},
+	{"mte",		set_mt, (void *) 4},
+	{"mtf",		set_mt, (void *) 5},
+	{"mth",		set_mt, (void *) 6},
+	{"mtj",		set_mt, (void *) 7},
+	{"mtk",		set_mt, (void *) 8},
+	{"mtl",		set_mt, (void *) 9},
+	{"mtm",		set_mt, (void *) 10},
+	{"mtn",		set_mt, (void *) 11},
+	{"mtp",		set_mt, (void *) 12},
+	{"mtr",		set_mt, (void *) 13},
+	{"mts",		set_mt, (void *) 14},
+	{"mtt",		set_mt, (void *) 15},
+	{"trace",	set_mttrace},
+	{"file",	set_mtfile},
+	{NULL,		NULL},
+};
 
 /*
  * Initialize command from argv scanner or special SPO input
  */
 int mt_init(const char *option) {
-	struct mt *mtx = NULL; // require specification of a tape drive
-	const char *op = option;
-	printf("magnetic tape option(s): %s\n", op);
-	while (*op != 0) {
-		if (strncmp(op, "mta=", 4) == 0) {
-			mtx = mt+0;
-			op += 4;
-		} else if (strncmp(op, "mtb=", 4) == 0) {
-			mtx = mt+1;
-			op += 4;
-		} else if (strncmp(op, "mtc=", 4) == 0) {
-			mtx = mt+2;
-			op += 4;
-		} else if (strncmp(op, "mtd=", 4) == 0) {
-			mtx = mt+3;
-			op += 4;
-		} else if (strncmp(op, "mte=", 4) == 0) {
-			mtx = mt+4;
-			op += 4;
-		} else if (strncmp(op, "mtf=", 4) == 0) {
-			mtx = mt+5;
-			op += 4;
-		} else if (strncmp(op, "mth=", 4) == 0) {
-			mtx = mt+6;
-			op += 4;
-		} else if (strncmp(op, "mtj=", 4) == 0) {
-			mtx = mt+7;
-			op += 4;
-		} else if (strncmp(op, "mtk=", 4) == 0) {
-			mtx = mt+8;
-			op += 4;
-		} else if (strncmp(op, "mtl=", 4) == 0) {
-			mtx = mt+9;
-			op += 4;
-		} else if (strncmp(op, "mtm=", 4) == 0) {
-			mtx = mt+10;
-			op += 4;
-		} else if (strncmp(op, "mtn=", 4) == 0) {
-			mtx = mt+11;
-			op += 4;
-		} else if (strncmp(op, "mtp=", 4) == 0) {
-			mtx = mt+12;
-			op += 4;
-		} else if (strncmp(op, "mtr=", 4) == 0) {
-			mtx = mt+13;
-			op += 4;
-		} else if (strncmp(op, "mts=", 4) == 0) {
-			mtx = mt+14;
-			op += 4;
-		} else if (strncmp(op, "mtt=", 4) == 0) {
-			mtx = mt+15;
-			op += 4;
-		} else if (mtx != NULL) {
-			// assume rest is a filename
-			strncpy(mtx->filename, op, NAMELEN);
-			mtx->filename[NAMELEN-1] = 0;
-
-			// if we are ready, close current file
-			if (mtx->ready) {
-				fclose(mtx->fp);
-				mtx->fp = NULL;
-				mtx->ready = false;
-			}
-
-			// now open the new file, if any name was given
-			// if none given, the tape drive just stays unready
-			if (mtx->filename[0] != '#') {
-				mtx->fp = fopen(mtx->filename, "r");
-				if (mtx->fp) {
-					mtx->line = 0;
-					mtx->lastpos = -1;
-					mtx->eof = false;
-					mtx->ready = true;
-					return 0; // OK
-				} else {
-					// cannot open
-					perror(mtx->filename);
-					return 2; // FATAL
-				}
-			}
-			return 0;
-		} else {
-			// bogus information
-			return 1; // WARNING
-		}
-	}
-	return 1; // WARNING
+	mtx = NULL; // require specification of a drive
+	return command_parser(mt_commands, option);
 }
 
 /*

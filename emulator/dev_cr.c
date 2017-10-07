@@ -37,51 +37,85 @@ struct cr {
 } cr[READERS];
 
 /*
+ * optional open file to write debugging traces into
+ */
+static FILE *trace = NULL;
+static struct cr *crx = NULL;
+
+/*
+ * set to cra/crb
+ */
+int set_cr(const char *v, void *data) {crx = cr+(int)data; return 0; }
+
+/*
+ * specify or close the trace file
+ */
+int set_crtrace(const char *v, void *) {
+	// if open, close existing trace file
+	if (trace) {
+		fclose(trace);
+		trace = NULL;
+	}
+	// if a name is given, open new trace
+	if (strlen(v) > 0) {
+		trace = fopen(v, "w");
+		if (!trace)
+			return 2; // FATAL
+	}
+	return 0; // OK
+}
+
+/*
+ * specify or close the file for emulation
+ */
+int set_crfile(const char *v, void *) {
+	if (!crx) {
+		printf("cr not specified\n");
+		return 2; // FATAL
+	}
+	strncpy(crx->filename, v, NAMELEN);
+	crx->filename[NAMELEN-1] = 0;
+
+	// if we are ready, close current file
+	if (crx->ready) {
+		fclose(crx->fp);
+		crx->fp = NULL;
+		crx->ready = false;
+	}
+
+	// now open the new file, if any name was given
+	// if none given, the drive just stays unready
+	if (crx->filename[0]) {
+		crx->fp = fopen(crx->filename, "r"); // cards are always read only
+		if (crx->fp) {
+			crx->ready = true;
+			return 0; // OK
+		} else {
+			// cannot open
+			perror(crx->filename);
+			return 2; // FATAL
+		}
+	}
+	return 0; // OK
+}
+
+/*
+ * command table
+ */
+const command_t cr_commands[] = {
+	{"cra",		set_cr,	(void *) 0},
+	{"crb", 	set_cr, (void *) 1},
+	{"trace",	set_crtrace},
+	{"file",	set_crfile},
+	{NULL,		NULL},
+};
+
+/*
  * Initialize command from argv scanner or special SPO input
  */
 int cr_init(const char *option) {
-	struct cr *crx = NULL; // require specification of a reader
-	const char *op = option;
-	printf("card reader option(s): %s\n", op);
-	while (*op != 0) {
-		if (strncmp(op, "cra=", 4) == 0) {
-			crx = cr+0;
-			op += 4;
-		} else if (strncmp(op, "crb=", 4) == 0) {
-			crx = cr+1;
-			op += 4;
-		} else if (crx != NULL) {
-			// assume rest is a filename
-			strncpy(crx->filename, op, NAMELEN);
-			crx->filename[NAMELEN-1] = 0;
-
-			// if we are ready, close current file
-			if (crx->ready) {
-				fclose(crx->fp);
-				crx->fp = NULL;
-				crx->ready = false;
-			}
-
-			// now open the new file, if any name was given
-			// if none given, the reader just stays unready
-			if (crx->filename[0] != '#') {
-				crx->fp = fopen(crx->filename, "r");
-				if (crx->fp) {
-					crx->ready = true;
-					return 0; // OK
-				} else {
-					// cannot open - stay unready
-					perror(crx->filename);
-					return 2; // ERROR
-				}
-			}
-			return 0;
-		} else {
-			// bogus information
-			return 1; // WARNING
-		}
-	}
-	return 1; // WARNING
+	crx = NULL; // require specification of a drive
+	return command_parser(cr_commands, option);
 }
 
 /*

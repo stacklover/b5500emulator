@@ -98,6 +98,7 @@ void b5500_execute_wm(CPU *cpu)
                 case 070: // 7001: RDV=remainder divide
                         remainderDivide(cpu);
                         break;
+		default: goto unused;
                 }
                 break;
         case 005: // XX05: double-precision numerics
@@ -114,6 +115,7 @@ void b5500_execute_wm(CPU *cpu)
                 case 010: // 1005: DLD=double-precision floating divide
                         doublePrecisionDivide(cpu);
                         break;
+		default: goto unused;
                 }
                 break;
         case 011: // XX11: Control State and communication ops
@@ -296,6 +298,7 @@ void b5500_execute_wm(CPU *cpu)
                                 initiate(cpu, 1);
                         }
                         break;
+		default: goto unused;
                 } // end switch for XX11 ops
                 break;
         case 015: // XX15: logical (bitmask) ops
@@ -328,6 +331,7 @@ void b5500_execute_wm(CPU *cpu)
                         adjustAFull(cpu);
                         cpu->r.A |= MASK_FLAG;
                         break;
+		default: goto unused;
                 }
                 break;
         case 021: // XX21: load & store ops
@@ -388,6 +392,7 @@ void b5500_execute_wm(CPU *cpu)
                 case 042: // 4221: ISN=Integer store nondestructive
                         integerStore(cpu, false, false);
                         break;
+		default: goto unused;
                 }
                 break;
         case 025: // XX25: comparison & misc. stack ops
@@ -450,6 +455,7 @@ void b5500_execute_wm(CPU *cpu)
                         cpu->r.B = (cpu->r.B & ~MASK_FREG) | (t1 << SHFT_FREG);
                         cpu->r.AROF = false;
                         break;
+		default: goto unused;
                 }
                 break;
         case 031: // XX31: branch, sign-bit, interrogate ops
@@ -567,6 +573,7 @@ common_branch_word:
                         // flag bit found: stop the search
                         cpu->r.A = INIT_DD | MASK_PBIT | cpu->r.M;
                         break;
+		default: goto unused;
                 }
                 break;
         case 035: // XX35: exit & return ops
@@ -631,6 +638,7 @@ common_branch_word:
                         // B = [S], fetch the RCW
                         exitSubroutine(cpu, false);
                         break;
+		default: goto unused;
                 }
                 break;
         case 041: // XX41: index, mark stack, etc.
@@ -714,6 +722,7 @@ common_branch_word:
                 case 044: // 4441: CMN=enter character mode inline
                         enterCharModeInline(cpu);
                         break;
+		default: goto unused;
                 }
                 break;
         case 045: // XX45: ISO=Variable Field Isolate op
@@ -927,6 +936,9 @@ exit_fce:
                 printf(" A=%llo\n", cpu->r.A);
 #endif
                 break;
-                // anything else is a no-op
+	default: // anything else is a no-op
+		// warn about it
+unused:		printf("*\tWARNING: wordmode opcode %04o execute as no-op\n", opcode);
+		break;
         } // end switch for non-LITC/OPDC/DESC operators
 }

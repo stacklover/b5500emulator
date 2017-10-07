@@ -31,7 +31,6 @@ int dodmpins     = false;       /* dump instructions after assembly */
 int dotrcmem     = false;       /* trace memory accesses */
 int dolistsource = false;       /* list source line */
 int dotrcins     = false;       /* trace instruction execution */
-int cardload     = false;       /* card load select switch */
 
 // never set
 int dotrcmat     = false;       /* trace math operations */
@@ -440,6 +439,57 @@ runagain:
                 goto runagain;
 }
 
+/*
+ * command parser
+ */
+int command_parser(const command_t *table, const char *op) {
+	const char *delim;
+	const char *equals;
+	int wlen, res;
+	char buffer[80];
+	const command_t *tp;
+
+next:
+	// remove leading blanks
+	while (*op == ' ')
+		op++;
+	while (*op != 0) {
+		// partition options into words
+		delim = strchrnul(op, ' ');
+		equals = strchrnul(op, '=');
+		if (equals >= delim) {
+			// single command without assignment
+			wlen = delim - op;
+		} else {
+			// with assigment
+			wlen = equals - op;
+		}
+		// search table for command
+		for (tp = table; tp->cmd; tp++) {
+			if ((int)strlen(tp->cmd) == wlen && strncmp(tp->cmd, op, wlen) == 0) {
+				// found the command, prepare parameter
+				memset(buffer, 0, sizeof buffer);
+				if (delim > equals) {
+					if (delim - equals >= (int)sizeof buffer) {
+						printf("argument too long\n");
+						return 2; // FATAL
+					}
+					memcpy(buffer, equals+1, delim - (equals+1));
+				}
+				res = (tp->func)(buffer, tp->data);
+				if (res)
+					return res; // some error
+				op = delim;
+				goto next;
+			}
+		}
+		// no match
+		printf("unknown command\n");
+		return 2; // FATAL
+	}
+	return 0; // OK
+}
+
 int handle_option(const char *option) {
 	if (strncmp(option, "spo", 3) == 0) {
                 return spo_init(option); /* console emulation options */
@@ -452,11 +502,13 @@ int handle_option(const char *option) {
 	} else if (strncmp(option, "lp", 2) == 0) {
                 return lp_init(option); /* printer emulation options */
 	}
+	printf("unknown device\n");
 	return 1; // WARNING
 }
 
 int main(int argc, char *argv[])
 {
+	FILE *inifile = NULL;
         int opt;
         ADDR15 addr;
 
@@ -471,10 +523,16 @@ int main(int argc, char *argv[])
         cpu->acc.id = cpu->id;
         cpu->isP1 = true;
 
-        while ((opt = getopt(argc, argv, "imsezSl:I:")) != -1) {
+        // check translate tables bic2ascii and ascii2bic for consistency
+        for (addr=0; addr<64; addr++) {
+                if (translatetable_ascii2bic[translatetable_bic2ascii[addr]] != addr)
+                        printf("tranlatetable error at bic=%02o\n", addr);
+        }
+
+        while ((opt = getopt(argc, argv, "i:msezl:I:")) != -1) {
                 switch (opt) {
                 case 'i':
-                        dodmpins = true; /* I/O trace */
+                        inifile = fopen(optarg, "r"); /* ini file */
                         break;
                 case 'm':
                         dotrcmem = true; /* trace memory accesses */
@@ -488,9 +546,6 @@ int main(int argc, char *argv[])
                 case 'z':
                         cpu->r.US14X = true; /* stop on ZPI */
                         break;
-                case 'S':
-                        cardload = true; /* load from CARD else from DISK */
-                        break;
                 case 'l':
                         listfile.name = optarg; /* file with listing */
                         break;
@@ -501,12 +556,11 @@ int main(int argc, char *argv[])
                 default: /* '?' */
                         fprintf(stderr,
                                 "Usage: %s\n"
-                                "\t-i\t\ttrace I/O\n"
+                                "\t-i <file>\tspecify init file\n"
                                 "\t-m\t\tshow memory accesses\n"
                                 "\t-s\t\tlist source cards\n"
                                 "\t-e\t\ttrace execution\n"
                                 "\t-z\t\tstop at ZPI instruction\n"
-                                "\t-S\t\tcard load select\n"
                                 "\t-l <file>\tspecify listing file name\n"
                                 "\t-I <file>\tspecify I/O and special instruction trace file name\n"
                                 , argv[0]);
@@ -514,17 +568,36 @@ int main(int argc, char *argv[])
                 }
         }
 
-        // check translate tables bic2ascii and ascii2bic for consistency
-        for (addr=0; addr<64; addr++) {
-                if (translatetable_ascii2bic[translatetable_bic2ascii[addr]] != addr)
-                        printf("tranlatetable error at bic=%02o\n", addr);
+	// handle init file first
+        if (inifile) {
+		char buf[81], *p;
+                while (fgets(buf, 81, inifile)) {
+			// remove trailing control codes
+			p = buf + strlen(buf);
+			while (p >= buf && *p <= ' ')
+				*p-- = 0;
+			p = buf;
+			// remove leading spaces
+			while (*p == ' ')
+				p++;
+			// ignore empty lines
+			if (*p == 0)
+				continue;
+			printf("=IF %s\n", p);
+			if (*p != '#') {
+				opt = handle_option(p);
+				if (opt)
+					exit (opt);
+			}
+                }
+		fclose(inifile);
+		inifile = NULL;
         }
 
-        while (argc > 1) {
-		argv++;
-		argc--;
-		//printf("argc=%d *argv=%s\n", argc, *argv);
-		opt = handle_option(*argv);
+	// the command line options
+        while (optind < argc) {
+		printf("=CL %s\n", argv[optind]);
+		opt = handle_option(argv[optind++]);
 		if (opt)
 			exit (opt);
         }
@@ -557,7 +630,7 @@ int main(int argc, char *argv[])
         start(cpu);
 
         addr = 020; // boot addr
-        if (cardload) {
+        if (CC->CLS) {
                 // binary read first CRA card to <addr>
                 cr_read(0240000540000000LL | addr);
         } else {

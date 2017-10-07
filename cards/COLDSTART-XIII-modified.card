@@ -90,7 +90,7 @@
 00000000=000000#04*)H/}VY6044A4("000000:2*14"$"50R004J0O4J70100S0|JI000001000011
 DRCTRYTP 2000                                   % START OF DIRECTORY AREA
 DIRECT  3604                                    % END OF DIRECTORY AREA
-ESU     2                                       % MAX NUMBER OF EUS
+ESU     10                                      % MAX NUMBER OF EUS
 DATE    05/10/85                                % CURRENT SYSTEM DATE
 SYSTEMS = 1                                     % MUST BE 1 (FOR NOW)
 FENCE = 16384                                   % USED BY TSMCP ONLY

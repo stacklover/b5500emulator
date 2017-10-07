@@ -49,58 +49,84 @@ struct lp {
 	BIT	ready;
 } lp[PRINTERS];
 
+static struct lp *lpx = NULL;
+
+/*
+ * set to lpa/lpb
+ */
+int set_lp(const char *v, void *data) {lpx = lp+(int)data; return 0; }
+
+/*
+ * specify printer type
+ */
+int set_lptype(const char *v, void *) {
+	if (!lpx) {
+		printf("lp not specified\n");
+		return 2; // FATAL
+	}
+	if (strcmp(v, "file") == 0) {
+		lpx->type = pt_file;
+	} else if (strcmp(v, "lc10") == 0) {
+		lpx->type = pt_lc10;
+	} else {
+		printf("unknown type\n");
+		return 2; // FATAL
+	}
+	return 0; // OK
+}
+
+/*
+ * specify or close the file for emulation
+ */
+int set_lpfile(const char *v, void *) {
+	if (!lpx) {
+		printf("lp not specified\n");
+		return 2; // FATAL
+	}
+	strncpy(lpx->filename, v, NAMELEN);
+	lpx->filename[NAMELEN-1] = 0;
+
+	// if we are ready, close current file
+	if (lpx->ready) {
+		fclose(lpx->fp);
+		lpx->fp = NULL;
+		lpx->ready = false;
+	}
+
+	// now open the new file, if any name was given
+	// if none given, the drive just stays unready
+	if (lpx->filename[0]) {
+		lpx->fp = fopen(lpx->filename, "w"); // printers are always write only
+		if (lpx->fp) {
+			lpx->ready = true;
+			lpx->lineno = 1;
+			return 0; // OK
+		} else {
+			// cannot open
+			perror(lpx->filename);
+			return 2; // FATAL
+		}
+	}
+	return 0; // OK
+}
+
+/*
+ * command table
+ */
+const command_t lp_commands[] = {
+	{"lpa",		set_lp,	(void *) 0},
+	{"lpb", 	set_lp, (void *) 1},
+	{"type",	set_lptype},
+	{"file",	set_lpfile},
+	{NULL,		NULL},
+};
+
 /*
  * Initialize command from argv scanner or special SPO input
  */
 int lp_init(const char *option) {
-	struct lp *lpx = NULL; // require specification of a printer
-	const char *op = option;
-	printf("printer option(s): %s\n", op);
-	while (*op != 0) {
-		if (strncmp(op, "lpa=", 4) == 0) {
-			lpx = lp+0;
-			op += 4;
-		} else if (strncmp(op, "lpb=", 4) == 0) {
-			lpx = lp+1;
-			op += 4;
-		} else if (lpx != NULL && strncmp(op, "file:", 5) == 0) {
-			lpx->type = pt_file;
-			op += 5;
-		} else if (lpx != NULL && strncmp(op, "lc10:", 5) == 0) {
-			lpx->type = pt_lc10;
-			op += 5;
-		} else if (lpx != NULL) {
-			// assume rest is a filename
-			strncpy(lpx->filename, op, NAMELEN);
-			lpx->filename[NAMELEN-1] = 0;
-
-			// if we are ready, close current file
-			if (lpx->ready) {
-				fclose(lpx->fp);
-				lpx->fp = NULL;
-				lpx->ready = false;
-			}
-
-			// now open the new file, if any name was given
-			// if none given, the printer just stays unready
-			if (lpx->filename[0] != '#') {
-				lpx->fp = fopen(lpx->filename, "w");
-				if (lpx->fp) {
-					lpx->ready = true;
-					return 0; // OK
-				} else {
-					// cannot open
-					perror(lpx->filename);
-					return 2; // FATAL
-				}
-			}
-			return 0;
-		} else {
-			// bogus information
-			return 1; // WARNING
-		}
-	}
-	return 1; // WARNING
+	lpx = NULL; // require specification of a drive
+	return command_parser(lp_commands, option);
 }
 
 /*
