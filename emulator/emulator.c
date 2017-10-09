@@ -22,19 +22,21 @@
 #include <ctype.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <signal.h>
+#include <time.h>
 #include "common.h"
 
 #define MAXLINELENGTH   (264)   /* maximum line length for all devices - must be multiple of 8 */
 
 /* debug flags: turn these on for various dumps and traces */
-int dodmpins     = false;       /* dump instructions after assembly */
-int dotrcmem     = false;       /* trace memory accesses */
-int dolistsource = false;       /* list source line */
-int dotrcins     = false;       /* trace instruction execution */
+volatile int dodmpins     = false;       /* dump instructions after assembly */
+volatile int dotrcmem     = false;       /* trace memory accesses */
+volatile int dolistsource = false;       /* list source line */
+volatile int dotrcins     = false;       /* trace instruction execution */
 
 // never set
-int dotrcmat     = false;       /* trace math operations */
-int emode        = false;       /* emode math */
+volatile int dotrcmat     = false;       /* trace math operations */
+volatile int emode        = false;       /* emode math */
 
 /* variables for file access */
 typedef struct filehandle {
@@ -58,8 +60,9 @@ char    *linep;
 char name[MAXNAME][29];
 
 /* instruction execution counter */
-unsigned instr_count;
+volatile unsigned instr_count;
 
+/* one processor */
 CPU *cpu;
 
 
@@ -506,6 +509,26 @@ int handle_option(const char *option) {
 	return 1; // WARNING
 }
 
+/* 60 Hz timer */
+timer_t timerid;
+struct sigevent sev;
+struct itimerspec its;
+long long freq_nanosecs;
+sigset_t mask;
+struct sigaction sa;
+
+/*
+ * handle 60Hz timer
+ */
+void timer60hz(union sigval sv) {
+	if (CC->TM >= 63) {
+		CC->TM = 0;
+		CC->CCI03F = true;
+		signalInterrupt("CC", "TIMER");
+	} else
+		CC->TM++;
+}
+
 int main(int argc, char *argv[])
 {
 	FILE *inifile = NULL;
@@ -516,8 +539,8 @@ int main(int argc, char *argv[])
 
         b5500_init_shares();
 
-        memset(MAIN, 0, MAXMEM*sizeof(WORD48));
-        cpu = P[0];
+        memset((void*)MAIN, 0, MAXMEM*sizeof(WORD48));
+        cpu = (CPU*)P[0];
         memset(cpu, 0, sizeof(CPU));
         cpu->id = "P1";
         cpu->acc.id = cpu->id;
@@ -627,6 +650,27 @@ int main(int argc, char *argv[])
         if (opt)
                 exit(2);
 
+	// Create the timer
+	sev.sigev_notify = SIGEV_THREAD;
+	sev.sigev_notify_function = timer60hz;
+	sev.sigev_value.sival_int = 0;
+	if (timer_create(CLOCK_MONOTONIC, &sev, &timerid) == -1) {
+		perror("timer_create");
+		exit(2);
+	}
+	printf("timer ID is 0x%lx\n", (long) timerid);
+
+	// Start the timer
+	its.it_value.tv_sec = 0;
+	its.it_value.tv_nsec = 16666667; // 16.666667ms ~ 60 Hz
+	its.it_interval.tv_sec = its.it_value.tv_sec;
+	its.it_interval.tv_nsec = its.it_value.tv_nsec;
+	if (timer_settime(timerid, 0, &its, NULL) == -1) {
+		perror("timer_settime");
+		exit(2);
+	}
+
+	// get the CPU running
         start(cpu);
 
         addr = 020; // boot addr

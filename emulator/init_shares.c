@@ -41,9 +41,9 @@ int	shm_main,   // main memory
 	msg_cpu[2], // messages	to P1 and P2
 	msg_cc;	    // messages	to CC
 
-WORD48		*MAIN;
-CPU		*P[2];
-CENTRAL_CONTROL	*CC;
+volatile WORD48 *MAIN;
+volatile CPU *P[2];
+volatile CENTRAL_CONTROL *CC;
 
 void b5500_init_shares(void)
 {

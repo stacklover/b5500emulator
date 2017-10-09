@@ -463,21 +463,35 @@ void integerStore(CPU *cpu, BIT conditional, BIT destructive)
 
                 if (B.e < 0) {
                         // exponent is negative
-                        cpu->cycleCount += num_right_shift_exp(&B, 0);
+			do {
+		                cpu->cycleCount++;
+			        // store rightmost octet in x
+			        B.x = B.m & 7;
+				B.m >>= 3;     // shift right
+				B.e++;
+			} while (B.e < 0);
                         // round up the number
-                        num_round(&B);
+		        if (B.s ? B.x > 4 : B.x >= 4) {
+				B.m++; // round the B mantissa
+	                }
                 } else if (B.e > 0) {
-                        // exponent is positive
-                        cpu->cycleCount += num_left_shift_exp(&B, 0);
-                        if (B.e != 0) {
-                                // oops... integer overflow normalizing the mantisa
-                                doStore = false;
-                                if (cpu->r.NCSF) {
-                                        // set I07/8: integer overflow
-                                        cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_INTO;
-                                        signalInterrupt(cpu->id, "ISD/ISN Overflow");
-                                }
-                        }
+			// exponent is positive
+			do {
+		                cpu->cycleCount++;
+				if (B.m & MASK_MANTHIGH) {
+        	                        // oops... integer overflow normalizing the mantisa
+		                        if (cpu->r.NCSF) {
+			                        doStore = false;
+			                        // set I07/8: integer overflow
+		                                cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_INTO;
+		                                signalInterrupt(cpu->id, "ISD/ISN Overflow");
+						break; // kill the loop
+					}
+                                } else {
+					B.m <<= 3;
+				}
+				B.e--;
+			} while (B.e > 0);
                 }
                 if (doStore) {
                         num_compose(&B, &cpu->r.B);

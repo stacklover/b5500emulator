@@ -34,12 +34,12 @@
 #define TEST_MOD        1
 
 /* debug flags: turn these on for various dumps and traces */
-int dodmpins     = false;       /* dump instructions after assembly */
-int dotrcmem     = false;       /* trace memory accesses */
-int dolistsource = false;       /* list source line */
-int dotrcins     = false;       /* trace instruction execution */
-int dotrcmat     = false;       /* trace math operations */
-int emode        = false;       /* emode math */
+volatile int dodmpins     = false;       /* dump instructions after assembly */
+volatile int dotrcmem     = false;       /* trace memory accesses */
+volatile int dolistsource = false;       /* list source line */
+volatile int dotrcins     = false;       /* trace instruction execution */
+volatile int dotrcmat     = false;       /* trace math operations */
+volatile int emode        = false;       /* emode math */
 
 /* variables for input file reading */
 FILE    *prd;           /* for assembly source */
@@ -52,7 +52,7 @@ char    opname[20];
 char    regname[20];
 unsigned wc;
 unsigned sc;
-unsigned instr_count;
+volatile unsigned instr_count;
 
 CENTRAL_CONTROL cc;
 CPU *cpu;
@@ -489,7 +489,7 @@ int main(int argc, char *argv[])
 
         b5500_init_shares();
 
-        cpu = P[0];
+        cpu = (CPU*)P[0];
         memset(cpu, 0, sizeof(CPU));
         cpu->id = "P1";
 

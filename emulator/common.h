@@ -247,9 +247,9 @@ typedef struct irq {
 /*
  * global (IPC) memory areas
  */
-extern WORD48           *MAIN;
-extern CPU              *P[2];
-extern CENTRAL_CONTROL  *CC;
+extern volatile WORD48 *MAIN;
+extern volatile CPU *P[2];
+extern volatile CENTRAL_CONTROL *CC;
 
 /*
  * special memory locations (absolute addresses)
@@ -700,11 +700,11 @@ typedef struct instruction {
         BIT     cwmf;           // character mode instruction
 } INSTRUCTION;
 
-extern int dotrcmem;    // trace memory accesses
-extern int dotrcins;    // trace instruction and IRQs
-extern int dotrcmat;    // trace math operations
-extern int emode;       // emode math
+extern volatile int dotrcmem;    // trace memory accesses
+extern volatile int dotrcins;    // trace instruction and IRQs
+extern volatile int dotrcmat;    // trace math operations
+extern volatile int emode;       // emode math
 extern const INSTRUCTION instruction_table[];
-extern unsigned instr_count;
+extern volatile unsigned instr_count;
 
 #endif /* COMMON_H */

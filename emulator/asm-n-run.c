@@ -29,12 +29,12 @@
 #define MAXLINELENGTH   80      /* maximum input line length */
 
 /* debug flags: turn these on for various dumps and traces */
-int dodmpins     = false;       /* dump instructions after assembly */
-int dotrcmem     = false;       /* trace memory accesses */
-int dolistsource = false;       /* list source line */
-int dotrcins     = false;       /* trace instruction execution */
-int dotrcmat     = false;       /* trace math operations */
-int emode        = false;       /* emode math */
+volatile int dodmpins     = false;       /* dump instructions after assembly */
+volatile int dotrcmem     = false;       /* trace memory accesses */
+volatile int dolistsource = false;       /* list source line */
+volatile int dotrcins     = false;       /* trace instruction execution */
+volatile int dotrcmat     = false;       /* trace math operations */
+volatile int emode        = false;       /* emode math */
 
 typedef enum labelst {entered=0, defined} LABELST;
 typedef struct labelrec {
@@ -53,7 +53,7 @@ char    opname[20];
 char    regname[20];
 unsigned wc;
 unsigned sc;
-unsigned instr_count;
+volatile unsigned instr_count;
 
 /* variables of code generator */
 int     pass2;
@@ -731,8 +731,8 @@ int main(int argc, char *argv[])
 
         b5500_init_shares();
 
-        memset(MAIN, 0, MAXMEM*sizeof(WORD48));
-        cpu = P[0];
+        memset((void*)MAIN, 0, MAXMEM*sizeof(WORD48));
+        cpu = (CPU*)P[0];
         memset(cpu, 0, sizeof(CPU));
         cpu->id = "P1";
         //cpu->isP1 = true;

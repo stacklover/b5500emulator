@@ -938,7 +938,7 @@ exit_fce:
                 break;
 	default: // anything else is a no-op
 		// warn about it
-unused:		printf("*\tWARNING: wordmode opcode %04o execute as no-op\n", opcode);
+unused:		printf("*\tWARNING: wordmode opcode %04o executed as no-op C:L=%05o:%o\n", opcode, cpu->r.C, cpu->r.L);
 		break;
         } // end switch for non-LITC/OPDC/DESC operators
 }

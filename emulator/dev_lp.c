@@ -40,7 +40,7 @@
 /*
  * for each supported printer
  */
-enum pt	{pt_file=0, pt_lc10};
+enum pt	{pt_file=0, pt_lc10, pt_text};
 struct lp {
 	char	filename[NAMELEN];
 	FILE	*fp;
@@ -68,6 +68,8 @@ int set_lptype(const char *v, void *) {
 		lpx->type = pt_file;
 	} else if (strcmp(v, "lc10") == 0) {
 		lpx->type = pt_lc10;
+	} else if (strcmp(v, "text") == 0) {
+		lpx->type = pt_text;
 	} else {
 		printf("unknown type\n");
 		return 2; // FATAL
@@ -174,6 +176,9 @@ WORD48 lp_write(WORD48 iocw) {
         if (skip) {
                 // skip to stop
 		switch (lpx->type) {
+		case pt_text:
+			fprintf(lpx->fp, "****************************** SKIP %d ******************************\n", skip);
+			break;
 		case pt_file:
 			fprintf(lpx->fp, "%c", '@'+skip);
 			break;
@@ -186,11 +191,17 @@ WORD48 lp_write(WORD48 iocw) {
         } else {
                 // space
 		switch (lpx->type) {
+		case pt_text:
+		        switch (space) {
+		        case 1: case 3: fprintf(lpx->fp, "\n"); lpx->lineno += 2; break;
+		        case 2: lpx->lineno++; break;
+			}
+			break;
 		case pt_file:
 		        switch (space) {
 		        case 0: fprintf(lpx->fp, "0"); break;
-		        case 1: case 3: fprintf(lpx->fp, "2"); break;
-		        case 2: fprintf(lpx->fp, "1"); break;
+		        case 1: case 3: fprintf(lpx->fp, "2"); lpx->lineno += 2; break;
+		        case 2: fprintf(lpx->fp, "1"); lpx->lineno++; break;
 			}
 			break;
 		case pt_lc10:
@@ -213,6 +224,7 @@ WORD48 lp_write(WORD48 iocw) {
                 }
         }
 	switch (lpx->type) {
+	case pt_text:
 	case pt_file:
 	        fprintf(lpx->fp, "\n");
 		break;
@@ -223,7 +235,7 @@ WORD48 lp_write(WORD48 iocw) {
 	fflush(lpx->fp);
 
 	// end of  page reached?
-	if (lpx->lineno >= 66) {
+	if (lpx->type != pt_text && lpx->lineno >= 66) {
 		result |= MASK_IORD21;
 	}
 

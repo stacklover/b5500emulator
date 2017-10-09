@@ -72,7 +72,7 @@ INC =		common.h
 CFLAGS		= -D_LARGEFILE64_SOURCE	-D_FILE_OFFSET_BITS=64 -pipe -Os \
 		  -D_THREAD_SAFE -D_REENTRANT -Wall
 
-LFLAGS		= #-lfltk_images -lfltk	-lpng -lz -ljpeg  -lXext -lXft \
+LFLAGS		= -lrt #-lfltk_images -lfltk	-lpng -lz -ljpeg  -lXext -lXft \
 		  #-lfontconfig	-lXinerama -lpthread -ldl -lm -lX11
 
 all: $(ALL)
