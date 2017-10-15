@@ -18,9 +18,9 @@
 #**********************************************************************/
 
 ALL =		$(ODIR)/processor_panel.exe \
-		$(ODIR)/asm-n-run.exe \
-		$(ODIR)/sptest.exe \
 		$(ODIR)/emulator.exe
+		#$(ODIR)/asm-n-run.exe \
+		#$(ODIR)/sptest.exe \
 
 OBJTEST	=	$(ODIR)/test.o \
 		$(ODIR)/sp_compare.o \

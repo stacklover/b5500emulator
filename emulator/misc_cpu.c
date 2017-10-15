@@ -24,6 +24,25 @@
 #define TRCMEM false
 
 /*
+ * Tests and returns the presence bit [2:1] of the "word" parameter,
+ * which it assumes is a control word. If [2:1] is 0, the p-bit interrupt
+ * is set; otherwise no further action
+ */
+BIT presenceTest(CPU *cpu, WORD48 word)
+{
+        if (word & MASK_PBIT)
+                return true;
+
+        printf("*\t%s: presenceTest failed %016llo\n", cpu->id, word);
+
+        if (cpu->r.NCSF) {
+                cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_PBIT;
+                signalInterrupt(cpu->id, "PBIT=0");
+        }
+        return false;
+}
+
+/*
  * Implements the 4441=CMN syllable
  */
 void enterCharModeInline(CPU *cpu)
@@ -201,23 +220,6 @@ void initiate(CPU *cpu, BIT forTest)
 }
 
 /*
- * Called from CentralControl to initiate the processor as P2. Fetches the
- * INCW from @10, injects an initiate P2 syllable into T, and calls start()
- */
-void initiateP2(CPU *cpu)
-{
-        DPRINTF("*\t%s: initiateP2\n", cpu->id);
-        cpu->r.NCSF = 0;        // make sure P2 is in Control State to execute the IP1 & access low mem
-        cpu->r.M = 0x08;        // address of the INCW
-        loadBviaM(cpu); // B = [M]
-        cpu->r.AROF = 0;        // make sure A is invalid
-        cpu->r.T = 04111;       // inject 4111=IP1 into P2's T register
-        cpu->r.TROF = 1;
-        // Now start scheduling P2 on the Javascript thread
-        start(cpu);
-}
-
-/*
  * Initiates the processor
  */
 void start(CPU *cpu)
@@ -239,9 +241,20 @@ void stop(CPU *cpu)
         cpu->cycleLimit = 0;    // exit cpu->r.run()
 }
 
-void haltP2(CPU *cpu)
+/*
+ * Called from CC initiate this(cpu) processor as P2. Fetches the
+ * INCW from @10, injects an initiate syllable into T, and calls start()
+ */
+void initiateAsP2(CPU *cpu)
 {
-        DPRINTF("*\t%s: haltP2\n", cpu->id);
+	printf("*\t%s: initiateAsP2\n", cpu->id);
+	cpu->r.NCSF = 0;	// make P2 is in Control State to execute the IP1 & access low mem
+	cpu->r.M = AA_IODESC;	// address of the INCW
+	loadBviaM(cpu);		// B = [M]
+	cpu->r.AROF = 0;	// make sure A is invalid
+	cpu->r.T = 04111;	// inject 4111=IP1 into P2's T register
+	cpu->r.TROF = 1;
+	start(cpu);
 }
 
 /*

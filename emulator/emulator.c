@@ -65,6 +65,9 @@ volatile unsigned instr_count;
 /* one processor */
 CPU *cpu;
 
+/* timer */
+extern void timer60hz(union sigval sv);
+
 
 int openfile(FILEHANDLE *f, const char *mode) {
         if (f->name != NULL) {
@@ -382,6 +385,15 @@ runagain:
                 } else if (instr_count >= 680000) {
                         dotrcmem = dodmpins = dotrcins = true;
                 }
+                // end check for instruction count
+#endif
+#if 1
+		// simulate TIMER
+		if ((instr_count & 0xffff) == 0) {
+			union sigval x;
+			timer60hz(x);
+		}
+
 #endif
                 if (dotrcins) {
                         ADDR15 c;
@@ -400,7 +412,6 @@ runagain:
                         printf("\n");
                 }
 
-                // end check for instruction count
                 cpu->cycleLimit = 1;
                 run(cpu);
                 if (cpu->r.T == 03011)
@@ -516,18 +527,6 @@ struct itimerspec its;
 long long freq_nanosecs;
 sigset_t mask;
 struct sigaction sa;
-
-/*
- * handle 60Hz timer
- */
-void timer60hz(union sigval sv) {
-	if (CC->TM >= 63) {
-		CC->TM = 0;
-		CC->CCI03F = true;
-		signalInterrupt("CC", "TIMER");
-	} else
-		CC->TM++;
-}
 
 int main(int argc, char *argv[])
 {
@@ -650,6 +649,7 @@ int main(int argc, char *argv[])
         if (opt)
                 exit(2);
 
+#if 0
 	// Create the timer
 	sev.sigev_notify = SIGEV_THREAD;
 	sev.sigev_notify_function = timer60hz;
@@ -669,21 +669,24 @@ int main(int argc, char *argv[])
 		perror("timer_settime");
 		exit(2);
 	}
+#endif
 
 	// get the CPU running
-        start(cpu);
+	start(cpu);
 
-        addr = 020; // boot addr
-        if (CC->CLS) {
-                // binary read first CRA card to <addr>
-                cr_read(0240000540000000LL | addr);
-        } else {
-                // load DKA disk segments 1..63 to <addr>
+	addr = 020; // boot addr
+	if (CC->CLS) {
+		// binary read first CRA card to <addr>
+		cr_read(0240000540000000LL | addr);
+	} else {
+		// load DKA disk segments 1..63 to <addr>
 		MAIN[addr-1] = 1LL;
-                dk_access(0140000047700000LL | (addr-1));
-        }
+		dk_access(0140000047700000LL | (addr-1));
+	}
 
-        execute(addr);
+	execute(addr);
 
-        return 0;
+	memdump();
+
+	return 0;
 }

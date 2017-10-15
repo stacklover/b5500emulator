@@ -28,26 +28,6 @@
 #define TRCMEM false
 
 /*
- * Tests and returns the presence bit [2:1] of the "word" parameter,
- * which it assumes is a control word. If [2:1] is 0, the p-bit interrupt
- * is set; otherwise no further action
- */
-BIT presenceTest(CPU *cpu, WORD48 word)
-{
-        if (word & MASK_PBIT)
-                return true;
-
-#if DEBUG
-        DPRINTF("*\t%s: presenceTest failed %016llo\n", cpu->id, word);
-#endif
-        if (cpu->r.NCSF) {
-                cpu->r.I = (cpu->r.I & 0x0F) | 0x70; // set I05/6/7: p-bit
-                signalInterrupt(cpu->id, "NOT PBIT");
-        }
-        return false;
-}
-
-/*
  * Implements the 3011=SFI operator and the parts of 3411=SFT that are
  * common to it. "forced" implies Q07F: a hardware-induced SFI syllable.
  * "forTest" implies use from SFT

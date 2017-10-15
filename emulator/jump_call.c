@@ -169,13 +169,12 @@ void operandCall(CPU *cpu)
                                 cpu->r.M = cpu->r.A & MASKMEM;
                                 loadAviaM(cpu); // A = [M]
                                 if ((cpu->r.A & MASK_FLAG) && cpu->r.NCSF) { // Flag bit is set
-                                        cpu->r.I = (cpu->r.I & 0x0F) | 0x80; // set I08: flag-bit interrupt
+                                        cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_FLAG;
                                         signalInterrupt(cpu->id, "OPCD FLAG SET");
-                                        // B5500DumpState("Flag Bit: OPDC"); // <<< DEBUG >>>
                                 }
                         }
                         break;
-                case 7: //  CODE=1, PBIT=1, XBIT=1
+                case 7: // CODE=1, PBIT=1, XBIT=1
                         // Present program descriptor
                         enterSubroutine(cpu, false);
                         break;
@@ -184,7 +183,7 @@ void operandCall(CPU *cpu)
                 case 5: // CODE=1, PBIT=0, XBIT=1
                         // Absent data or program descriptor
                         if (cpu->r.NCSF) {
-                                cpu->r.I = (cpu->r.I & 0x0F) | 0x70; // set I05/6/7: p-bit
+                                cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_PBIT;
                                 signalInterrupt(cpu->id, "OPDC NOT PBIT");
                                 // else if Control State, we're done
                         }
@@ -228,7 +227,7 @@ void descriptorCall(CPU *cpu)
                                 // else descriptor is already indexed (word count 0)
                         }
                         break;
-                case 7: //  CODE=1, PBIT=1, XBIT=1
+                case 7: // CODE=1, PBIT=1, XBIT=1
                         //printf("present program");
                         // Present program descriptor
                         enterSubroutine(cpu, true);
@@ -239,7 +238,7 @@ void descriptorCall(CPU *cpu)
                         //printf("absent program/data");
                         // Absent data or program descriptor
                         if (cpu->r.NCSF) {
-                                cpu->r.I = (cpu->r.I & 0x0F) | 0x70; // set I05/6/7: p-bit
+                                cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_PBIT;
                                 signalInterrupt(cpu->id, "OPDC NOT PBIT");
                                 // else if Control State, we're done
                         }

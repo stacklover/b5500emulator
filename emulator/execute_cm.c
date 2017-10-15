@@ -584,7 +584,7 @@ again:
                                 cpu->r.L = 0;
                                 // require fetch at SECL
                                 cpu->r.PROF = false;
-                        }
+			}
                 } else {
                         cpu->r.C = t2 & MASKMEM;
                         t1 = (t2 >> 36) & 3;
@@ -598,6 +598,7 @@ again:
                         // require fetch at SECL
                         cpu->r.PROF = false;
                 }
+		// TODO: this code also executed in case of presence bit fail, is that OK?
                 // restore B
                 cpu->r.B = cpu->r.A;
                 cpu->r.BROF = cpu->r.AROF;
@@ -698,6 +699,7 @@ again:
                         // just take the side effect of any p-bit interrupt
                         presenceTest(cpu, t1);
                 }
+		// TODO: this code also executed in case of presence bit fail, is that OK?
                 // restore B from A
                 cpu->r.B = cpu->r.A;
                 cpu->r.BROF = cpu->r.AROF;
@@ -856,7 +858,7 @@ again:
                 streamCharacterToDest(cpu, variant);
                 break;
 
-        default:        // everything else is a no-op
+	default:        // everything else is a no-op
 		// warn about it
 		printf("*\tWARNING: charmode opcode %04o execute as no-op\n", opcode);
                 break;
