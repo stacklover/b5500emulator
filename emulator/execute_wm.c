@@ -169,13 +169,10 @@ void b5500_execute_wm(CPU *cpu)
 				// normal state
 				// test continuity bit, [20:1]
 				if (cpu->r.A & MASK_CONT) {
-					// set I07/6: continuity bit
-					cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_CONT;
+					causeSyllableIrq(cpu, IRQ_CONT, "PRL-CONT");
 				} else {
-					// set I07/5: program release
-					cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_PREL;
+					causeSyllableIrq(cpu, IRQ_PREL, "PRL-PRL");
 				}
-				signalInterrupt(cpu->id, "PRL");
 				// store IOD address in PRT[9]
 				cpu->r.A = cpu->r.M;
 				cpu->r.M = (cpu->r.R<<RSHIFT) + RR_COM;
@@ -245,9 +242,7 @@ void b5500_execute_wm(CPU *cpu)
                                 storeBviaM(cpu);
                                 cpu->r.BROF = false;
                         }
-                        // set I07: communicate
-                        cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_COM;
-                        signalInterrupt(cpu->id, "COM");
+			causeSyllableIrq(cpu, IRQ_COM, "COM");
                         break;
 
 /***********************************************************************
@@ -1143,8 +1138,8 @@ exit_fce:
 ***********************************************************************/
 	default:
 	unused:
-		printf("*\tERROR: wordmode opcode %04o encoundered at C:L=%05o:%o\n",
-			opcode, cpu->r.L == 0 ? cpu->r.C-1 : cpu->r.C, (cpu->r.L - 1) & 3);
+		prepMessage(cpu);
+		printf("opcode %04o encoundered (word mode)\n", opcode);
 		stop(cpu);
 		break;
 

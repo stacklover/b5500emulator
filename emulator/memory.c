@@ -118,121 +118,23 @@ void store(ACCESSOR *acc)
         }
 }
 
-/*
- * Common error handling routine for all memory acccesses
- */
+/***********************************************************************
+* Common error handling routine for all memory acccesses
+* VERIFIED against Paul's JavaScript 17-10-16
+***********************************************************************/
 void accessError(CPU *cpu)
 {
-        printf("*\t%s accessError addr=%05o MAE=%d MPE=%d\n",
-		cpu->id, cpu->acc.addr,
-		cpu->acc.MAED, cpu->acc.MPED);
+	prepMessage(cpu);
+        printf("accessError addr=%05o MAE=%d MPE=%d\n",
+		cpu->acc.addr, cpu->acc.MAED, cpu->acc.MPED);
         if (cpu->acc.MAED) {
-                // set I02F: memory address/inhibit error
-                cpu->r.I |= 0x02;
-                signalInterrupt(cpu->id, "MAE");
+		causeMemoryIrq(cpu, IRQ_INVA, "MAE");
         } else if (cpu->acc.MPED) {
-                // set I01F: memory parity error
-                cpu->r.I |= 0x01;
-                signalInterrupt(cpu->id, "MPE");
+                causeMemoryIrq(cpu, IRQ_MPE, "MPE");
+                // P1 memory parity in Control State stops the processor
                 if (cpu->isP1 && !cpu->r.NCSF) {
-                        // P1 memory parity in Control State stops the processor
                         stop(cpu);
                 }
-        }
-}
-
-/*
- * Computes an absolute memory address from the relative "offset" parameter
- * and leaves it in the M register. See Table 6-1 in the B5500 Reference
- * Manual. "cEnable" determines whether C-relative addressing is permitted.
- * This offset must be in (0..1023)
- */
-void computeRelativeAddr(CPU *cpu, unsigned offset, BIT cEnabled)
-{
-        if (dotrcmem)
-                printf("\tRelAddr(%04o,%u) -> ", offset, cEnabled);
-	if (offset > 1023) {
-		printf("*\tERROR: offset > 1023: %u\n", offset);
-		stop(cpu);
-	}
-
-        cpu->cycleCount += 2; // approximate the timing
-        if (cpu->r.SALF) {
-                // subroutine level - check upper 3 bits of the 10 bit offset
-                switch ((offset >> 7) & 7) {
-                case 0: case 1: case 2: case 3:
-                        // pattern 0xx xxxxxxx - R+ relative
-                        // reach 0..511
-                        offset &= 0777;
-                        cpu->r.M = (cpu->r.R<<6) + offset;
-                        if (dotrcmem)
-                                printf("R+%o -> M=%05o\n", offset, cpu->r.M);
-                        break;
-                case 4: case 5:
-                        // pattern 10x xxxxxxx - F+ or (R+7)+ relative
-                        // reach 0..255
-                        offset &= 0377;
-                        if (cpu->r.MSFF) {
-                                // during function parameter loading its (R+7)+
-                                cpu->r.M = (cpu->r.R<<6) + RR_MSCW;
-                                loadMviaM(cpu); // M = [M].[18:15]
-                                cpu->r.M += offset;
-                                if (dotrcmem)
-                                        printf("(R+7)+%o -> M=%05o\n", offset, cpu->r.M);
-                        } else {
-                                // inside function its F+
-                                cpu->r.M = cpu->r.F + offset;
-                                if (dotrcmem)
-                                        printf("F+%o -> M=%05o\n", offset, cpu->r.M);
-                        }
-                        break;
-                case 6:
-                        // pattern 110 xxxxxxx - C+ relative on read, R+ on write
-                        // reach 0..127
-                        offset &= 0177;
-                        if (cEnabled) {
-                                // adjust C for fetch offset from
-                                // syllable the instruction was in
-                                cpu->r.M = (cpu->r.L ? cpu->r.C : cpu->r.C-1) + offset;
-                                if (dotrcmem)
-                                        printf("C+%o -> M=%05o\n", offset, cpu->r.M);
-                        } else {
-                                cpu->r.M = (cpu->r.R<<6) + offset;
-                                if (dotrcmem)
-                                        printf("R+%o -> M=%05o\n", offset, cpu->r.M);
-                        }
-                        break;
-                case 7:
-                        // pattern 111 xxxxxxx - F- or (R+7)- relative
-                        // reach 0..127 (negative direction)
-                        offset &= 0177;
-                        if (cpu->r.MSFF) {
-                                cpu->r.M = (cpu->r.R<<6) + RR_MSCW;
-                                loadMviaM(cpu); // M = [M].[18:15]
-                                cpu->r.M -= offset;
-                                if (dotrcmem)
-                                        printf("(R+7)-%o -> M=%05o\n", offset, cpu->r.M);
-                        } else {
-                                cpu->r.M = cpu->r.F - offset;
-                                if (dotrcmem)
-                                        printf("F-%o -> M=%05o\n", offset, cpu->r.M);
-                        }
-                        break;
-                } // switch
-        } else {
-                // program level - all 10 bits are offset
-                offset &= 001777;
-                cpu->r.M = (cpu->r.R<<6) + offset;
-                if (dotrcmem)
-                        printf("R+%o,M=%05o\n", offset, cpu->r.M);
-        }
-
-        // Reset variant-mode R-relative addressing, if it was enabled
-        if (cpu->r.VARF) {
-                if (dotrcmem)
-                        printf("Resetting VARF\n");
-                cpu->r.SALF = true;
-                cpu->r.VARF = false;
         }
 }
 
@@ -256,9 +158,7 @@ BIT indexDescriptor(CPU *cpu)
 		// oops... integer overflow normalizing the index
 		interrupted = true;
 		if (cpu->r.NCSF) {
-			// set I07/8: integer overflow
-			cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_INTO;
-			signalInterrupt(cpu->id, "INX Overflow");
+			causeSyllableIrq(cpu, IRQ_INTO, "INX Overflow");
 		}
         }
 
@@ -272,9 +172,7 @@ BIT indexDescriptor(CPU *cpu)
                         // index is negative
                         interrupted = true;
                         if (cpu->r.NCSF) {
-                                // set I05/8: invalid-index
-                                cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_INDEX;
-                                signalInterrupt(cpu->id, "INX<0");
+				causeSyllableIrq(cpu, IRQ_INDEX, "INX<0");
                         }
                 } else if (index < ((aw & MASK_WCNT) >> SHFT_WCNT)) {
                         // We finally have a valid index
@@ -285,183 +183,206 @@ BIT indexDescriptor(CPU *cpu)
                         // index not less than size
                         interrupted = true;
                         if (cpu->r.NCSF) {
-                                // set I05/8: invalid-index
-                                cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_INDEX;
-                                signalInterrupt(cpu->id, "INX>WC");
+				causeSyllableIrq(cpu, IRQ_INDEX, "INX>WC");
                         }
                 }
         }
         return interrupted;
 }
 
-/*
- * load registers from memory
- */
+/***********************************************************************
+* Load the A register from the address in S
+* VERIFIED against Paul's JavaScript 17-10-16
+***********************************************************************/
 void loadAviaS(CPU *cpu)
 {
-        if (dotrcmem)
-                printf("\t[S]->A ");
-        cpu->r.E = 2;           // Just to show the world what's happening
-        cpu->acc.addr = cpu->r.S;
-        cpu->acc.MAIL = (cpu->r.S < AA_USERMEM) && cpu->r.NCSF;
-        fetch(&cpu->acc);
-        //cpu->cycleCount += B5500CentralControl.memReadCycles;
-        if (cpu->acc.MAED || cpu->acc.MPED) {
-                accessError(cpu);
-        } else {
-                cpu->r.A = cpu->acc.word;
-                cpu->r.AROF = true;
-        }
+	if (dotrcmem) printf("\t[S]->A ");
+	cpu->r.E = 2;           // Just to show the world what's happening
+	cpu->acc.addr = cpu->r.S;
+	cpu->acc.MAIL = (cpu->r.S < AA_USERMEM) && cpu->r.NCSF;
+	fetch(&cpu->acc);
+	//cpu->cycleCount += B5500CentralControl.memReadCycles;
+	if (cpu->acc.MAED || cpu->acc.MPED) {
+		accessError(cpu);
+	} else {
+		cpu->r.A = cpu->acc.word;
+		cpu->r.AROF = true;
+	}
 }
 
+/***********************************************************************
+* Load the B register from the address in S
+* VERIFIED against Paul's JavaScript 17-10-16
+***********************************************************************/
 void loadBviaS(CPU *cpu)
 {
-        if (dotrcmem)
-                printf("\t[S]->B ");
-        cpu->r.E = 3;           // Just to show the world what's happening
-        cpu->acc.addr = cpu->r.S;
-        cpu->acc.MAIL = (cpu->r.S < AA_USERMEM) && cpu->r.NCSF;
-        fetch(&cpu->acc);
-        //cpu->cycleCount += B5500CentralControl.memReadCycles;
-        if (cpu->acc.MAED || cpu->acc.MPED) {
-                accessError(cpu);
-        } else {
-                cpu->r.B = cpu->acc.word;
-                cpu->r.BROF = true;
-        }
+	if (dotrcmem) printf("\t[S]->B ");
+	cpu->r.E = 3;           // Just to show the world what's happening
+	cpu->acc.addr = cpu->r.S;
+	cpu->acc.MAIL = (cpu->r.S < AA_USERMEM) && cpu->r.NCSF;
+	fetch(&cpu->acc);
+	//cpu->cycleCount += B5500CentralControl.memReadCycles;
+	if (cpu->acc.MAED || cpu->acc.MPED) {
+		accessError(cpu);
+	} else {
+		cpu->r.B = cpu->acc.word;
+		cpu->r.BROF = true;
+	}
 }
 
+/***********************************************************************
+* Load the A register from the address in M
+* VERIFIED against Paul's JavaScript 17-10-16
+***********************************************************************/
 void loadAviaM(CPU *cpu)
 {
-        if (dotrcmem)
-                printf("\t[M]->A ");
-        cpu->r.E = 4;           // Just to show the world what's happening
-        cpu->acc.addr = cpu->r.M;
-        cpu->acc.MAIL = (cpu->r.M < AA_USERMEM) && cpu->r.NCSF;
-        fetch(&cpu->acc);
-        //cpu->cycleCount += B5500CentralControl.memReadCycles;
-        if (cpu->acc.MAED || cpu->acc.MPED) {
-                accessError(cpu);
-        } else {
-                cpu->r.A = cpu->acc.word;
-                cpu->r.AROF = true;
-        }
+	if (dotrcmem) printf("\t[M]->A ");
+	cpu->r.E = 4;           // Just to show the world what's happening
+	cpu->acc.addr = cpu->r.M;
+	cpu->acc.MAIL = (cpu->r.M < AA_USERMEM) && cpu->r.NCSF;
+	fetch(&cpu->acc);
+	//cpu->cycleCount += B5500CentralControl.memReadCycles;
+	if (cpu->acc.MAED || cpu->acc.MPED) {
+		accessError(cpu);
+	} else {
+		cpu->r.A = cpu->acc.word;
+		cpu->r.AROF = true;
+	}
 }
 
+/***********************************************************************
+* Load the B register from the address in M
+* VERIFIED against Paul's JavaScript 17-10-16
+***********************************************************************/
 void loadBviaM(CPU *cpu)
 {
-        if (dotrcmem)
-                printf("\t[M]->B ");
-        cpu->r.E = 5;           // Just to show the world what's happening
-        cpu->acc.addr = cpu->r.M;
-        cpu->acc.MAIL = (cpu->r.M < AA_USERMEM) && cpu->r.NCSF;
-        fetch(&cpu->acc);
-        //cpu->cycleCount += B5500CentralControl.memReadCycles;
-        if (cpu->acc.MAED || cpu->acc.MPED) {
-                accessError(cpu);
-        } else {
-                cpu->r.B = cpu->acc.word;
-                cpu->r.BROF = true;
-        }
+	if (dotrcmem) printf("\t[M]->B ");
+	cpu->r.E = 5;           // Just to show the world what's happening
+	cpu->acc.addr = cpu->r.M;
+	cpu->acc.MAIL = (cpu->r.M < AA_USERMEM) && cpu->r.NCSF;
+	fetch(&cpu->acc);
+	//cpu->cycleCount += B5500CentralControl.memReadCycles;
+	if (cpu->acc.MAED || cpu->acc.MPED) {
+		accessError(cpu);
+	} else {
+		cpu->r.B = cpu->acc.word;
+		cpu->r.BROF = true;
+	}
 }
 
+/***********************************************************************
+* Load the M register from the address in M
+* use the F field of that value
+* note: this is only used to get the saved F registers value from
+* the saved MSCW at R+7.
+* VERIFIED against Paul's JavaScript 17-10-16
+***********************************************************************/
 void loadMviaM(CPU *cpu)
 {
-        // note: this is only used to get the saved F registers value from
-        // the saved MSCW at R+7.
-        if (dotrcmem)
-                printf("\t[M]~>M ");
-        cpu->r.E = 6;           // Just to show the world what's happening
-        cpu->acc.addr = cpu->r.M;
-        cpu->acc.MAIL = (cpu->r.M < AA_USERMEM) && cpu->r.NCSF;
-        fetch(&cpu->acc);
-        //cpu->cycleCount += B5500CentralControl.memReadCycles;
-        if (cpu->acc.MAED || cpu->acc.MPED) {
-                accessError(cpu);
-        } else {
-                cpu->r.M = (cpu->acc.word & MASK_FREG) >> SHFT_FREG;
-        }
+	if (dotrcmem) printf("\t[M]~>M ");
+	cpu->r.E = 6;           // Just to show the world what's happening
+	cpu->acc.addr = cpu->r.M;
+	cpu->acc.MAIL = (cpu->r.M < AA_USERMEM) && cpu->r.NCSF;
+	fetch(&cpu->acc);
+	//cpu->cycleCount += B5500CentralControl.memReadCycles;
+	if (cpu->acc.MAED || cpu->acc.MPED) {
+		accessError(cpu);
+	} else {
+		cpu->r.M = (cpu->acc.word & MASK_FREG) >> SHFT_FREG;
+	}
 }
 
+/***********************************************************************
+* Load the P register from the address in C
+* VERIFIED against Paul's JavaScript 17-10-16
+***********************************************************************/
 void loadPviaC(CPU *cpu)
 {
-        if (dotrcmem)
-                printf("\t[C]->P ");
-        cpu->r.E = 48;          // Just to show the world what's happening
-        cpu->acc.addr = cpu->r.C;
-        cpu->acc.MAIL = (cpu->r.C < AA_USERMEM) && cpu->r.NCSF;
-        fetch(&cpu->acc);
-        // TODO: should cpu not be in the else part?
-        cpu->r.PROF = true;
-        //cpu->cycleCount += B5500CentralControl.memReadCycles;
-        if (cpu->acc.MAED || cpu->acc.MPED) {
-                accessError(cpu);
-        } else {
-                cpu->r.P = cpu->acc.word;
-        }
+	if (dotrcmem) printf("\t[C]->P ");
+	cpu->r.E = 48;          // Just to show the world what's happening
+	cpu->acc.addr = cpu->r.C;
+	cpu->acc.MAIL = (cpu->r.C < AA_USERMEM) && cpu->r.NCSF;
+	fetch(&cpu->acc);
+	// PROF gets set even on access error!
+	cpu->r.PROF = true;
+	//cpu->cycleCount += B5500CentralControl.memReadCycles;
+	if (cpu->acc.MAED || cpu->acc.MPED) {
+		accessError(cpu);
+	} else {
+		cpu->r.P = cpu->acc.word;
+	}
 }
 
-/*
- * store registers to memory
- */
+/***********************************************************************
+* Store the A register into the address in S
+* Note that AROF is not reset!
+* VERIFIED against Paul's JavaScript 17-10-16
+***********************************************************************/
 void storeAviaS(CPU *cpu)
 {
-        if (dotrcmem)
-                printf("\t[S]<-A ");
-        cpu->r.E = 10;          // Just to show the world what's happening
-        cpu->acc.addr = cpu->r.S;
-        cpu->acc.MAIL = (cpu->r.S < AA_USERMEM) && cpu->r.NCSF;
-        cpu->acc.word = cpu->r.A;
-        store(&cpu->acc);
-        //cpu->cycleCount += B5500CentralControl.memReadCycles;
-        if (cpu->acc.MAED || cpu->acc.MPED) {
-                accessError(cpu);
-        }
+	if (dotrcmem) printf("\t[S]<-A ");
+	cpu->r.E = 10;          // Just to show the world what's happening
+	cpu->acc.addr = cpu->r.S;
+	cpu->acc.MAIL = (cpu->r.S < AA_USERMEM) && cpu->r.NCSF;
+	cpu->acc.word = cpu->r.A;
+	store(&cpu->acc);
+	//cpu->cycleCount += B5500CentralControl.memReadCycles;
+	if (cpu->acc.MAED || cpu->acc.MPED)
+		accessError(cpu);
 }
 
+/***********************************************************************
+* Store the B register into the address in S
+* Note that BROF is not reset!
+* VERIFIED against Paul's JavaScript 17-10-16
+***********************************************************************/
 void storeBviaS(CPU *cpu)
 {
-        if (dotrcmem)
-                printf("\t[S]<-B ");
-        cpu->r.E = 11;          // Just to show the world what's happening
-        cpu->acc.addr = cpu->r.S;
-        cpu->acc.MAIL = (cpu->r.S < AA_USERMEM) && cpu->r.NCSF;
-        cpu->acc.word = cpu->r.B;
-        store(&cpu->acc);
-        //cpu->cycleCount += B5500CentralControl.memReadCycles;
-        if (cpu->acc.MAED || cpu->acc.MPED) {
-                accessError(cpu);
-        }
+	if (dotrcmem) printf("\t[S]<-B ");
+	cpu->r.E = 11;          // Just to show the world what's happening
+	cpu->acc.addr = cpu->r.S;
+	cpu->acc.MAIL = (cpu->r.S < AA_USERMEM) && cpu->r.NCSF;
+	cpu->acc.word = cpu->r.B;
+	store(&cpu->acc);
+	//cpu->cycleCount += B5500CentralControl.memReadCycles;
+	if (cpu->acc.MAED || cpu->acc.MPED)
+		accessError(cpu);
 }
 
+/***********************************************************************
+* Store the A register into the address in M
+* Note that AROF is not reset!
+* VERIFIED against Paul's JavaScript 17-10-16
+***********************************************************************/
 void storeAviaM(CPU *cpu)
 {
-        if (dotrcmem)
-                printf("\t[M]<-A ");
-        cpu->r.E = 12;          // Just to show the world what's happening
-        cpu->acc.addr = cpu->r.M;
-        cpu->acc.MAIL = (cpu->r.M < AA_USERMEM) && cpu->r.NCSF;
-        cpu->acc.word = cpu->r.A;
-        store(&cpu->acc);
-        //cpu->cycleCount += B5500CentralControl.memReadCycles;
-        if (cpu->acc.MAED || cpu->acc.MPED) {
-                accessError(cpu);
-        }
+	if (dotrcmem) printf("\t[M]<-A ");
+	cpu->r.E = 12;          // Just to show the world what's happening
+	cpu->acc.addr = cpu->r.M;
+	cpu->acc.MAIL = (cpu->r.M < AA_USERMEM) && cpu->r.NCSF;
+	cpu->acc.word = cpu->r.A;
+	store(&cpu->acc);
+	//cpu->cycleCount += B5500CentralControl.memReadCycles;
+	if (cpu->acc.MAED || cpu->acc.MPED)
+		accessError(cpu);
 }
 
+/***********************************************************************
+* Store the B register into the address in B
+* Note that BROF is not reset!
+* VERIFIED against Paul's JavaScript 17-10-16
+***********************************************************************/
 void storeBviaM(CPU *cpu)
 {
-        if (dotrcmem)
-                printf("\t[M]<-B ");
-        cpu->r.E = 12;          // Just to show the world what's happening
-        cpu->acc.addr = cpu->r.M;
-        cpu->acc.MAIL = (cpu->r.M < AA_USERMEM) && cpu->r.NCSF;
-        cpu->acc.word = cpu->r.B;
-        store(&cpu->acc);
-        //cpu->cycleCount += B5500CentralControl.memReadCycles;
-        if (cpu->acc.MAED || cpu->acc.MPED) {
-                accessError(cpu);
-        }
+	if (dotrcmem) printf("\t[M]<-B ");
+	cpu->r.E = 12;          // Just to show the world what's happening
+	cpu->acc.addr = cpu->r.M;
+	cpu->acc.MAIL = (cpu->r.M < AA_USERMEM) && cpu->r.NCSF;
+	cpu->acc.word = cpu->r.B;
+	store(&cpu->acc);
+	//cpu->cycleCount += B5500CentralControl.memReadCycles;
+	if (cpu->acc.MAED || cpu->acc.MPED)
+		accessError(cpu);
 }
 
 /*
@@ -497,9 +418,7 @@ void integerStore(CPU *cpu, BIT conditional, BIT destructive)
 	if (normalize) {
 		if (integerize(&cpu->r.B)) {
 			if (cpu->r.NCSF) {
-				// set I07/8: integer overflow
-				cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_INTO;
-				signalInterrupt(cpu->id, "ISD/ISN Overflow");
+				causeSyllableIrq(cpu, IRQ_INTO, "ISD/ISN Overflow");
 				return;
 			}
 		}

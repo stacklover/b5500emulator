@@ -555,6 +555,9 @@ extern void enterSubroutine(CPU *, BIT descriptorCall);
 extern int exitSubroutine(CPU *, int how);
 
 /* interrupts & IO */
+extern void prepMessage(CPU *);
+extern void causeMemoryIrq(CPU *, WORD8, const char *cause);
+extern void causeSyllableIrq(CPU *, WORD8, const char *cause);
 extern BIT presenceTest(CPU *, WORD48 word);
 extern WORD48 interrogateUnitStatus(CPU *);
 extern WORD48 interrogateIOChannel(CPU *);

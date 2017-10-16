@@ -14,6 +14,8 @@
 *   read/write/open/lseek
 ***********************************************************************/
 
+#define COMPLAINABOUTNEVERWRITTEN 0
+
 #include <stdio.h>
 #include <string.h>
 #include <stddef.h>
@@ -292,7 +294,9 @@ WORD48 dk_access(WORD48 iocw) {
                         cnt = read(dkx->df, dkx->dbuf, 256);
 			if (cnt == 0) {
 				// read past current end
+#if COMPLAINABOUTNEVERWRITTEN
                                 printf("*** DISKIO READ PAST EOF DFA=%d:%06d ***\n", eu, diskfileaddr);
+#endif
 				goto pasteof;
 			}
                         if (cnt != 256) {
@@ -313,10 +317,12 @@ WORD48 dk_access(WORD48 iocw) {
 				dkx->dbuf[7] != ':' ||
 				strtol(dkx->dbuf+8, NULL, 10) != diskfileaddr ||
 				dkx->dbuf[14] != ')') {
+#if COMPLAINABOUTNEVERWRITTEN
 				printf("*** DISKIO READ OF RECORD NEVER WRITTEN DFA=%d:%06d ***\n", eu, diskfileaddr);
 				printf("Segment:'%s'\n", dkx->dbuf);
+#endif
                         pasteof:
-				// return a filled segment
+				// return a ZERO filled segment
 				memset(dkx->dbuf, 0, 256);
 				dkx->dbuf[255] = '\n';
                         }

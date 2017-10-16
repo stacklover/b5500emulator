@@ -53,6 +53,7 @@ again:
         repeat = 0;
 
         switch (opcode & 077) {
+
         case 000:       // XX00: CMX, EXC: Exit character mode
                 if (cpu->r.BROF) {
                         // store destination string
@@ -69,7 +70,8 @@ again:
                 cpu->r.N = 0;
                 cpu->r.CWMF = 0;
                 break;
-	case 001:	// XX01: unknown
+
+	case 001:	// XX01: 'legit' chatacter mode NOP
 		break;
 
         case 002:       // XX02: BSD=Skip bit destination
@@ -240,7 +242,7 @@ again:
                         break;
 
                 default:        // Anything else is a no-op
-                        break;
+                        goto unused;
                 } // end switch for XX11 ops
                 break;
 
@@ -858,10 +860,17 @@ again:
                 streamCharacterToDest(cpu, variant);
                 break;
 
-	default:        // everything else is a no-op
-		// warn about it
-		printf("*\tWARNING: charmode opcode %04o execute as no-op\n", opcode);
-                break;
+/***********************************************************************
+* inofficially, all unused opcodes are NOP
+* due to partial decoding, that may not always be true
+* for the time being we consider all unused opcodes a fatal error
+***********************************************************************/
+	default:
+	unused:
+		prepMessage(cpu);
+		printf("opcode %04o encoundered (character mode)\n", opcode);
+		stop(cpu);
+		break;
 
         } // end switch for character mode operators
 

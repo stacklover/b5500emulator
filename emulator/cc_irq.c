@@ -25,6 +25,8 @@
 #include <signal.h>
 #include "common.h"
 
+#define TRACEIRQ 0
+
 /*
  * table of IRQs
  * indexed by cell address - 020
@@ -87,7 +89,7 @@ IRQ irq[48] = {
 /*
  * optional trace of IRQ action
  */
-static FILE *trace = NULL;
+static FILE *trace = stdout;
 #endif
 
 /*
@@ -266,7 +268,8 @@ void timer60hz(union sigval sv) {
  */
 void initiateP2(CPU *cpu)
 {
-        printf("*\t%s: initiateP2 - ", cpu->id);
+	prepMessage(cpu);
+        printf("initiateP2 - ");
 
 	// always cause P2 busy IRQ (for now)
 

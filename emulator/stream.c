@@ -23,73 +23,75 @@
 #include <stdio.h>
 #include "common.h"
 
-/*
- * Generally
- *
- * M/C Source address
- * A/P Source word
- * G Source char index in word 0..7 (for display in Y)
- * H Source bit index in char 0..5
- *
- * S Destination address
- * B Destination word
- * K Destination char index in word 0..7 (for display in Z)
- * V Destination bit index in char 0..5
- */
+/***********************************************************************
+* Generally
+*
+* M/C Source address
+* A/P Source word
+* G Source char index in word 0..7 (for display in Y)
+* H Source bit index in char 0..5
+*
+* S Destination address
+* B Destination word
+* K Destination char index in word 0..7 (for display in Z)
+* V Destination bit index in char 0..5
+***********************************************************************/
 
-/*
- * Adjusts the character-mode source pointer to the next character
- * boundary, as necessary. If the adjustment crosses a word boundary,
- * AROF is reset to force reloading later at the new source address
- */
-// recoded and checked 17-09-23 RM
+/***********************************************************************
+* Adjusts the character-mode source pointer to the next character
+* boundary, as necessary. If the adjustment crosses a word boundary,
+* AROF is reset to force reloading later at the new source address
+* VERIFIED against Paul's JavaScript 17-10-16
+***********************************************************************/
 void streamAdjustSourceChar(CPU *cpu)
 {
-        if (cpu->r.H > 0) {
-                // not at bit position 0
-                // reset bit position
-                cpu->r.H = 0;
-                // move to next char
-                ++cpu->r.G;
-                if (cpu->r.G > 7) {
-                        // move to next word
-                        ++cpu->r.M;
-                        cpu->r.G = 0;
-                        cpu->r.AROF = false;
-                }
-        }
+	if (cpu->r.H > 0) {
+		// not at bit position 0
+		// reset bit position
+		cpu->r.H = 0;
+		// move to next char
+		if (cpu->r.G < 7) {
+			++cpu->r.G;
+		} else {
+			// move to next word
+			cpu->r.G = 0;
+			++cpu->r.M; // TODO: check for overflow here?
+			cpu->r.AROF = false;
+		}
+	}
 }
 
-/*
+/***********************************************************************
  * Adjusts the character-mode destination pointer to the next character
  * boundary, as necessary. If the adjustment crosses a word boundary and
  * BROF is set, B is stored at S before S is incremented and BROF is reset
  * to force reloading later at the new destination address
- */
-// recoded and checked 17-09-23 RM
+* VERIFIED against Paul's JavaScript 17-10-16
+***********************************************************************/
 void streamAdjustDestChar(CPU *cpu)
 {
-        if (cpu->r.V > 0) {
-                // not at bit position 0
-                // reset bit position
-                cpu->r.V = 0;
-                // more to next char
-                ++cpu->r.K;
-                if (cpu->r.K > 7) {
-                        // move next word
-                        // store current word when touched
-                        if (cpu->r.BROF) {
-                                // store it
-                                storeBviaS(cpu);
-                                cpu->r.BROF = false;
-                        }
-                        ++cpu->r.S;
-                        cpu->r.K = 0;
-                }
-        }
+	if (cpu->r.V > 0) {
+		// not at bit position 0
+		// reset bit position
+		cpu->r.V = 0;
+		// move to next char
+		if (cpu->r.K < 7) {
+			++cpu->r.K;
+		} else {
+			// move to next word
+			cpu->r.K = 0;
+			// store current word when touched
+			if (cpu->r.BROF) {
+				// store it
+				storeBviaS(cpu);
+				cpu->r.BROF = false;
+			}
+			++cpu->r.S;
+		}
+	}
 }
 
-/*
+/***********************************************************************
  * Compares source characters to destination characters according to the
  * processor collating sequence.
  * "count" is the number of source characters to process.
@@ -104,152 +106,154 @@ void streamAdjustDestChar(CPU *cpu)
  * inhibit storing the B register at the end of a word boundary. This store
  * may be required only for the first word in the destination string, if B may
  * have been left in an updated state by a prior syllable
- */
+***********************************************************************/
 // not used by MCP up to problem 17-09-23 RM
 void compareSourceWithDest(CPU *cpu, unsigned count, BIT numeric)
 {
-        unsigned        aBit;   // A register bit nr
-        WORD48          aw;     // current A register word
-        unsigned        bBit;   // B register bit nr
-        WORD48          bw;     // current B register word
-        BIT             Q03F = cpu->r.Q03F; // local copy of Q03F: inequality detected
-        BIT             Q04F = cpu->r.Q04F; // local copy of Q04F: B not dirty
-        unsigned        yc = 0; // local Y register
-        unsigned        zc = 0; // local Z register
+	unsigned        aBit;   // A register bit nr
+	WORD48          aw;     // current A register word
+	unsigned        bBit;   // B register bit nr
+	WORD48          bw;     // current B register word
+	unsigned        yc = 0; // local Y register
+	unsigned        zc = 0; // local Z register
 
-//printf("cSWD\n");
-//        printf("* count=%u, num=%u\n", count, numeric);
-        cpu->r.TFFF = false;
-        streamAdjustSourceChar(cpu);
-        streamAdjustDestChar(cpu);
-        if (count) {
-                if (cpu->r.BROF) {
-                        if (cpu->r.K == 0) {
-                                // set Q04F -- at start of word, no need to store B later
-                                Q04F = true;
-                        }
-                } else {
-                        loadBviaS(cpu); // B = [S]
-                        // set Q04F -- just loaded B, no need to store it later
-                        Q04F = true;
-                }
-                if (!cpu->r.AROF) {
-                        loadAviaM(cpu); // A = [M]
-                }
+	cpu->r.TFFF = false;
+	cpu->r.Q03F = false;
 
-                // setting Q06F and saving the count in H & V is only significant if this
-                // routine is executed as part of Field Add (FAD) or Field Subtract (FSU).
-                cpu->r.Q06F = true; // set Q06F
-                cpu->r.H = count >> 3;
-                cpu->r.V = count & 7;
+	streamAdjustSourceChar(cpu);
+	streamAdjustDestChar(cpu);
 
-                aBit = cpu->r.G*6;      // A-bit number
-                aw = cpu->r.A;
-                bBit = cpu->r.K*6;      // B-bit number
-                bw = cpu->r.B;
-                do {
-                        ++cpu->cycleCount; // approximate the timing
-                        if (Q03F) {
-                                // inequality already detected -- just count down
-                                if (count >= 8) {
-                                        count -= 8;
-                                        if (!Q04F) {
-                                                // test Q04F to see if B may be dirty
-                                                storeBviaS(cpu); // [S] = B
-                                                // set Q04F so we won't store B anymore
-                                                Q04F = true;
-                                        }
-                                        cpu->r.BROF = false;
-                                        ++cpu->r.S;
-                                        cpu->r.AROF = false;
-                                        ++cpu->r.M;
-                                } else {
-                                        --count;
-                                        if (cpu->r.K < 7) {
-                                                ++cpu->r.K;
-                                        } else {
-                                                if (!Q04F) {
-                                                        // test Q04F to see if B may be dirty
-                                                        storeBviaS(cpu); // [S] = B
-                                                        // set Q04F so we won't store B anymore
-                                                        Q04F = true;
-                                                }
-                                                cpu->r.K = 0;
-                                                cpu->r.BROF = false;
-                                                ++cpu->r.S;
-                                        }
-                                        if (cpu->r.G < 7) {
-                                                ++cpu->r.G;
-                                        } else {
-                                                cpu->r.G = 0;
-                                                cpu->r.AROF = false;
-                                                ++cpu->r.M;
-                                        }
-                                }
-                        } else {
-                                // strings still equal -- check this character
-                                if (numeric) {
-                                        yc = fieldIsolate(aw, aBit+2, 4);
-                                        zc = fieldIsolate(bw, bBit+2, 4);
-                                } else {
-                                        yc = fieldIsolate(aw, aBit, 6);
-                                        zc = fieldIsolate(bw, bBit, 6);
-                                }
-//                                printf("* still equal... yc=%03o zc=%03o\n", yc, zc);
-                                if (yc != zc) {
-                                        // set Q03F to stop further comparison
-                                        Q03F = true;
-                                        if (numeric) {
-                                                cpu->r.TFFF = yc > zc ? 1 : 0;
-                                        } else {
-                                                cpu->r.TFFF = collation[yc] > collation[zc] ? 1 : 0;
-                                        }
-                                } else {
-                                        // strings still equal -- advance to next character
-                                        --count;
-                                        if (bBit < 42) {
-                                                bBit += 6;
-                                                ++cpu->r.K;
-                                        } else {
-                                                bBit = 0;
-                                                cpu->r.K = 0;
-                                                // test Q04F to see if B may be dirty
-                                                if (!Q04F) {
-                                                        storeBviaS(cpu); // [S] = B
-                                                        // set Q04F so we won't store B anymore
-                                                        Q04F = true;
-                                                }
-                                                ++cpu->r.S;
-                                                if (count > 0) {
-                                                        loadBviaS(cpu); // B = [S]
-                                                        bw = cpu->r.B;
-                                                } else {
-                                                        cpu->r.BROF = false;
-                                                }
-                                        }
-                                        if (aBit < 42) {
-                                                aBit += 6;
-                                                ++cpu->r.G;
-                                        } else {
-                                                aBit = 0;
-                                                cpu->r.G = 0;
-                                                ++cpu->r.M;
-                                                if (count > 0) {
-                                                        loadAviaM(cpu); // A = [M]
-                                                        aw = cpu->r.A;
-                                                } else {
-                                                        cpu->r.AROF = false;
-                                                }
-                                        }
-                                }
-                        }
-                } while (count);
+	if (count) {
+		// ensure B is filled
+		if (cpu->r.BROF) {
+			// B already full
+			if (cpu->r.K == 0) {
+				// set Q04F -- at start of word, no need to store B later
+				cpu->r.Q04F = true;
+			}
+		} else {
+			// fill B
+			loadBviaS(cpu); // B = [S]
+			// set Q04F -- just loaded B, no need to store it later
+			cpu->r.Q04F = true;
+		}
+		// ensure A is filled
+		if (!cpu->r.AROF) {
+		        loadAviaM(cpu); // A = [M]
+		}
 
-                cpu->r.Q03F = Q03F;
-                cpu->r.Q04F = Q04F;
-                cpu->r.Y = yc;          // for display only
-                cpu->r.Z = zc;          // for display only
-        }
+		// setting Q06F and saving the count in H & V is only significant if this
+		// routine is executed as part of Field Add (FAD) or Field Subtract (FSU).
+		cpu->r.Q06F = true; // set Q06F
+		cpu->r.H = count >> 3;
+		cpu->r.V = count & 7;
+
+		// calculate current bit numbers
+		aBit = cpu->r.G*6;      // A-bit number
+		aw = cpu->r.A;
+		bBit = cpu->r.K*6;      // B-bit number
+		bw = cpu->r.B;
+		do {
+		        ++cpu->cycleCount; // approximate the timing
+		        if (cpu->r.Q03F) {
+		                // inequality already detected -- just count down
+		                if (count >= 8) {
+		                        count -= 8;
+		                        if (!cpu->r.Q04F) {
+		                                // test Q04F to see if B may be dirty
+		                                storeBviaS(cpu); // [S] = B
+		                                // set Q04F so we won't store B anymore
+		                                cpu->r.Q04F = true;
+		                        }
+		                        cpu->r.BROF = false;
+		                        ++cpu->r.S;
+		                        cpu->r.AROF = false;
+		                        ++cpu->r.M;
+		                } else {
+		                        --count;
+		                        if (cpu->r.K < 7) {
+		                                ++cpu->r.K;
+		                        } else {
+		                                if (!cpu->r.Q04F) {
+		                                        // test Q04F to see if B may be dirty
+		                                        storeBviaS(cpu); // [S] = B
+		                                        // set Q04F so we won't store B anymore
+		                                        cpu->r.Q04F = true;
+		                                }
+		                                cpu->r.K = 0;
+		                                cpu->r.BROF = false;
+		                                ++cpu->r.S;
+		                        }
+		                        if (cpu->r.G < 7) {
+		                                ++cpu->r.G;
+		                        } else {
+		                                cpu->r.G = 0;
+		                                cpu->r.AROF = false;
+		                                ++cpu->r.M;
+		                        }
+		                }
+		        } else {
+		                // strings still equal -- check this character
+		                if (numeric) {
+		                        yc = fieldIsolate(aw, aBit+2, 4);
+		                        zc = fieldIsolate(bw, bBit+2, 4);
+		                } else {
+		                        yc = fieldIsolate(aw, aBit, 6);
+		                        zc = fieldIsolate(bw, bBit, 6);
+		                }
+	//                                printf("* still equal... yc=%03o zc=%03o\n", yc, zc);
+		                if (yc != zc) {
+		                        // set Q03F to stop further comparison
+		                        cpu->r.Q03F = true;
+		                        if (numeric) {
+		                                cpu->r.TFFF = yc > zc ? 1 : 0;
+		                        } else {
+		                                cpu->r.TFFF = collation[yc] > collation[zc] ? 1 : 0;
+		                        }
+		                } else {
+		                        // strings still equal -- advance to next character
+		                        --count;
+		                        if (bBit < 42) {
+		                                bBit += 6;
+		                                ++cpu->r.K;
+		                        } else {
+		                                bBit = 0;
+		                                cpu->r.K = 0;
+		                                // test Q04F to see if B may be dirty
+		                                if (!cpu->r.Q04F) {
+		                                        storeBviaS(cpu); // [S] = B
+		                                        // set Q04F so we won't store B anymore
+		                                        cpu->r.Q04F = true;
+		                                }
+		                                ++cpu->r.S;
+		                                if (count > 0) {
+		                                        loadBviaS(cpu); // B = [S]
+		                                        bw = cpu->r.B;
+		                                } else {
+		                                        cpu->r.BROF = false;
+		                                }
+		                        }
+		                        if (aBit < 42) {
+		                                aBit += 6;
+		                                ++cpu->r.G;
+		                        } else {
+		                                aBit = 0;
+		                                cpu->r.G = 0;
+		                                ++cpu->r.M;
+		                                if (count > 0) {
+		                                        loadAviaM(cpu); // A = [M]
+		                                        aw = cpu->r.A;
+		                                } else {
+		                                        cpu->r.AROF = false;
+		                                }
+		                        }
+		                }
+		        }
+		} while (count);
+
+		cpu->r.Y = yc;          // for display only
+		cpu->r.Z = zc;          // for display only
+	}
 }
 
 /*

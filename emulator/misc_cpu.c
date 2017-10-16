@@ -23,23 +23,293 @@
 #define DPRINTF if(0)printf
 #define TRCMEM false
 
-/*
- * Tests and returns the presence bit [2:1] of the "word" parameter,
- * which it assumes is a control word. If [2:1] is 0, the p-bit interrupt
- * is set; otherwise no further action
- */
+/***********************************************************************
+* Prepare a debug message
+* message must be completed and ended by caller
+***********************************************************************/
+void prepMessage(CPU *cpu) {
+	printf("*\t%s at %05o:%o: ",
+		cpu->id,
+		cpu->r.L == 0 ? cpu->r.C-1 : cpu->r.C,
+		(cpu->r.L - 1) & 3);
+}
+
+/***********************************************************************
+* Cause a memory access based IRQ
+***********************************************************************/
+void causeMemoryIrq(CPU *cpu, WORD8 irq, const char *reason) {
+	cpu->r.I |= irq;
+	signalInterrupt(cpu->id, reason);
+#if 1
+	prepMessage(cpu);
+	printf("IRQ %02x caused reason %s (I now %02x)\n",
+		irq, reason, cpu->r.I);
+#endif
+}
+
+/***********************************************************************
+* Cause a syllable based IRQ
+***********************************************************************/
+void causeSyllableIrq(CPU *cpu, WORD8 irq, const char *reason) {
+	cpu->r.I = (cpu->r.I & IRQ_MASKL) | irq;
+	signalInterrupt(cpu->id, reason);
+#if 1
+	prepMessage(cpu);
+	printf("IRQ %02x caused reason %s (I now %02x)\n",
+		irq, reason, cpu->r.I);
+#endif
+}
+
+/***********************************************************************
+* Computes an absolute memory address from the relative "offset" parameter
+* and leaves it in the M register. See Table 6-1 in the B5500 Reference
+* Manual. "cEnable" determines whether C-relative addressing is permitted.
+* VERIFIED against Paul's JavaScript 17-10-16
+***********************************************************************/
+void computeRelativeAddr(CPU *cpu, unsigned offset, BIT cEnabled)
+{
+	// This offset must be in (0..1023)
+	if (offset > 01777) {
+		prepMessage(cpu);
+		printf("computeRelativeAddr offset(%04o) >01777\n", offset);
+		stop(cpu);
+	}
+
+        if (dotrcmem)
+                printf("\tRelAddr(%04o,%u) -> ", offset, cEnabled);
+
+        cpu->cycleCount += 2; // approximate the timing
+
+        if (cpu->r.SALF) {
+                // subroutine level - check upper 3 bits of the 10 bit offset
+                switch ((offset >> 7) & 7) {
+                case 0: case 1: case 2: case 3:
+                        // pattern 0 xxx xxx xxx - R+ relative
+                        // reach 0..511
+                        offset &= 0777;
+                        cpu->r.M = (cpu->r.R<<RSHIFT) + offset;
+                        if (dotrcmem)
+                                printf("R+%o -> M=%05o\n", offset, cpu->r.M);
+                        break;
+                case 4: case 5:
+                        // pattern 1 0xx xxx xxx - F+ or (R+7)+ relative
+                        // reach 0..255
+                        offset &= 0377;
+                        if (cpu->r.MSFF) {
+                                // during function parameter loading its (R+7)+
+                                cpu->r.M = (cpu->r.R<<RSHIFT) + RR_MSCW;
+                                loadMviaM(cpu); // M = [M].[18:15]
+                                cpu->r.M += offset;
+                                if (dotrcmem)
+                                        printf("(R+7)+%o -> M=%05o\n", offset, cpu->r.M);
+                        } else {
+                                // inside function its F+
+                                cpu->r.M = cpu->r.F + offset;
+                                if (dotrcmem)
+                                        printf("F+%o -> M=%05o\n", offset, cpu->r.M);
+                        }
+                        break;
+                case 6:
+                        // pattern 1 10x xxx xxx - C+ relative on read, R+ on write
+                        // reach 0..127
+                        offset &= 0177;
+                        if (cEnabled) {
+                                // adjust C for fetch offset from
+                                // syllable the instruction was in
+                                cpu->r.M = (cpu->r.L > 0 ? cpu->r.C : cpu->r.C-1) + offset;
+                                if (dotrcmem)
+                                        printf("C+%o -> M=%05o\n", offset, cpu->r.M);
+                        } else {
+                                cpu->r.M = (cpu->r.R<<RSHIFT) + offset;
+                                if (dotrcmem)
+                                        printf("R+%o -> M=%05o\n", offset, cpu->r.M);
+                        }
+                        break;
+                case 7:
+                        // pattern 1 11x xxx xxx - F- or (R+7)- relative
+                        // reach 0..127 (negative direction)
+                        offset &= 0177;
+                        if (cpu->r.MSFF) {
+                                // during function parameter loading its (R+7)-
+                                cpu->r.M = (cpu->r.R<<RSHIFT) + RR_MSCW;
+                                loadMviaM(cpu); // M = [M].[18:15]
+                                cpu->r.M -= offset;
+                                if (dotrcmem)
+                                        printf("(R+7)-%o -> M=%05o\n", offset, cpu->r.M);
+                        } else {
+                                // inside function its F-
+                                cpu->r.M = cpu->r.F - offset;
+                                if (dotrcmem)
+                                        printf("F-%o -> M=%05o\n", offset, cpu->r.M);
+                        }
+                        break;
+                } // switch
+        } else {
+                // program level - all 10 bits are offset
+                offset &= 001777; // redundant
+                cpu->r.M = (cpu->r.R<<RSHIFT) + offset;
+                if (dotrcmem)
+                        printf("R+%o,M=%05o\n", offset, cpu->r.M);
+        }
+
+        // Reset variant-mode R-relative addressing, if it was enabled
+        if (cpu->r.VARF) {
+                if (dotrcmem)
+                        printf("Resetting VARF\n");
+                cpu->r.SALF = true;
+                cpu->r.VARF = false;
+        }
+}
+
+/***********************************************************************
+* Test the presence bit [2:1] of the "word" parameter.
+*
+* if SET: returns true
+*
+* if RESET and in NORMAL STATE:
+* optionally a warning is printed
+* causes presence bit IRQ and returns false
+*
+* if RESET and in CONTROL STATE:
+* an error message is printed
+* not a good idea: stops the cpu and returns false
+* VERIFIED against Paul's JavaScript 17-10-16
+***********************************************************************/
 BIT presenceTest(CPU *cpu, WORD48 word)
 {
-        if (word & MASK_PBIT)
-                return true;
+	if (word & MASK_PBIT)
+		return true;
 
-        printf("*\t%s: presenceTest failed %016llo\n", cpu->id, word);
+	if (cpu->r.NCSF) {
+		// NORMAL STATE
+#if 1
+		prepMessage(cpu);
+		printf("presenceTest failed (%016llo)\n", word);
+#endif
+		causeSyllableIrq(cpu, IRQ_PBIT, "PBIT=0");
+		return false;
+	}
+	// CONTROL STATE
+	prepMessage(cpu);
+	printf("presenceTest failed (%016llo) in CONTROL STATE\n", word);
+	//stop(cpu);
+	return false;
+}
 
-        if (cpu->r.NCSF) {
-                cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_PBIT;
-                signalInterrupt(cpu->id, "PBIT=0");
-        }
-        return false;
+/***********************************************************************
+* OPDC, the moral equivalent of "load accumulator" on lesser
+* machines. Assumes the syllable has already loaded a word into A.
+* See Figures 6-1, 6-3, and 6-4 in the B5500 Reference Manual
+* VERIFIED against Paul's JavaScript 17-10-16
+***********************************************************************/
+void operandCall(CPU *cpu)
+{
+	BIT interrupted = false; // interrupt occurred
+
+	// If A contains a simple operand, just leave it there
+	if (OPERAND(cpu->r.A))
+		return;
+
+	// It's not a simple operand
+	switch ((cpu->r.A & MASK_TYPE) >> SHFT_TYPE) { // A.[1:3]
+
+	case 2: // CODE=0, PBIT=1, XBIT=0
+	case 3: // CODE=0, PBIT=1, XBIT=1
+		// Present data descriptor: see if it must be indexed
+		if (cpu->r.A & MASK_WCNT) { // A.[8:10]
+			// TODO: indexDescriptor ensures AB full (again) and implicitly uses A
+			interrupted = indexDescriptor(cpu);
+			// else descriptor is already indexed (word count 0)
+		}
+		if (!interrupted) {
+			// indexing reported no issue
+			cpu->r.M = cpu->r.A & MASKMEM;
+			// get the value, which now should be an operand
+			loadAviaM(cpu); // A = [M]
+			if (DESCRIPTOR(cpu->r.A) && cpu->r.NCSF) {
+				// Flag bit is set and NORMAL state
+			        causeSyllableIrq(cpu, IRQ_FLAG, "operandCall FLAG SET");
+			}
+		}
+		break;
+
+	case 7: // CODE=1, PBIT=1, XBIT=1
+		// Present program descriptor
+		enterSubroutine(cpu, false);
+		break;
+
+	case 0: // CODE=0, PBIT=0, XBIT=0
+	case 1: // CODE=0, PBIT=0, XBIT=1
+	case 5: // CODE=1, PBIT=0, XBIT=1
+		// Absent data or program descriptor
+		if (cpu->r.NCSF) {
+			causeSyllableIrq(cpu, IRQ_PBIT, "operandCall NOT PBIT");
+		}
+		// else if Control State, we're done
+		break;
+
+	default: // cases 4, 6  // CODE=1, PBIT=0/1, XBIT=0
+		// Miscellaneous control word -- leave as is
+		break;
+	}
+}
+
+/***********************************************************************
+* DESC, the moral equivalent of "load address" on lesser machines.
+* Assumes the syllable has already loaded a word into A, and that the
+* address of that word is in M.
+* See Figures 6-2, 6-3, and 6-4 in the B5500 Reference Manual
+* VERIFIED against Paul's JavaScript 17-10-16
+***********************************************************************/
+void descriptorCall(CPU *cpu)
+{
+	BIT interrupted = false; // interrupt occurred
+
+	if (OPERAND(cpu->r.A)) {
+		// It's a simple operand
+		// create a present data descriptor to its address (is in M)
+		cpu->r.A = cpu->r.M | MASK_FLAG | MASK_PBIT;
+		return;
+	}
+
+	// It's not a simple operand
+	switch ((cpu->r.A & MASK_TYPE) >> SHFT_TYPE) { // A.[1:3]
+
+	case 2: // CODE=0, PBIT=1, XBIT=0
+	case 3: // CODE=0, PBIT=1, XBIT=1
+	        // Present data descriptor: see if it must be indexed
+	        if (cpu->r.A & MASK_WCNT) { // aw.[8:10]
+			// TODO: indexDescriptor ensures AB full (again) and implicitly uses A
+	                interrupted = indexDescriptor(cpu);
+	                if (!interrupted) {
+	                        // set word count to zero
+	                        cpu->r.A &= ~MASK_WCNT;
+	                }
+	                // else descriptor is already indexed (word count 0)
+	        }
+	        break;
+
+	case 7: // CODE=1, PBIT=1, XBIT=1
+	        // Present program descriptor
+	        enterSubroutine(cpu, true);
+	        break;
+
+	case 0: // CODE=0, PBIT=0, XBIT=0
+	case 1: // CODE=0, PBIT=0, XBIT=1
+	case 5: // CODE=1, PBIT=0, XBIT=1
+	        // Absent data or program descriptor
+		if (cpu->r.NCSF) {
+			causeSyllableIrq(cpu, IRQ_PBIT, "descriptorCall NOT PBIT");
+		}
+                // else if Control State, we're done
+	        break;
+
+	default: // cases 4, 6  // CODE=1, PBIT=0/1, XBIT=0
+	        // Miscellaneous control word
+		// create a present data descriptor to its address (is in M)
+	        cpu->r.A = cpu->r.M | MASK_FLAG | MASK_PBIT;
+	        break;
+	}
 }
 
 /*
