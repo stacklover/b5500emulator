@@ -19,14 +19,15 @@
 *   some refactoring in the functions, added documentation
 ***********************************************************************/
 
-#define NEW_ITI 1
-
 #include <stdio.h>
 #include "common.h"
 
 #define DEBUG_TRB false
 #define DEBUG_FCE false
 #define DEBUG_FCL false
+
+#define	CONTROL_STATE_ONLY if (cpu->r.NCSF) return
+#define	NORMAL_STATE_ONLY if (!cpu->r.NCSF) return
 
 void b5500_execute_wm(CPU *cpu)
 {
@@ -92,95 +93,104 @@ void b5500_execute_wm(CPU *cpu)
         variant = opcode >> 6;
 
         switch (opcode & 077) {
-        case 001: // XX01: single-precision numerics
+
+/***********************************************************************
+* XX01: single-precision numerics
+* 0101: ADD=single-precision add
+* 0301: SUB=single-precision subtract
+* 0401: MUL=single-precision multiply
+* 1001: DIV=single-precision floating divide
+* 3001: IDV=integer divide
+* 7001: RDV=remainder divide
+***********************************************************************/
+        case 001:
                 switch (variant) {
-                case 001: // 0101: ADD=single-precision add
-                        singlePrecisionAdd(cpu, true);
-                        break;
-                case 003: // 0301: SUB=single-precision subtract
-                        singlePrecisionAdd(cpu, false);
-                        break;
-                case 004: // 0401: MUL=single-precision multiply
-                        singlePrecisionMultiply(cpu);
-                        break;
-                case 010: // 1001: DIV=single-precision floating divide
-                        singlePrecisionDivide(cpu);
-                        break;
-                case 030: // 3001: IDV=integer divide
-                        integerDivide(cpu);
-                        break;
-                case 070: // 7001: RDV=remainder divide
-                        remainderDivide(cpu);
-                        break;
+                case 001: singlePrecisionAdd(cpu, true); return;
+                case 003: singlePrecisionAdd(cpu, false); return;
+                case 004: singlePrecisionMultiply(cpu); return;
+                case 010: singlePrecisionDivide(cpu); return;
+                case 030: integerDivide(cpu); return;
+                case 070: remainderDivide(cpu); return;
 		default: goto unused;
                 }
-                break;
-        case 005: // XX05: double-precision numerics
-                switch (variant) {
-                case 001: // 0105: DLA=double-precision add
-                        doublePrecisionAdd(cpu, true);
-                        break;
-                case 003: // 0305: DLS=double-precision subtract
-                        doublePrecisionAdd(cpu, false);
-                        break;
-                case 004: // 0405: DLM=double-precision multiply
-                        doublePrecisionMultiply(cpu);
-                        break;
-                case 010: // 1005: DLD=double-precision floating divide
-                        doublePrecisionDivide(cpu);
-                        break;
+		return;
+
+/***********************************************************************
+* XX05: double-precision numerics
+* 0105: DLA=double-precision add
+* 0305: DLS=double-precision subtract
+* 0405: DLM=double-precision multiply
+* 1005: DLD=double-precision floating divide
+***********************************************************************/
+	case 005:
+		switch (variant) {
+		case 001: doublePrecisionAdd(cpu, true); return;
+		case 003: doublePrecisionAdd(cpu, false); return;
+		case 004: doublePrecisionMultiply(cpu); return;
+		case 010: doublePrecisionDivide(cpu); return;
 		default: goto unused;
-                }
-                break;
-        case 011: // XX11: Control State and communication ops
+		}
+		return;
+
+/***********************************************************************
+* XX11: Control State and communication ops
+***********************************************************************/
+        case 011:
                 switch (variant) {
-                case 001: // 0111: PRL=Program Release
-                        // TOS should be operand or descriptor
-                        // t1 = copy of A
-                        // t2 = presence bit or value valid
-                        // get it into A and copy into t1
+
+/***********************************************************************
+* 0111: PRL=Program Release
+* Get TOS into A (TOS should be operand or descriptor)
+* if Operand then its a relative address. Compute it into M
+* if Descriptor
+*   if present, load A into M;
+*   otherwise cause presence bit IRQ and exit
+* load A from [M]
+* in control state clear presence bit and
+*   store A back into [M] and exit
+* in normal state check continuity bit
+*   if set cause continuity IRQ
+*   if clear cause program release IRQ
+*   save M (address) in [R+9]
+* set A empty
+***********************************************************************/
+                case 001:
                         adjustAFull(cpu);
-                        t1 = cpu->r.A;
-                        if (OPERAND(t1)) {
-                                // it's an operand
-                                computeRelativeAddr(cpu, t1, false);
-                                t2 = true;
-                        } else if (presenceTest(cpu, t1)) {
+                        if (OPERAND(cpu->r.A)) {
+                                // operand
+                                computeRelativeAddr(cpu, cpu->r.A, false);
+                        } else if (presenceTest(cpu, cpu->r.A)) {
                                 // present descriptor
-                                cpu->r.M = t1 & MASKMEM;
-                                t2 = true;
+                                cpu->r.M = cpu->r.A & MASKMEM;
                         } else {
-                                // absent descriptor
-                                t2 = false;
+				// not present
+				// leave address on stack and exit
+				return;
                         }
-                        if (t2) {
-                                // fetch IO Descriptor
-                                loadAviaM(cpu);
-                                if (cpu->r.NCSF) {
-                                        // not in control state
-                                        // test continuity bit, [20:1]
-                                        if (cpu->r.A & MASK_CONT) {
-                                                // set I07/6: continuity bit
-                                                cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_CONT;
-                                        } else {
-                                                // set I07/5: program release
-                                                cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_PREL;
-                                        }
-                                        signalInterrupt(cpu->id, "PRL");
-                                        cpu->r.A = cpu->r.M;
-                                        // store IOD address in PRT[9]
-                                        cpu->r.M = (cpu->r.R<<6) + 9;
-                                        storeAviaM(cpu);
-                                } else {
-                                        // in control state
-                                        // clear presence bit
-                                        cpu->r.A &= ~MASK_PBIT;
-                                        storeAviaM(cpu);
-                                }
-                                cpu->r.AROF = false;
-                        }
-                        break;
-#if NEW_ITI
+			// fetch the value
+			loadAviaM(cpu);
+			if (cpu->r.NCSF) {
+				// normal state
+				// test continuity bit, [20:1]
+				if (cpu->r.A & MASK_CONT) {
+					causeSyllableIrq(cpu, IRQ_CONT, "PRL-CONT");
+				} else {
+					causeSyllableIrq(cpu, IRQ_PREL, "PRL-PRL");
+				}
+				// store IOD address in PRT[9]
+				cpu->r.A = cpu->r.M;
+				cpu->r.M = (cpu->r.R<<RSHIFT) + RR_COM;
+				storeAviaM(cpu);
+			} else {
+				// control state
+				// just clear presence bit and store back
+				cpu->r.A &= ~MASK_PBIT;
+				storeAviaM(cpu);
+			}
+			// remove address
+			cpu->r.AROF = false;
+                        return;
+
 /***********************************************************************
 * 0211: ITI=Interrogate Interrupt
 * poll pending IRQs
@@ -188,8 +198,7 @@ void b5500_execute_wm(CPU *cpu)
 * otherwise exit
 ***********************************************************************/
                 case 002:
-			// control state only
-			if (cpu->r.NCSF) break;
+			CONTROL_STATE_ONLY;
 			// use M as temporary
 			cpu->r.M = CC->IAR;
 			if (cpu->r.M) {
@@ -199,144 +208,177 @@ void b5500_execute_wm(CPU *cpu)
 				cpu->r.S = AA_IRQSTACK; // stack address @100
 				clearInterrupt(cpu->r.M); // clear IRQ
 			}
-                        break;
-#else
-                case 002: // 0211: ITI=Interrogate Interrupt
-                        interrogateInterrupt(cpu);
-                        break;
-#endif
-                case 004: // 0411: RTR=Read Timer
-                        // control-state only
-                        if (!cpu->r.NCSF) {
-                                adjustAEmpty(cpu);
-                                cpu->r.A = readTimer(cpu);
-                                cpu->r.AROF = true;
+                        return;
+
+/***********************************************************************
+* 0411: RTR=Read Timer
+* put 7 bits of timer IRQ pending (1 bit) and the timer count (6 bits)
+* in A right jusitfied. Rest of A is zero
+***********************************************************************/
+                case 004:
+                        CONTROL_STATE_ONLY;
+                        adjustAEmpty(cpu);
+                        cpu->r.A = readTimer(cpu);
+                        cpu->r.AROF = true;
+                        return;
+
+/***********************************************************************
+* 1011: COM=Communicate
+* in normal state store word at TOS in [R+9]
+* set communicate IRQ
+* delete TOS
+* NOP in control state
+***********************************************************************/
+                case 010:
+                        NORMAL_STATE_ONLY;
+                        cpu->r.M = (cpu->r.R<<RSHIFT) + RR_COM;
+                        if (cpu->r.AROF) { // TOS in A
+                                storeAviaM(cpu);
+                                cpu->r.AROF = false;
+                        } else if (cpu->r.BROF) { // TOS in B
+                                storeBviaM(cpu);
+                                cpu->r.BROF = false;
+                        } else { // load TOS to B
+                                adjustBFull(cpu);
+                                storeBviaM(cpu);
+                                cpu->r.BROF = false;
                         }
-                        break;
-                case 010: // 1011: COM=Communicate
-                        // no-op in Control State
-                        if (cpu->r.NCSF) {
-                                // address = R+@11
-                                cpu->r.M = (cpu->r.R<<6) + RR_COM;
-                                if (cpu->r.AROF) {
-                                        storeAviaM(cpu);
-                                        // [M] = A
-                                        cpu->r.AROF = false;
-                                } else if (cpu->r.BROF) {
-                                        storeBviaM(cpu);
-                                        // [M] = B
-                                        cpu->r.BROF = false;
-                                } else {
-                                        adjustBFull(cpu);
-                                        storeBviaM(cpu);
-                                        // [M] = B
-                                        cpu->r.BROF = false;
-                                }
-                                // set I07: communicate
-                                cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_COM;
-                                signalInterrupt(cpu->id, "COM");
-                        }
-                        break;
-                case 021: // 2111: IOR=I/O Release
-                        // no-op in Normal State
-                        if (!cpu->r.NCSF) {
+			causeSyllableIrq(cpu, IRQ_COM, "COM");
+                        return;
+
+/***********************************************************************
+* 2111: IOR=I/O Release
+* in normal state just exit
+* Get TOS into A (TOS should be operand or descriptor)
+* if Operand then its a relative address. Compute it into M
+* if Descriptor
+*   if present, load A into M;
+*   otherwise just exit (cause no IRQ)
+* load A from [M]
+* set presence bit
+* store A back into [M]
+* set A empty
+***********************************************************************/
+                case 021:
+                        CONTROL_STATE_ONLY;
+			adjustAFull(cpu);
+			if (OPERAND(cpu->r.A)) {
+				// it's an operand
+				computeRelativeAddr(cpu, cpu->r.A, 0);
+			} else if (PRESENT(cpu->r.A)) {
+				cpu->r.M = cpu->r.A & MASKMEM;
+				// present descriptor
+			} else {
+				// leave address on stack and exit
+				return;
+			}
+			// set the presence bit of the word at the designed address
+			loadAviaM(cpu);
+			cpu->r.A |= MASK_PBIT;
+			storeAviaM(cpu);
+			// remove address
+			cpu->r.AROF = false;
+                        return;
+
+/***********************************************************************
+* 2211: HP2=Halt Processor 2
+* NOP when not in control state
+* NOP when HP2F already set
+***********************************************************************/
+                case 022:
+			CONTROL_STATE_ONLY;
+			if (!CC->HP2F) haltP2(cpu);
+			return;
+
+/***********************************************************************
+* 2411: ZPI=Conditional Halt
+* if operator switch is on, halt the processor
+***********************************************************************/
+		case 024:
+			if (cpu->r.US14X)
+				stop(cpu);
+			return;
+
+/***********************************************************************
+* 3011: SFI=Store for Interrupt
+* here: caused by instruction (forced=false, forTest=false)
+* 3411: SFT=Store for Test
+* here: caused by instruction (forced=false, forTest=true)
+* for a detailed description of operation see storeForInterrupt()
+***********************************************************************/
+                case 030: storeForInterrupt(cpu, false, false, "SFI"); return;
+                case 034: storeForInterrupt(cpu, false, true, "SFT"); return;
+
+/***********************************************************************
+* 4111: IP1=Initiate Processor 1
+* INCW is in TOS (A, B or [S])
+* here: (forTest=false)
+* for a detailed description of operation see initiate()
+***********************************************************************/
+                case 041:
+                        CONTROL_STATE_ONLY;
+                        initiate(cpu, false);
+                        return;
+
+/***********************************************************************
+* 4211: IP2=Initiate Processor 2
+* INCW is in TOS (A, B or [S]), store it in @10
+* initate P2
+***********************************************************************/
+                case 042:
+                        CONTROL_STATE_ONLY;
+			cpu->r.M = AA_IODESC;
+			if (cpu->r.AROF) {
+				storeAviaM(cpu);
+				cpu->r.AROF = false;
+			} else if (cpu->r.BROF) {
+				storeBviaM(cpu);
+				cpu->r.BROF = false;
+			} else {
+				adjustAFull(cpu);
+				storeAviaM(cpu);
+				cpu->r.AROF = false;
+			}
+			// send signal to central control
+			initiateP2(cpu);
+                        return;
+
+/***********************************************************************
+* 4411: IIO=Initiate I/O
+***********************************************************************/
+                case 044:
+                        CONTROL_STATE_ONLY;
+                        // address of IOD is stored in @10
+                        cpu->r.M = AA_IODESC;
+                        if (cpu->r.AROF) {
+                                storeAviaM(cpu);
+                                cpu->r.AROF = false;
+                        } else if (cpu->r.BROF) {
+                                storeBviaM(cpu);
+                                cpu->r.BROF = false;
+                        } else {
                                 adjustAFull(cpu);
-                                t1 = cpu->r.A;
-                                if (OPERAND(t1)) {
-                                        // it's an operand
-                                        computeRelativeAddr(cpu, t1, 0);
-                                        t2 = true;
-                                } else if (PRESENT(t1)) {
-                                        cpu->r.M = t1 & MASKMEM;
-                                        // present descriptor
-                                        t2 = true;
-                                } else {
-                                        // for an absent descriptor, just leave it on the stack
-                                        t2 = false;
-                                }
-                                if (t2) {
-                                        loadAviaM(cpu);
-                                        cpu->r.A |= MASK_PBIT;
-                                        storeAviaM(cpu);
-                                        cpu->r.AROF = false;
-                                }
+                                storeAviaM(cpu);
+                                // [M] = A
+                                cpu->r.AROF = false;
                         }
-                        break;
-                case 022: // 2211: HP2=Halt Processor 2
-                        // control-state only
-                        if (!(cpu->r.NCSF || CC->HP2F)) {
-                                haltP2(cpu);
-                        }
-                        break;
-                case 024: // 2411: ZPI=Conditional Halt
-                        if (cpu->r.US14X) {
-                                // STOP OPERATOR switch on
-                                stop(cpu);
-                        }
-                        break;
-                case 030: // 3011: SFI=Store for Interrupt
-                        storeForInterrupt(cpu, false, false, "wmSFI");
-                        break;
-                case 034: // 3411: SFT=Store for Test
-                        storeForInterrupt(cpu, false, true, "wmSFT");
-                        break;
-                case 041: // 4111: IP1=Initiate Processor 1
-                        // control-state only
-                        if (!cpu->r.NCSF) {
-                                initiate(cpu, false);
-                        }
-                        break;
-                case 042: // 4211: IP2=Initiate Processor 2
-                        // control-state only
-                        if (!cpu->r.NCSF) {
-                                // INCW is stored in @10
-                                cpu->r.M = AA_IODESC;
-                                if (cpu->r.AROF) {
-                                        storeAviaM(cpu);
-                                        // [M] = A
-                                        cpu->r.AROF = false;
-                                } else if (cpu->r.BROF) {
-                                        storeBviaM(cpu);
-                                        // [M] = B
-                                        cpu->r.BROF = false;
-                                } else {
-                                        adjustAFull(cpu);
-                                        storeAviaM(cpu);
-                                        // [M] = A
-                                        cpu->r.AROF = false;
-                                }
-                                initiateP2(cpu);
-                        }
-                        break;
-                case 044: // 4411: IIO=Initiate I/O
-                        if (!cpu->r.NCSF) {
-                                // address of IOD is stored in @10
-                                cpu->r.M = AA_IODESC;
-                                if (cpu->r.AROF) {
-                                        storeAviaM(cpu);
-                                        cpu->r.AROF = false;
-                                } else if (cpu->r.BROF) {
-                                        storeBviaM(cpu);
-                                        cpu->r.BROF = false;
-                                } else {
-                                        adjustAFull(cpu);
-                                        storeAviaM(cpu);
-                                        // [M] = A
-                                        cpu->r.AROF = false;
-                                }
-                                // let CentralControl choose the I/O Unit
-                                initiateIO(cpu);
-                        }
-                        break;
-                case 051: // 5111: IFT=Initiate For Test
-                        if (!cpu->r.NCSF) {
-                                // control-state only
-                                initiate(cpu, 1);
-                        }
-                        break;
+                        // let CentralControl choose the I/O Unit
+                        initiateIO(cpu);
+                        return;
+
+/***********************************************************************
+* 5111: IFT=Initiate For Test
+***********************************************************************/
+		case 051:
+			CONTROL_STATE_ONLY;
+			initiate(cpu, true);
+			return;
+
 		default: goto unused;
-                } // end switch for XX11 ops
-                break;
+		} // end switch for XX11 ops
+		break;
+
+
         case 015: // XX15: logical (bitmask) ops
                 switch (variant) {
                 case 001: // 0115: LNG=logical negate

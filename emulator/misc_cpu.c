@@ -19,7 +19,7 @@
 
 #define NEW_INITIATEP2 1
 
-#define	TRACE_IRQ 1
+#define	TRACE_IRQ 0
 
 #include <stdio.h>
 #include "common.h"
