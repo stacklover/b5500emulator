@@ -356,3 +356,35 @@ void interrogateInterrupt(CPU *cpu) {
 }
 #endif
 
+/*
+ * Called by P1 to initiate P2. Assumes that an INCW has been stored at
+ * memory location @10. If P2 is busy or not present, sets the P2 busy
+ * interrupt. Otherwise, loads the INCW into P2's A register and initiates
+ * the processor
+ */
+void initiateP2(CPU *cpu)
+{
+	prepMessage(cpu);
+        printf("initiateP2 - ");
+
+	// always cause P2 busy IRQ (for now)
+
+	if (true /* P2BF || !P2 */) {
+		printf("busy or not available\n");
+		CC->CCI12F = true;
+		signalInterrupt(cpu->id, "initiateP2");
+	} else {
+		printf("done\n");
+		//P2BF = 1;
+		//ccLatch |= 0x10;
+		//HP2F = 0;
+		//initiateAsP2();
+	}
+}
+
+void haltP2(CPU *cpu)
+{
+        printf("*\t%s: haltP2\n", cpu->id);
+}
+
+

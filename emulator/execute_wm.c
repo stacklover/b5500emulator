@@ -376,166 +376,199 @@ void b5500_execute_wm(CPU *cpu)
 
 		default: goto unused;
 		} // end switch for XX11 ops
-		break;
+		return;
 
 
-        case 015: // XX15: logical (bitmask) ops
+/***********************************************************************
+* XX15: logical (bitmask) ops
+* ensure A full, ensure B full for LOR, LND, LQV
+* 0115: LNG=logical negate
+* complement A except for flag
+* 0215: LOR=logical OR
+* bitwise or B into A, except for flag, set A.flag = B.flag, set B empty
+* 0415: LND=logical AND
+* bitwise and B into A, except for flag, set A.flag = B.flag, set B empty
+* 1015: LQV=logical EQV
+* bitwise equivalence A into B, except for flag, preserve B.flag, set A empty
+* 2015: MOP=reset flag bit (make operand)
+* set A.flag = 0
+* 4015: MDS=set flag bit (make descriptor)
+* set A.flag = 1
+***********************************************************************/
+        case 015:
                 switch (variant) {
-                case 001: // 0115: LNG=logical negate
-                        adjustAFull(cpu);
-                        cpu->r.A ^= MASK_NUMBER;
-                        break;
-                case 002: // 0215: LOR=logical OR
-                        adjustABFull(cpu);
-                        cpu->r.A = (cpu->r.A & MASK_NUMBER) | cpu->r.B;
-                        cpu->r.BROF = false;
-                        break;
-                case 004: // 0415: LND=logical AND
-                        adjustABFull(cpu);
-                        cpu->r.A = (cpu->r.A | MASK_FLAG) & cpu->r.B;
-                        cpu->r.BROF = false;
-                        break;
-                case 010: // 1015: LQV=logical EQV
-                        adjustABFull(cpu);
+                case 001: adjustAFull(cpu);
+			cpu->r.A ^= MASK_NUMBER; return;
+                case 002: adjustABFull(cpu);
+			cpu->r.A = (cpu->r.A & MASK_NUMBER) | cpu->r.B;
+			cpu->r.BROF = false; return;
+                case 004: adjustABFull(cpu);
+			cpu->r.A = (cpu->r.A | MASK_FLAG) & cpu->r.B;
+			cpu->r.BROF = false; return;
+                case 010: adjustABFull(cpu);
                         cpu->r.B ^= (~cpu->r.A) & MASK_NUMBER;
-                        cpu->r.AROF = false;
-                        break;
-
-                case 020: // 2015: MOP=reset flag bit (make operand)
-                        adjustAFull(cpu);
-                        cpu->r.A &= MASK_NUMBER;
-                        break;
-                case 040: // 4015: MDS=set flag bit (make descriptor)
-                        adjustAFull(cpu);
-                        cpu->r.A |= MASK_FLAG;
-                        break;
+                        cpu->r.AROF = false; return;
+                case 020: adjustAFull(cpu);
+                        cpu->r.A &= MASK_NUMBER; return;
+                case 040: adjustAFull(cpu);
+                        cpu->r.A |= MASK_FLAG; return;
 		default: goto unused;
                 }
-                break;
-        case 021: // XX21: load & store ops
+                return;
+
+/***********************************************************************
+* XX21: load & store ops
+***********************************************************************/
+        case 021:
                 switch (variant) {
-                case 001: // 0121: CID=Conditional integer store destructive
-                        integerStore(cpu, true, true);
-                        break;
-                case 002: // 0221: CIN=Conditional integer store nondestructive
-                        integerStore(cpu, true, false);
-                        break;
-                case 004: // 0421: STD=Store destructive
+
+/***********************************************************************
+* 0121: CID=Conditional integer store destructive
+* 0221: CIN=Conditional integer store nondestructive
+* if A.integer bit then convert B to integer, cause integerger overflow is so happens
+* store to address designated by A
+* 4121: ISD=Integer store destructive
+* 4221: ISN=Integer store nondestructive
+* convert B to integer, cause integerger overflow is so happens
+* store B to address designated by A
+***********************************************************************/
+                case 001: integerStore(cpu, true, true); return;
+                case 002: integerStore(cpu, true, false); return;
+                case 041: integerStore(cpu, false, true); return;
+                case 042: integerStore(cpu, false, false); return;
+
+/***********************************************************************
+* 0421: STD=Store destructive
+* 1021: SND=Store nondestructive
+* ensure A and B full
+* store B to address designated by A, set A empty
+* if destructive, set B empty
+***********************************************************************/
+		case 004:
+		case 010:
                         adjustABFull(cpu);
                         if (OPERAND(cpu->r.A)) {
-                                // it's an operand
+                                // operand
                                 computeRelativeAddr(cpu, cpu->r.A, false);
-                                storeBviaM(cpu);
-                                cpu->r.AROF = cpu->r.BROF = false;
-                        } else {
-                                // it's a descriptor
-                                if (presenceTest(cpu, cpu->r.A)) {
-                                        cpu->r.M = cpu->r.A & MASKMEM;
-                                        storeBviaM(cpu);
-                                        cpu->r.AROF = cpu->r.BROF = false;
-                                }
-                        }
-                        break;
-                case 010: // 1021: SND=Store nondestructive
-                        adjustABFull(cpu);
-                        if (OPERAND(cpu->r.A)) {
-                                // it's an operand
-                                computeRelativeAddr(cpu, cpu->r.A, false);
-                                storeBviaM(cpu);
-                                cpu->r.AROF = false;
-                        } else {
-                                // it's a descriptor
-                                if (presenceTest(cpu, cpu->r.A)) {
-                                        cpu->r.M = cpu->r.A & MASKMEM;
-                                        storeBviaM(cpu);
-                                        cpu->r.AROF = false;
-                                }
-                        }
-                        break;
-                case 020: // 2021: LOD=Load operand
+                        } else if (presenceTest(cpu, cpu->r.A)) {
+				// present descriptor
+				cpu->r.M = cpu->r.A & MASKMEM;
+			} else {
+				// not present
+				// leave address and value on stack and exit
+				return;
+			}
+			// now store
+                        storeBviaM(cpu);
+			// remove address
+                        cpu->r.AROF = false;
+			// if destructive, remove value
+			if (variant == 004)
+				cpu->r.BROF = false;
+                        return;
+
+/***********************************************************************
+* 2021: LOD=Load operand
+* ensure A full
+* load A from address designated by A
+***********************************************************************/
+                case 020:
                         adjustAFull(cpu);
                         if (OPERAND(cpu->r.A)) {
-                                // simple operand
+                                // operand
                                 computeRelativeAddr(cpu, cpu->r.A, true);
-                                loadAviaM(cpu);
                         } else if (presenceTest(cpu, cpu->r.A)) {
                                 // present descriptor
                                 cpu->r.M = cpu->r.A & MASKMEM;
-                                loadAviaM(cpu);
-                        }
-                        break;
-                case 041: // 4121: ISD=Integer store destructive
-                        integerStore(cpu, false, true);
-                        break;
-                case 042: // 4221: ISN=Integer store nondestructive
-                        integerStore(cpu, false, false);
-                        break;
-		default: goto unused;
-                }
-                break;
-        case 025: // XX25: comparison & misc. stack ops
-                switch (variant) {
-                case 001: // 0125: GEQ=compare B greater or equal to A
-                        cpu->r.B = (singlePrecisionCompare(cpu) >= 0) ? true : false;
-                        break;
-                case 002: // 0225: GTR=compare B greater to A
-                        cpu->r.B = (singlePrecisionCompare(cpu) > 0) ? true : false;
-                        break;
-                case 004: // 0425: NEQ=compare B not equal to A
-                        cpu->r.B = (singlePrecisionCompare(cpu) != 0) ? true : false;
-                        break;
-                case 041: // 4125: LEQ=compare B less or equal to A
-                        cpu->r.B = (singlePrecisionCompare(cpu) <= 0) ? true : false;
-                        break;
-                case 042: // 4225: LSS=compare B less to A
-                        cpu->r.B = (singlePrecisionCompare(cpu) < 0) ? true : false;
-                        break;
-                case 044: // 4425: EQL=compare B equal to A
-                        cpu->r.B = (singlePrecisionCompare(cpu) == 0) ? true : false;
-                        break;
-
-                case 010: // 1025: XCH=exchange TOS words
-                        exchangeTOS(cpu);
-                        break;
-                case 020: // 2025: DUP=Duplicate TOS
-                        if (cpu->r.AROF) {
-                                adjustBEmpty(cpu);
-                                cpu->r.B = cpu->r.A;
-                                cpu->r.BROF = true;
                         } else {
-                                adjustBFull(cpu);
-                                cpu->r.A = cpu->r.B;
-                                cpu->r.AROF = true;
-                        }
-                        break;
+				// not present
+				// leave address on stack and exit
+				return;
+			}
+			// now load value
+                        loadAviaM(cpu);
+                        return;
 
-                case 014: // 1425: FTC=F field to C field
-                        adjustABFull(cpu);
-                        t1 = (cpu->r.A & MASK_FREG) >> SHFT_FREG;
-                        cpu->r.B = (cpu->r.B & ~MASK_CREG) | (t1 << SHFT_CREG);
-                        cpu->r.AROF = false;
-                        break;
-                case 034: // 3425: FTF=F field to F field
-                        adjustABFull(cpu);
-                        t1 = (cpu->r.A & MASK_FREG) >> SHFT_FREG;
-                        cpu->r.B = (cpu->r.B & ~MASK_FREG) | (t1 << SHFT_FREG);
-                        cpu->r.AROF = false;
-                        break;
-                case 054: // 5425: CTC=C field to C field
-                        adjustABFull(cpu);
-                        t1 = (cpu->r.A & MASK_CREG) >> SHFT_CREG;
-                        cpu->r.B = (cpu->r.B & ~MASK_CREG) | (t1 << SHFT_CREG);
-                        cpu->r.AROF = false;
-                        break;
-                case 074: // 7425: CTF=C field to F field
-                        adjustABFull(cpu);
-                        t1 = (cpu->r.A & MASK_CREG) >> SHFT_CREG;
-                        cpu->r.B = (cpu->r.B & ~MASK_FREG) | (t1 << SHFT_FREG);
-                        cpu->r.AROF = false;
-                        break;
 		default: goto unused;
                 }
-                break;
+                return;
+
+/***********************************************************************
+* XX25: comparison & misc. stack ops
+***********************************************************************/
+        case 025:
+                switch (variant) {
+
+/***********************************************************************
+* 0125: GEQ=compare B greater or equal to A
+* 0225: GTR=compare B greater to A
+* 0425: NEQ=compare B not equal to A
+* 4125: LEQ=compare B less or equal to A
+* 4225: LSS=compare B less to A
+* 4425: EQL=compare B equal to A
+***********************************************************************/
+		case 001: cpu->r.B = (singlePrecisionCompare(cpu) >= 0) ? true : false; return;
+		case 002: cpu->r.B = (singlePrecisionCompare(cpu) > 0) ? true : false; return;
+		case 004: cpu->r.B = (singlePrecisionCompare(cpu) != 0) ? true : false; return;
+		case 041: cpu->r.B = (singlePrecisionCompare(cpu) <= 0) ? true : false; return;
+		case 042: cpu->r.B = (singlePrecisionCompare(cpu) < 0) ? true : false; return;
+		case 044: cpu->r.B = (singlePrecisionCompare(cpu) == 0) ? true : false; return;
+
+/***********************************************************************
+* 1025: XCH=exchange TOS words
+***********************************************************************/
+		case 010: exchangeTOS(cpu); return;
+
+/***********************************************************************
+* 2025: DUP=Duplicate TOS
+* if A is full, make B empty and copy to B
+* if A is empty, make B full and copy to A
+***********************************************************************/
+                case 020:
+			if (cpu->r.AROF) {
+				adjustBEmpty(cpu);
+				cpu->r.B = cpu->r.A;
+				cpu->r.BROF = true;
+			} else {
+				adjustBFull(cpu);
+				cpu->r.A = cpu->r.B;
+				cpu->r.AROF = true;
+			}
+			return;
+
+/***********************************************************************
+* 1425: FTC=F field to C field
+* 3425: FTF=F field to F field
+* 5425: CTC=C field to C field
+* 7425: CTF=C field to F field
+* F field = bits 18..32
+* C field = bits 33..47
+* ensure A and B full
+* move field from A into B
+* mark A empty
+***********************************************************************/
+		case 014: adjustABFull(cpu);
+			t1 = (cpu->r.A & MASK_FREG) >> SHFT_FREG;
+			cpu->r.B = (cpu->r.B & ~MASK_CREG) | (t1 << SHFT_CREG);
+			cpu->r.AROF = false; return;
+		case 034: adjustABFull(cpu);
+			t1 = (cpu->r.A & MASK_FREG) >> SHFT_FREG;
+			cpu->r.B = (cpu->r.B & ~MASK_FREG) | (t1 << SHFT_FREG);
+			cpu->r.AROF = false; return;
+		case 054: adjustABFull(cpu);
+			t1 = (cpu->r.A & MASK_CREG) >> SHFT_CREG;
+			cpu->r.B = (cpu->r.B & ~MASK_CREG) | (t1 << SHFT_CREG);
+			cpu->r.AROF = false; return;
+		case 074: adjustABFull(cpu);
+			t1 = (cpu->r.A & MASK_CREG) >> SHFT_CREG;
+			cpu->r.B = (cpu->r.B & ~MASK_FREG) | (t1 << SHFT_FREG);
+			cpu->r.AROF = false; return;
+
+		default: goto unused;
+		}
+		return;
+
+
         case 031: // XX31: branch, sign-bit, interrogate ops
                 switch (variant) {
                 case 001: // 0131: BBC=branch backward conditional
