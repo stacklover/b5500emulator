@@ -15,10 +15,64 @@
 *   changed "this" to "cpu" to avoid errors when using g++
 * 2017-09-30  R.Meyer
 *   overhaul of file names
+* 2017-10-10  R.Meyer
+*   some refactoring in the functions, added documentation
 ***********************************************************************/
+
+#define NEW_INDEXDESCRIPTOR 1
+#define NEW_INTEGERSTORE 1
 
 #include <stdio.h>
 #include "common.h"
+
+#if NEW_INDEXDESCRIPTOR || NEW_INTEGERSTORE
+/*
+ * local function to integerize a REAL value to an INTEGER
+ * return true on integer overflow
+ *
+ * Note: this function does round as follows
+ *  0.50000 ->  1
+ *  0.49999 ->  0
+ * -0.50000 ->  0
+ * -0.50001 -> -1
+ * This rounding also takes place when indexing arrays!
+ * This is intentional on the B5500
+ */
+static BIT integerize(WORD48 *v) {
+	NUM n;
+
+	num_extract(v, &n);
+
+	if (n.e < 0) {
+		// exponent is negative
+		do {
+			// store rightmost octet in x for later rounding
+			n.x = n.m & 7;
+			n.m >>= 3; // shift one octade right
+			n.e++;
+		} while (n.e < 0);
+		// round up the number
+		if (n.s ? n.x > 4 : n.x >= 4) {
+			n.m++; // round the mantissa
+		}
+	} else if (n.e > 0) {
+		// exponent is positive
+		do {
+			if (n.m & MASK_MANTHIGH) {
+				// integer overflow while normalizing the mantisa
+				return true;
+			} else {
+				n.m <<= 3; // shift one octade left
+			}
+			n.e--;
+		} while (n.e > 0);
+	}
+
+        num_compose(&n, v);
+
+	return false;
+}
+#endif
 
 /*
  * Called by a requestor module passing accessor object "acc" to fetch a
@@ -190,6 +244,70 @@ void computeRelativeAddr(CPU *cpu, unsigned offset, BIT cEnabled)
         }
 }
 
+#if NEW_INDEXDESCRIPTOR
+/*
+ * Indexes a descriptor and, if successful leaves the indexed value in
+ * the A register. Returns 1 if an interrupt is set and the syllable is
+ * to be exited
+ */
+BIT indexDescriptor(CPU *cpu)
+{
+        WORD48  aw;     // local copy of A reg
+        BIT             interrupted = false;    // fatal error, interrupt set
+	ADDR15	index;
+	BIT	sign;
+
+        adjustABFull(cpu);
+        aw = cpu->r.A;
+
+        // Normalize the index
+	if (integerize(&cpu->r.B)) {
+		// oops... integer overflow normalizing the index
+		interrupted = true;
+		if (cpu->r.NCSF) {
+			//causeSyllableIrq(cpu, IRQ_INTO, "INX Overflow");
+                        // set I07/8: integer overflow
+                        cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_INTO;
+                        signalInterrupt(cpu->id, "INX Overflow");
+		}
+        }
+
+        // look only at lowest 10 bits
+        index = cpu->r.B & 01777;
+	sign = (cpu->r.B & MASK_SIGNMANT);
+
+        // Now we have an integerized index value in I
+        if (!interrupted) {
+                if (sign && index) {
+                        // index is negative
+                        interrupted = true;
+                        if (cpu->r.NCSF) {
+				//causeSyllableIrq(cpu, IRQ_INDEX, "INX<0");
+                                // set I05/8: invalid-index
+                                cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_INDEX;
+                                signalInterrupt(cpu->id, "INX<0");
+                        }
+                } else if (index < ((aw & MASK_WCNT) >> SHFT_WCNT)) {
+                        // We finally have a valid index
+                        index = (aw + index) & MASK_ADDR;
+                        cpu->r.A = (aw & ~MASK_ADDR) | index;
+                        cpu->r.BROF = false;
+                } else {
+                        // index not less than size
+                        interrupted = true;
+                        if (cpu->r.NCSF) {
+				//causeSyllableIrq(cpu, IRQ_INDEX, "INX>WC");
+                                // set I05/8: invalid-index
+                                cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_INDEX;
+                                signalInterrupt(cpu->id, "INX>WC");
+                        }
+                }
+        }
+        return interrupted;
+}
+
+#else
+
 /*
  * Indexes a descriptor and, if successful leaves the indexed value in
  * the A register. Returns 1 if an interrupt is set and the syllable is
@@ -203,8 +321,8 @@ BIT indexDescriptor(CPU *cpu)
 
         adjustABFull(cpu);
         aw = cpu->r.A;
-        num_extract(&cpu->r.B, &I);
 
+        num_extract(&cpu->r.B, &I);
         // Normalize the index, if necessary
         if (I.e < 0) {
                 // index exponent is negative
@@ -254,6 +372,7 @@ BIT indexDescriptor(CPU *cpu)
         }
         return interrupted;
 }
+#endif
 
 /*
  * load registers from memory
@@ -459,6 +578,20 @@ void integerStore(CPU *cpu, BIT conditional, BIT destructive)
 
         if (normalize) {
 
+#if NEW_INTEGERSTORE
+		if (integerize(&cpu->r.B)) {
+                        // oops... integer overflow normalizing the mantisa
+                        doStore = false;
+			if (cpu->r.NCSF) {
+				//causeSyllableIrq(cpu, IRQ_INTO, "ISD/ISN Overflow");
+                                // set I07/8: integer overflow
+                                cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_INTO;
+                                signalInterrupt(cpu->id, "ISD/ISN Overflow");
+				return;
+			}
+		}
+#else
+
                 num_extract(&cpu->r.B, &B);
 
                 if (B.e < 0) {
@@ -482,6 +615,7 @@ void integerStore(CPU *cpu, BIT conditional, BIT destructive)
                 if (doStore) {
                         num_compose(&B, &cpu->r.B);
                 }
+#endif
         }
 
         if (doStore) {
