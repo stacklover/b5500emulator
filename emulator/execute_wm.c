@@ -34,31 +34,36 @@ void b5500_execute_wm(CPU *cpu)
         WORD12 variant;
         WORD48 t1, t2;
 
-        // clear some vars at begin of each word mode instruction
-        cpu->r.Q01F = false;
-        cpu->r.Q02F = false;
-        cpu->r.Q03F = false;
-        cpu->r.Q04F = false;
-        cpu->r.Q05F = false;
-        cpu->r.Q06F = false;
-        cpu->r.Q07F = false;
-        cpu->r.Q08F = false;
-        cpu->r.Q09F = false;
-        cpu->r.Y = 0;
-        cpu->r.Z = 0;
-        cpu->r.M = 0;
-        cpu->r.N = 0;
+        // clear all Q flags, Y, Z, M, N, X registers for each word mode instruction
+        cpu->r.Q01F = false; cpu->r.Q02F = false; cpu->r.Q03F = false;
+        cpu->r.Q04F = false; cpu->r.Q05F = false; cpu->r.Q06F = false;
+        cpu->r.Q07F = false; cpu->r.Q08F = false; cpu->r.Q09F = false;
+        cpu->r.Y = 0; cpu->r.Z = 0; cpu->r.M = 0; cpu->r.N = 0;
         cpu->r.X = 0;
 
-        // last 2 bits of opcode classify
-        switch (opcode & 3) {
-        case 0: // LITC: Literal Call
+/***********************************************************************
+* Word Mode Opcode Analysis
+***********************************************************************/
+        // check last 2 bits of opcode first
+	variant = opcode & 3;
+
+/***********************************************************************
+* LITC: Literal Call
+* Constant to top of stack
+***********************************************************************/
+	if (variant == 0) {
                 adjustAEmpty(cpu);
                 cpu->r.A = opcode >> 2;
                 cpu->r.AROF = true;
                 return;
+	}
 
-        case 2: // OPDC: Operand Call
+/***********************************************************************
+* OPDC: Operand Call
+* Value to top of stack
+* Subroutines might be called
+***********************************************************************/
+	if (variant == 2) {
                 adjustAEmpty(cpu);
                 computeRelativeAddr(cpu, opcode >> 2, true);
                 loadAviaM(cpu);
@@ -68,19 +73,24 @@ void b5500_execute_wm(CPU *cpu)
                 }
                 // otherwise, just leave it in A
                 return;
+	}
 
-        case 3: // DESC: Descriptor (name) Call
+/***********************************************************************
+* DESC: Descriptor (name) Call
+* Address to top of stack
+* Subroutines might be called
+***********************************************************************/
+	if (variant == 3) {
                 adjustAEmpty(cpu);
                 computeRelativeAddr(cpu, opcode >> 2, true);
                 loadAviaM(cpu);
                 descriptorCall(cpu);
                 return;
-        default:
-                break;
         }
 
-        // all other word-mode operators
+        // variant == 1 --> all other word-mode operators
         variant = opcode >> 6;
+
         switch (opcode & 077) {
         case 001: // XX01: single-precision numerics
                 switch (variant) {

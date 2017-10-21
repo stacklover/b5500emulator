@@ -19,11 +19,50 @@
 
 #define NEW_INITIATEP2 1
 
+#define	TRACE_IRQ 1
+
 #include <stdio.h>
 #include "common.h"
 
 #define DPRINTF if(0)printf
 #define TRCMEM false
+
+/***********************************************************************
+* Prepare a debug message
+* message must be completed and ended by caller
+***********************************************************************/
+void prepMessage(CPU *cpu) {
+	printf("*\t%s at %05o:%o: ",
+		cpu->id,
+		cpu->r.L == 0 ? cpu->r.C-1 : cpu->r.C,
+		(cpu->r.L - 1) & 3);
+}
+
+/***********************************************************************
+* Cause a memory access based IRQ
+***********************************************************************/
+void causeMemoryIrq(CPU *cpu, WORD8 irq, const char *reason) {
+	cpu->r.I |= irq;
+	signalInterrupt(cpu->id, reason);
+#if TRACE_IRQ
+	prepMessage(cpu);
+	printf("IRQ %02x caused reason %s (I now %02x)\n",
+		irq, reason, cpu->r.I);
+#endif
+}
+
+/***********************************************************************
+* Cause a syllable based IRQ
+***********************************************************************/
+void causeSyllableIrq(CPU *cpu, WORD8 irq, const char *reason) {
+	cpu->r.I = (cpu->r.I & IRQ_MASKL) | irq;
+	signalInterrupt(cpu->id, reason);
+#if TRACE_IRQ
+	prepMessage(cpu);
+	printf("IRQ %02x caused reason %s (I now %02x)\n",
+		irq, reason, cpu->r.I);
+#endif
+}
 
 /*
  * Implements the 4441=CMN syllable
