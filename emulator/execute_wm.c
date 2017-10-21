@@ -15,7 +15,11 @@
 *   changed "this" to "cpu" to avoid errors when using g++
 * 2017-09-30  R.Meyer
 *   overhaul of file names
+* 2017-10-10  R.Meyer
+*   some refactoring in the functions, added documentation
 ***********************************************************************/
+
+#define NEW_ITI 1
 
 #include <stdio.h>
 #include "common.h"
@@ -166,9 +170,31 @@ void b5500_execute_wm(CPU *cpu)
                                 cpu->r.AROF = false;
                         }
                         break;
+#if NEW_ITI
+/***********************************************************************
+* 0211: ITI=Interrogate Interrupt
+* poll pending IRQs
+* if any pending, set stack and transfer to IRQ routine
+* otherwise exit
+***********************************************************************/
+                case 002:
+			// control state only
+			if (cpu->r.NCSF) break;
+			// use M as temporary
+			cpu->r.M = CC->IAR;
+			if (cpu->r.M) {
+				cpu->r.PROF = false; // require fetch at SECL
+				cpu->r.C = cpu->r.M;
+				cpu->r.L = 0;
+				cpu->r.S = AA_IRQSTACK; // stack address @100
+				clearInterrupt(cpu->r.M); // clear IRQ
+			}
+                        break;
+#else
                 case 002: // 0211: ITI=Interrogate Interrupt
                         interrogateInterrupt(cpu);
                         break;
+#endif
                 case 004: // 0411: RTR=Read Timer
                         // control-state only
                         if (!cpu->r.NCSF) {

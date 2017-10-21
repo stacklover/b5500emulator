@@ -53,17 +53,21 @@ typedef unsigned long long WORD48;      // 48 bits machine word
  * masks that should be used when assigning to above types when overflow is possible
  */
 #define MASK_BIT    01
+
 #define MASK_WORD2  03
 #define MASK_WORD3  07
 #define MASK_WORD4  017
 #define MASK_WORD6  077
 #define MASK_WORD8  0377
-#define MASK_ADDR9  0777
 #define MASK_WORD12 07777
-#define MASK_ADDR15 077777
 #define MASK_WORD21 07777777
-#define MASK_WORD39 07777777777777ll
-#define MASK_WORD48 07777777777777777ll
+#define MASK_WORD39 07777777777777LL
+#define MASK_WORD48 07777777777777777LL
+
+#define MASK_ADDR9  000777
+#define MASK_ADDR10 001777
+#define MASK_ADDR12 007777
+#define MASK_ADDR15 077777
 
 /*
  * define all the registers of the Central Control instance
@@ -247,9 +251,9 @@ typedef struct irq {
 /*
  * global (IPC) memory areas
  */
-extern WORD48           *MAIN;
-extern CPU              *P[2];
-extern CENTRAL_CONTROL  *CC;
+extern WORD48 *MAIN;
+extern CPU *P[2];
+extern CENTRAL_CONTROL *CC;
 
 /*
  * special memory locations (absolute addresses)
@@ -265,6 +269,7 @@ extern CENTRAL_CONTROL  *CC;
 #define RR_MSCW         00007   // MSCW is stored here for nested calls
 #define RR_INCW         00010   // INCW is stored here on interrupt
 #define RR_COM          00011   // COM word is stored here on COM operator
+#define	RSHIFT		6	// missing bits in R register
 
 /*
  * interrupt codes of a cpu
@@ -316,30 +321,30 @@ extern CENTRAL_CONTROL  *CC;
  * 765 432 109 876 543 210 987 654 321 098 765 432 109 876 543 210
  * octet numbers         FEDCBA9876543210
  */
-#define MASK_FLAG       04000000000000000ll // 1: the control bit
-#define MASK_CODE       02000000000000000ll // c: the code bit (0=data)
-#define MASK_PBIT       01000000000000000ll // p: the presence bit
-#define MASK_XBIT       00400000000000000ll // x: the execute bit (1=PD, 0=CW)
-#define MASK_MODE       00200000000000000ll // m: word/char mode bit
-#define MASK_ARGS       00100000000000000ll // a: arguments required
-#define MASK_TYPE       03400000000000000ll // the type bits
-#define MASK_WCNT       00017770000000000ll // W: word count
-#define MASK_HREG       00340000000000000ll // H: H register
-#define MASK_VREG       00034000000000000ll // V: V register
-#define MASK_LREG       00003000000000000ll // L: L register
-#define MASK_GREG       00000700000000000ll // G: G register
-#define MASK_KREG       00000070000000000ll // K: K register
-#define MASK_MSFF       00000020000000000ll // m: MSFF bit
-#define MASK_SALF       00000010000000000ll // s: SALF bit
-#define MASK_INTG       00000002000000000ll // j: integer bit
-#define MASK_CONT       00000001000000000ll // k: continuity bit
-#define MASK_VARF       00000000100000000ll // v: VARF bit
-#define MASK_RREG       00077700000000000ll // R: R register
-#define MASK_FREG       00000007777700000ll // F: F register
-#define MASK_NREG       00000000001700000ll // N: N register
-#define MASK_MREG       00000000000077777ll // M: M register
-#define MASK_CREG       00000000000077777ll // C: C register
-#define MASK_ADDR       00000000000077777ll // A: memory or disk address
+#define MASK_FLAG       04000000000000000ll // 1: the control bit [0:1]
+#define MASK_CODE       02000000000000000ll // c: the code bit (0=data) [1:1]
+#define MASK_PBIT       01000000000000000ll // p: the presence bit [2:1]
+#define MASK_XBIT       00400000000000000ll // x: the execute bit (1=PD, 0=CW) [3:1]
+#define MASK_MODE       00200000000000000ll // m: word/char mode bit [4:1]
+#define MASK_ARGS       00100000000000000ll // a: arguments required [5:1]
+#define MASK_TYPE       03400000000000000ll // the type bits [1:3]
+#define MASK_WCNT       00017770000000000ll // W: word count [8:10]
+#define MASK_HREG       00340000000000000ll // H: H register [4:3]
+#define MASK_VREG       00034000000000000ll // V: V register [7:3]
+#define MASK_LREG       00003000000000000ll // L: L register [10:2]
+#define MASK_GREG       00000700000000000ll // G: G register [12:3]
+#define MASK_KREG       00000070000000000ll // K: K register [15:3]
+#define MASK_MSFF       00000020000000000ll // m: MSFF bit [16:1]
+#define MASK_SALF       00000010000000000ll // s: SALF bit [17:1]
+#define MASK_INTG       00000002000000000ll // j: integer bit [19:1]
+#define MASK_CONT       00000001000000000ll // k: continuity bit [20:1]
+#define MASK_VARF       00000000100000000ll // v: VARF bit [23:1]
+#define MASK_RREG       00077700000000000ll // R: R register [6:9]
+#define MASK_FREG       00000007777700000ll // F: F register [18:15]
+#define MASK_NREG       00000000001700000ll // N: N register [29:4]
+#define MASK_MREG       00000000000077777ll // M: M register [33:15]
+#define MASK_CREG       00000000000077777ll // C: C register [33:15]
+#define MASK_ADDR       00000000000077777ll // A: memory or disk address [33:15]
 #define SHFT_TYPE       44
 #define SHFT_HREG       41
 #define SHFT_VREG       38
@@ -509,6 +514,8 @@ extern void b5500_pdp_text(CPU *);
 extern void b5500_init_shares(void);
 
 /* A & B adjustments, stack operations */
+extern BIT incrementS(CPU *);
+extern BIT decrementS(CPU *);
 extern void adjustABFull(CPU *);
 extern void adjustAFull(CPU *);
 extern void adjustBFull(CPU *);
@@ -548,11 +555,14 @@ extern void enterSubroutine(CPU *, BIT descriptorCall);
 extern int exitSubroutine(CPU *, int how);
 
 /* interrupts & IO */
+extern void prepMessage(CPU *);
+extern void causeMemoryIrq(CPU *, WORD8, const char *cause);
+extern void causeSyllableIrq(CPU *, WORD8, const char *cause);
 extern BIT presenceTest(CPU *, WORD48 word);
 extern WORD48 interrogateUnitStatus(CPU *);
 extern WORD48 interrogateIOChannel(CPU *);
 extern void storeForInterrupt(CPU *, BIT forced, BIT forTest, const char *);
-extern void interrogateInterrupt(CPU *);
+extern void clearInterrupt(ADDR15);
 extern void initiateIO(CPU *);
 extern void signalInterrupt(const char *id, const char *cause);
 

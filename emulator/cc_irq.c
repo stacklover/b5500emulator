@@ -9,7 +9,11 @@
 ************************************************************************
 * 2017-10-02  R.Meyer
 *   Factored out from emulator.c
+* 2017-10-10  R.Meyer
+*   some refactoring in the functions, added documentation
 ***********************************************************************/
+
+#define NEW_ITI 1
 
 #include <stdio.h>
 #include <string.h>
@@ -128,6 +132,110 @@ void signalInterrupt(const char *id, const char *cause) {
         }
 }
 
+#if NEW_ITI
+/*
+ * Resets an interrupt based on the current setting of CC->IAR, then
+ * re-prioritices any remaining interrupts, leaving the new vector address
+ * in CC->IAR
+ */
+void clearInterrupt(ADDR15 iar) {
+        if (iar) {
+                // current active IRQ
+                CC->interruptMask &= ~(1ll << iar);
+                switch (iar) {
+		case 000: // no IRQ
+			break;
+                case 022: // Time interval
+                        CC->CCI03F = false;
+                        break;
+                case 023: // I/O busy
+                        CC->CCI04F = false;
+                        break;
+                case 024: // Keyboard request
+                        CC->CCI05F = false;
+                        break;
+                case 025: // Printer 1 finished
+                        CC->CCI06F = false;
+                        break;
+                case 026: // Printer 2 finished
+                        CC->CCI07F = false;
+                        break;
+                case 027: // I/O 1 finished
+                        CC->CCI08F = false;
+                        CC->AD1F = false; // make unit non-busy
+                        CC->iouMask &= ~1;
+                        break;
+                case 030: // I/O 2 finished
+                        CC->CCI09F = false;
+                        CC->AD2F = false; // make unit non-busy
+                        CC->iouMask &= ~2;
+                        break;
+                case 031: // I/O 3 finished
+                        CC->CCI10F = false;
+                        CC->AD3F = false; // make unit non-busy
+                        CC->iouMask &= ~4;
+                        break;
+                case 032: // I/O 4 finished
+                        CC->CCI11F = false;
+                        CC->AD4F = false; // make unit non-busy
+                        CC->iouMask &= ~8;
+                        break;
+                case 033: // P2 busy
+                        CC->CCI12F = false;
+                        break;
+                case 034: // Inquiry request
+                        CC->CCI13F = false;
+                        break;
+                case 035: // Special interrupt 1
+                        CC->CCI14F = false;
+                        break;
+                case 036: // Disk file 1 read check finished
+                        CC->CCI15F = false;
+                        break;
+                case 037: // Disk file 2 read check finished
+                        CC->CCI16F = false;
+                        break;
+
+                case 040: // P2 memory parity error
+                        if (P[1]) P[1]->r.I &= 0xFE;
+                        break;
+                case 041: // P2 invalid address error
+                        if (P[1]) P[1]->r.I &= 0xFD;
+                        break;
+                case 042: // P2 stack overflow
+                        if (P[1]) P[1]->r.I &= 0xFB;
+                        break;
+                // 44-55: P2 syllable-dependent
+                case 044: case 045: case 046: case 047:
+                case 050: case 051: case 052: case 053:
+                case 054: case 055:
+                        if (P[1]) P[1]->r.I &= 0x0F;
+                        break;
+
+                case 060: // P1 memory parity error
+                        P[0]->r.I &= 0xFE;
+                        break;
+                case 061: // P1 invalid address error
+                        P[0]->r.I &= 0xFD;
+                        break;
+                case 062: // P1 stack overflow
+                        P[0]->r.I &= 0xFB;
+                        break;
+                // 64-75: P1 syllable-dependent
+                case 064: case 065: case 066: case 067:
+                case 070: case 071: case 072: case 073:
+                case 074: case 075:
+                        P[0]->r.I &= 0x0F;
+                        break;
+
+                default: // no recognized interrupt vector was set
+			printf("*\tWARNING: illegal IAR value: %05o\n", iar);
+                        break;
+                }
+        }
+        signalInterrupt("CC", "AGAIN");
+};
+#else
 /*
  * Resets an interrupt based on the current setting of CC->IAR, then
  * re-prioritices any remaining interrupts, leaving the new vector address
@@ -246,5 +354,5 @@ void interrogateInterrupt(CPU *cpu) {
                 return;
         }
 }
-
+#endif
 
