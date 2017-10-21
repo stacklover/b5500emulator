@@ -29,6 +29,9 @@
 #define	CONTROL_STATE_ONLY if (cpu->r.NCSF) return
 #define	NORMAL_STATE_ONLY if (!cpu->r.NCSF) return
 
+/***********************************************************************
+* execute one word mode instruction
+***********************************************************************/
 void b5500_execute_wm(CPU *cpu)
 {
         WORD12 opcode = cpu->r.T;
@@ -89,7 +92,10 @@ void b5500_execute_wm(CPU *cpu)
                 return;
         }
 
-        // variant == 1 --> all other word-mode operators
+/***********************************************************************
+* XXX1, XXX5: all other word-mode operators
+***********************************************************************/
+        
         variant = opcode >> 6;
 
         switch (opcode & 077) {
@@ -567,11 +573,18 @@ void b5500_execute_wm(CPU *cpu)
 		}
 		return;
 
-
-        case 031: // XX31: branch, sign-bit, interrogate ops
+/***********************************************************************
+* XX31: branch, sign-bit, interrogate ops
+***********************************************************************/
+        case 031:
                 switch (variant) {
-                case 001: // 0131: BBC=branch backward conditional
-                case 002: // 0231: BFC=branch forward conditional
+
+/***********************************************************************
+* 0131: BBC=branch backward conditional
+* 0231: BFC=branch forward conditional
+***********************************************************************/
+                case 001:
+                case 002:
                         adjustABFull(cpu);
                         if (cpu->r.B & 1) {
                                 // true => no branch
@@ -580,7 +593,12 @@ void b5500_execute_wm(CPU *cpu)
                         }
                         cpu->r.BROF = false;
                         goto common_branch;
-                case 041: // 4131: BBW=branch backward unconditional
+
+/***********************************************************************
+* 4131: BBW=branch backward unconditional
+* 4231: BFW=branch forward unconditional
+***********************************************************************/
+                case 041:
                 case 042: // 4231: BFW=branch forward unconditional
                         adjustAFull(cpu);
 common_branch:
@@ -607,8 +625,12 @@ common_branch:
                         }
                         return;
 
-                case 021: // 2131: LBC=branch backward word conditional
-                case 022: // 2231: LFC=branch forward word conditional
+/***********************************************************************
+* 2131: LBC=branch backward word conditional
+* 2231: LFC=branch forward word conditional
+***********************************************************************/
+                case 021:
+                case 022:
                         adjustABFull(cpu);
                         if (cpu->r.B & 1) {
                                 // true => no branch
@@ -617,8 +639,13 @@ common_branch:
                         }
                         cpu->r.BROF = false;
                         goto common_branch_word;
-                case 061: // 6131: LBU=branch backward word unconditional
-                case 062: // 6231: LFU=branch forward word unconditional
+
+/***********************************************************************
+* 6131: LBU=branch backward word unconditional
+* 6231: LFU=branch forward word unconditional
+***********************************************************************/
+                case 061:
+                case 062:
                         adjustAFull(cpu);
 common_branch_word:
                         if (cpu->r.L == 0) {
@@ -644,36 +671,41 @@ common_branch_word:
                         }
                         return;
 
-                case 004: // 0431: SSN=set sign bit (set negative)
-                        adjustAFull(cpu);
-                        cpu->r.A |= MASK_SIGNMANT;
-                        return;
-                case 010: // 1031: CHS=change sign bit
-                        adjustAFull(cpu);
-                        cpu->r.A ^= MASK_SIGNMANT;
-                        return;
-                case 020: // 2031: TOP=test flag bit (test for operand)
-                        adjustAEmpty(cpu);
-                        adjustBFull(cpu);
+/***********************************************************************
+* 0431: SSN=set sign bit (set negative)
+* 1031: CHS=change sign bit
+* 4431: SSP=reset sign bit (set positive)
+***********************************************************************/
+                case 004: adjustAFull(cpu); cpu->r.A |= MASK_SIGNMANT; return;
+                case 010: adjustAFull(cpu); cpu->r.A ^= MASK_SIGNMANT; return;
+                case 044: adjustAFull(cpu); cpu->r.A &= ~MASK_SIGNMANT; return;
+
+/***********************************************************************
+* 2031: TOP=test flag bit (test for operand)
+* test flag bit of TOS and add result to stack!
+***********************************************************************/
+                case 020: adjustAEmpty(cpu); adjustBFull(cpu);
                         cpu->r.A = OPERAND(cpu->r.B) ? true : false;
-                        cpu->r.AROF = true;
-                        return;
-                case 024: // 2431: TUS=interrogate peripheral status
-                        adjustAEmpty(cpu);
+                        cpu->r.AROF = true; return;
+
+/***********************************************************************
+* 2431: TUS=interrogate peripheral status
+***********************************************************************/
+                case 024: adjustAEmpty(cpu);
                         cpu->r.A = interrogateUnitStatus(cpu);
-                        cpu->r.AROF = true;
-                        return;
-                case 044: // 4431: SSP=reset sign bit (set positive)
-                        adjustAFull(cpu);
-                        cpu->r.A &= ~MASK_SIGNMANT;
-                        return;
-                case 064: // 6431: TIO=interrogate I/O channel
-                        adjustAEmpty(cpu);
+                        cpu->r.AROF = true; return;
+
+/***********************************************************************
+* 6431: TIO=interrogate I/O channel
+***********************************************************************/
+                case 064: adjustAEmpty(cpu);
                         cpu->r.A = interrogateIOChannel(cpu);
-                        cpu->r.AROF = true;
-                        return;
-                case 070: // 7031: FBS=stack search for flag
-                        adjustAFull(cpu);
+                        cpu->r.AROF = true; return;
+
+/***********************************************************************
+* 7031: FBS=stack search for flag
+***********************************************************************/
+                case 070: adjustAFull(cpu);
                         cpu->r.M = cpu->r.A & MASKMEM;
                         loadAviaM(cpu);
                         while (OPERAND(cpu->r.A)) {
@@ -683,6 +715,7 @@ common_branch_word:
                         // flag bit found: stop the search
                         cpu->r.A = INIT_DD | MASK_PBIT | cpu->r.M;
                         return;
+
 		default: goto unused;
                 }
                 return;
@@ -763,6 +796,7 @@ common_branch_word:
                         // B = [S], fetch the RCW
                         exitSubroutine(cpu, false);
                         return;
+
 		default: goto unused;
                 }
                 return;
