@@ -547,21 +547,20 @@ void b5500_execute_wm(CPU *cpu)
 * move field from A into B
 * mark A empty
 ***********************************************************************/
+#if SHFT_CREG > SHFT_FREG
+#error SHFT_CREG > SHFT_FREG
+#endif
 		case 014: adjustABFull(cpu);
-			t1 = (cpu->r.A & MASK_FREG) >> SHFT_FREG;
-			cpu->r.B = (cpu->r.B & ~MASK_CREG) | (t1 << SHFT_CREG);
+			cpu->r.B = (cpu->r.B & ~MASK_CREG) | ((cpu->r.A & MASK_FREG) >> (SHFT_FREG - SHFT_CREG));
 			cpu->r.AROF = false; return;
 		case 034: adjustABFull(cpu);
-			t1 = (cpu->r.A & MASK_FREG) >> SHFT_FREG;
-			cpu->r.B = (cpu->r.B & ~MASK_FREG) | (t1 << SHFT_FREG);
+			cpu->r.B = (cpu->r.B & ~MASK_FREG) | (cpu->r.A & MASK_FREG);
 			cpu->r.AROF = false; return;
 		case 054: adjustABFull(cpu);
-			t1 = (cpu->r.A & MASK_CREG) >> SHFT_CREG;
-			cpu->r.B = (cpu->r.B & ~MASK_CREG) | (t1 << SHFT_CREG);
+			cpu->r.B = (cpu->r.B & ~MASK_CREG) | (cpu->r.A & MASK_CREG);
 			cpu->r.AROF = false; return;
 		case 074: adjustABFull(cpu);
-			t1 = (cpu->r.A & MASK_CREG) >> SHFT_CREG;
-			cpu->r.B = (cpu->r.B & ~MASK_FREG) | (t1 << SHFT_FREG);
+			cpu->r.B = (cpu->r.B & ~MASK_FREG) | ((cpu->r.A & MASK_CREG) << (SHFT_FREG - SHFT_CREG));
 			cpu->r.AROF = false; return;
 
 		default: goto unused;
@@ -606,7 +605,7 @@ common_branch:
                                         cpu->r.AROF = false;
                                 }
                         }
-                        break;
+                        return;
 
                 case 021: // 2131: LBC=branch backward word conditional
                 case 022: // 2231: LFC=branch forward word conditional
@@ -643,36 +642,36 @@ common_branch_word:
                                         cpu->r.AROF = false;
                                 }
                         }
-                        break;
+                        return;
 
                 case 004: // 0431: SSN=set sign bit (set negative)
                         adjustAFull(cpu);
                         cpu->r.A |= MASK_SIGNMANT;
-                        break;
+                        return;
                 case 010: // 1031: CHS=change sign bit
                         adjustAFull(cpu);
                         cpu->r.A ^= MASK_SIGNMANT;
-                        break;
+                        return;
                 case 020: // 2031: TOP=test flag bit (test for operand)
                         adjustAEmpty(cpu);
                         adjustBFull(cpu);
                         cpu->r.A = OPERAND(cpu->r.B) ? true : false;
                         cpu->r.AROF = true;
-                        break;
+                        return;
                 case 024: // 2431: TUS=interrogate peripheral status
                         adjustAEmpty(cpu);
                         cpu->r.A = interrogateUnitStatus(cpu);
                         cpu->r.AROF = true;
-                        break;
+                        return;
                 case 044: // 4431: SSP=reset sign bit (set positive)
                         adjustAFull(cpu);
                         cpu->r.A &= ~MASK_SIGNMANT;
-                        break;
+                        return;
                 case 064: // 6431: TIO=interrogate I/O channel
                         adjustAEmpty(cpu);
                         cpu->r.A = interrogateIOChannel(cpu);
                         cpu->r.AROF = true;
-                        break;
+                        return;
                 case 070: // 7031: FBS=stack search for flag
                         adjustAFull(cpu);
                         cpu->r.M = cpu->r.A & MASKMEM;
@@ -683,13 +682,22 @@ common_branch_word:
                         }
                         // flag bit found: stop the search
                         cpu->r.A = INIT_DD | MASK_PBIT | cpu->r.M;
-                        break;
+                        return;
 		default: goto unused;
                 }
-                break;
-        case 035: // XX35: exit & return ops
+                return;
+
+/***********************************************************************
+* XX35: exit & return ops
+***********************************************************************/
+        case 035:
                 switch (variant) {
-                case 001: // 0135: BRT=branch return
+
+/***********************************************************************
+* 0135: BRT=branch return
+* ?
+***********************************************************************/
+                case 001:
                         adjustAEmpty(cpu);
                         if (!cpu->r.BROF) {
                                 cpu->r.Q03F = true;
@@ -708,9 +716,15 @@ common_branch_word:
                                 applyMSCW(cpu, cpu->r.B);
                                 cpu->r.BROF = false;
                         }
-                        break;
-                case 002: // 0235: RTN=return normal
-                case 012: // 1235: RTS=return special
+                        return;
+
+/***********************************************************************
+* 0235: RTN=return normal
+* 1235: RTS=return special
+* ?
+***********************************************************************/
+                case 002:
+                case 012:
                         adjustAFull(cpu);
                         // If A is an operand or a present descriptor,
                         // proceed with the return,
@@ -740,7 +754,7 @@ common_branch_word:
                                         break;
                                 }
                         }
-                        break;
+                        return;
 
                 case 004: // 0435: XIT=exit procedure
                         cpu->r.AROF = false;
@@ -748,10 +762,11 @@ common_branch_word:
                         loadBviaS(cpu);
                         // B = [S], fetch the RCW
                         exitSubroutine(cpu, false);
-                        break;
+                        return;
 		default: goto unused;
                 }
-                break;
+                return;
+
         case 041: // XX41: index, mark stack, etc.
                 switch (variant) {
                 case 001: // 0141: INX=index
@@ -759,14 +774,14 @@ common_branch_word:
                         cpu->r.M = (cpu->r.A + cpu->r.B) & MASKMEM;
                         cpu->r.A = (cpu->r.A & ~MASKMEM) | cpu->r.M;
                         cpu->r.BROF = false;
-                        break;
+                        return;
 
                 case 002: // 0241: COC=construct operand call
                         exchangeTOS(cpu);
                         cpu->r.A |= MASK_FLAG;
                         // set [0:1]
                         operandCall(cpu);
-                        break;
+                        return;
                 case 004: // 0441: MKS=mark stack
                         adjustABEmpty(cpu);
                         cpu->r.B = buildMSCW(cpu);
@@ -781,13 +796,13 @@ common_branch_word:
                                 }
                                 cpu->r.MSFF = true;
                         }
-                        break;
+                        return;
                 case 012: // 1241: CDC=construct descriptor call
                         exchangeTOS(cpu);
                         cpu->r.A |= MASK_FLAG;
                         // set [0:1]
                         descriptorCall(cpu);
-                        break;
+                        return;
                 case 021: // 2141: SSF=F & S register set/store
                         adjustABFull(cpu);
                         switch (cpu->r.A & 3) {
@@ -808,7 +823,7 @@ common_branch_word:
                                 break;
                         }
                         cpu->r.AROF = false;
-                        break;
+                        return;
                 case 025: // 2541: LLL=link list look-up
                         adjustABFull(cpu);
                         // get test field
@@ -829,13 +844,13 @@ common_branch_word:
                                         // B >= A: stop look-up
                                 }
                         } while (true);
-                        break;
+                        return;
                 case 044: // 4441: CMN=enter character mode inline
                         enterCharModeInline(cpu);
-                        break;
+                        return;
 		default: goto unused;
                 }
-                break;
+                return;
         case 045: // XX45: ISO=Variable Field Isolate op
                 adjustAFull(cpu);
                 t2 = variant >> 3; // number of whole chars
@@ -856,7 +871,7 @@ common_branch_word:
                         cpu->r.G = (cpu->r.G + (variant >> 3)) & 7;
                         cpu->r.H = 0;
                 }
-                break;
+                return;
         case 051: // XX51: delete & conditional branch ops
                 if (variant < 4) {
                         // 0051=DEL: delete TOS (or field branch with zero-length field)
@@ -899,7 +914,7 @@ common_branch_word:
                                                 }
                                         }
                                 }
-                                break;
+                                return;
                         case 0x03: // X351/X751: CBD=non-zero field branch backward destructive
                                 cpu->r.BROF = false;
                                 // no break: fall through
@@ -922,40 +937,51 @@ common_branch_word:
                                                 }
                                         }
                                 }
-                        break;
+                        return;
                         }
                 }
-                break;
-        case 055: // XX55: NOP & DIA=Dial A ops
+                return;
+
+/***********************************************************************
+* 0055: NOP=no operation
+* gh55: DIA=Dial A
+* set G and H registers
+***********************************************************************/
+        case 055:
                 if (variant) {
                         cpu->r.G = variant >> 3;
                         cpu->r.H = variant & 7;
-                } else { // 0055: NOP=no operation (the official one, at least)
                 }
-                break;
-        case 061: // XX61: XRT & DIB=Dial B ops
+                return;
+
+/***********************************************************************
+* 0061: XRT=Temporarily set full PRT addressing mode
+* kv61: DIB=Dial B
+* set K and V registers
+***********************************************************************/
+        case 061:
                 if (variant) {
                         cpu->r.K = variant >> 3;
                         cpu->r.V = variant & 7;
-                } else { // 0061=XRT: temporarily set full PRT addressing mode
+                } else {
                         cpu->r.VARF = cpu->r.SALF;
                         cpu->r.SALF = false;
                 }
-                break;
-        case 065: // XX65: TRB=Transfer Bits
-#if DEBUG_TRB
-                printf("TRB %2u S=%02u..%02u D=%02u..%02u A=%016llo B=%016llo", variant,
-                        47-(cpu->r.G*6+cpu->r.H), 47-(cpu->r.G*6+cpu->r.H)-variant+1,
-                        47-(cpu->r.K*6+cpu->r.V), 47-(cpu->r.K*6+cpu->r.V)-variant+1,
-                        cpu->r.A, cpu->r.B);
-#endif
-                // transfer bits from A to B
-                // starting in A at position G/H
-                // starting in B at position K/V
-                // stopping when either variant(aka count) is exhausted
-                // or the last bit of either A or B is reached
-                // note: bit numbering is 1..48
-                adjustABFull(cpu);  // makes sure A and B are filled
+                return;
+
+
+/***********************************************************************
+* cc65: TRB=Transfer Bits
+* transfer 'cc' bits from A to B
+* starting in A at position G/H
+* starting in B at position K/V
+* stopping when either variant(aka count) is exhausted
+* or the last bit of either A or B is reached
+* A is marked empty
+* note: bit numbering is 1..48
+***********************************************************************/
+	case 065:
+                adjustABFull(cpu);
                 // do it the hard way.. BIT-WISE!
                 t1 = MASK_FLAG >> (cpu->r.G*6 + cpu->r.H); // A register starting bit mask
                 t2 = MASK_FLAG >> (cpu->r.K*6 + cpu->r.V); // B register starting bit mask
@@ -971,24 +997,20 @@ common_branch_word:
                         ++cpu->cycleCount; // approximate the shift counts
                 }
                 cpu->r.AROF = false;
-#if DEBUG_TRB
-                printf(" B=%016llo\n", cpu->r.B);
-#endif
-                break;
-        case 071: // XX71: FCL=Compare Field Low
-#if DEBUG_FCL
-                printf("FCL %2u S=%02u..%02u D=%02u..%02u A=%016llo B=%016llo", variant,
-                        47-(cpu->r.G*6+cpu->r.H), 47-(cpu->r.G*6+cpu->r.H)-variant+1,
-                        47-(cpu->r.K*6+cpu->r.V), 47-(cpu->r.K*6+cpu->r.V)-variant+1,
-                        cpu->r.A, cpu->r.B);
-#endif
-                // compare bits from A with B
-                // starting in A at position G/H
-                // starting in B at position K/V
-                // stopping when either variant(aka count) is exhausted
-                // or the last bit of either A or B is reached
-                // or A > B is detected
-                // note: bit numbering is 1..48
+                return;
+
+/***********************************************************************
+* cc71: FCL=Compare Field Low
+* compare 'cc' bits from A with B
+* starting in A at position G/H
+* starting in B at position K/V
+* stopping when either variant(aka count) is exhausted
+* or the last bit of either A or B is reached
+* or A > B is detected
+* A is set to true or false
+* note: bit numbering is 1..48
+***********************************************************************/
+        case 071:
                 adjustABFull(cpu);
                 // do it the hard way.. BIT-WISE!
                 t1 = MASK_FLAG >> (cpu->r.G*6 + cpu->r.H); // A register starting bit mask
@@ -996,9 +1018,9 @@ common_branch_word:
                 // note: t1/t2 turn zero when the test bit is shifted out at the right
                 while (variant && t1 && t2) {
                         if (cpu->r.A & t1 && !(cpu->r.B & t2)) {
-                                // A > B
+                                // A > B: we are done
                                 cpu->r.A = true;
-                                goto exit_fcl;
+                                return;
                         }
                         --variant;
                         t1 >>= 1;
@@ -1006,25 +1028,20 @@ common_branch_word:
                         ++cpu->cycleCount; // approximate the shift counts
                 }
                 cpu->r.A = false;
-exit_fcl:
-#if DEBUG_FCL
-                printf(" A=%llo\n", cpu->r.A);
-#endif
-                break;
-        case 075: // XX75: FCE=Compare Field Equal
-#if DEBUG_FCE
-                printf("FCE %2u S=%02u..%02u D=%02u..%02u A=%016llo B=%016llo", variant,
-                        47-(cpu->r.G*6+cpu->r.H), 47-(cpu->r.G*6+cpu->r.H)-variant+1,
-                        47-(cpu->r.K*6+cpu->r.V), 47-(cpu->r.K*6+cpu->r.V)-variant+1,
-                        cpu->r.A, cpu->r.B);
-#endif
-                // compare bits from A with B
-                // starting in A at position G/H
-                // starting in B at position K/V
-                // stopping when either variant(aka count) is exhausted
-                // or the last bit of either A or B is reached
-                // or A <> B is detected
-                // note: bit numbering is 1..48
+                return;
+
+/***********************************************************************
+* cc75: FCE=Compare Field Equal
+* compare 'cc' bits from A with B
+* starting in A at position G/H
+* starting in B at position K/V
+* stopping when either variant(aka count) is exhausted
+* or the last bit of either A or B is reached
+* or A <> B is detected
+* A is set to true or false
+* note: bit numbering is 1..48
+***********************************************************************/
+        case 075:
                 adjustABFull(cpu);
                 // do it the hard way.. BIT-WISE!
                 t1 = MASK_FLAG >> (cpu->r.G*6 + cpu->r.H); // A register starting bit mask
@@ -1032,9 +1049,9 @@ exit_fcl:
                 // note: t1/t2 turn zero when the test bit is shifted out at the right
                 while (variant && t1 && t2) {
                         if (!(cpu->r.A & t1) != !(cpu->r.B & t2)) {
-                                // A <> B
+                                // A <> B: we are done
                                 cpu->r.A = false;
-                                goto exit_fce;
+                                return;
                         }
                         --variant;
                         t1 >>= 1;
@@ -1042,14 +1059,86 @@ exit_fcl:
                         ++cpu->cycleCount; // approximate the shift counts
                 }
                 cpu->r.A = true;
-exit_fce:
-#if DEBUG_FCE
-                printf(" A=%llo\n", cpu->r.A);
+		return;
+
+/***********************************************************************
+* common finals for all branches
+* branch_word_forward:
+* branch_word_backward:
+* descriptorbranch_adjust_c:
+*   since C:L already points to the next syllable, backup C if that is
+*   in the next word (L==0)
+* descriptorbranch:
+*   test for presence bit, cause IRQ in normal state if not present
+*   set C:L to address in descriptor
+*   mark A register empty
+*   mark P register empty
+***********************************************************************/
+#if 0
+	branch_syll_forward:
+		if (OPERAND(cpu->r.A)) {
+			// simple operand
+			jumpSyllables(cpu, cpu->r.A & 0xfff);
+			cpu->r.AROF = false;
+			return;
+		}
+		goto descriptorbranch_adjust_c;
+
+	branch_syll_backward:
+		if (OPERAND(cpu->r.A)) {
+			// simple operand
+			jumpSyllables(cpu, -(cpu->r.A & 0xfff));
+			cpu->r.AROF = false;
+			return;
+		}
+		goto descriptorbranch_adjust_c;
+
+	branch_word_forward:
+		if (OPERAND(cpu->r.A)) {
+			// simple operand
+			if (cpu->r.L == 0) --cpu->r.C;
+			jumpWords(cpu, cpu->r.A & MASK_ADDR10);
+			cpu->r.AROF = false;
+			return;
+		}
+		goto descriptorbranch_adjust_c;
+
+	branch_word_backward:
+		if (OPERAND(cpu->r.A)) {
+			// simple operand
+			if (cpu->r.L == 0) --cpu->r.C;
+			jumpWords(cpu, -(cpu->r.A & MASK_ADDR10));
+			cpu->r.AROF = false;
+			return;
+		}
+		goto descriptorbranch_adjust_c;
+
+	descriptorbranch_adjust_c:
+		// TODO: adjust before presence test?
+		if (cpu->r.L == 0) --cpu->r.C;
+		if (presenceTest(cpu, cpu->r.A)) {
+		        cpu->r.C = cpu->r.A & MASKMEM;
+		        cpu->r.L = 0;
+		        // require fetch at SECL
+		        cpu->r.PROF = false;
+		        cpu->r.AROF = false;
+		}
+		return;
 #endif
-                break;
-	default: // anything else is a no-op
-		// warn about it
-unused:		printf("*\tWARNING: wordmode opcode %04o execute as no-op\n", opcode);
-		break;
+
+/***********************************************************************
+* inofficially, all unused opcodes are NOP
+* due to partial decoding, that may not always be true
+* for the time being we consider all unused opcodes a fatal error
+***********************************************************************/
+	default:
+	unused:
+		prepMessage(cpu);
+		printf("opcode %04o encoundered (word mode)\n", opcode);
+		stop(cpu);
+		return;
+
         } // end switch for non-LITC/OPDC/DESC operators
 }
+
+
