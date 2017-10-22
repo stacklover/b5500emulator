@@ -103,7 +103,7 @@ void signalInterrupt(const char *id, const char *cause) {
 	// use a temporary variable to ensure a monolithic store at the end
 	ADDR15 temp = 0;
 	// do the tests in priority order
-        if (P[0]->r.I & 0x01) temp = 060;		// P1 memory parity error
+        if      (P[0]->r.I & 0x01) temp = 060;	// P1 memory parity error
         else if (P[0]->r.I & 0x02) temp = 061;	// P1 invalid address error
 
         else if (CC->CCI03F) temp = 022;	// Time interval
@@ -121,13 +121,15 @@ void signalInterrupt(const char *id, const char *cause) {
         else if (CC->CCI15F) temp = 036;	// Disk file 1 read check finished
         else if (CC->CCI16F) temp = 037;	// Disk file 2 read check finished
 
-        else if (P[0]->r.I & 0x04) temp = 062;			// P1 stack overflow
+        else if (P[0]->r.I & 0x04) temp = 062;	// P1 stack overflow
         else if (P[0]->r.I & 0xF0) temp = (P[0]->r.I >> 4) + 060;	// P1 syllable-dependent
 
         else if (P[1]->r.I & 0x01) temp = 040;	// P2 memory parity error
         else if (P[1]->r.I & 0x02) temp = 041;	// P2 invalid address error
         else if (P[1]->r.I & 0x04) temp = 042;	// P2 stack overflow
+
         else if (P[1]->r.I & 0xF0) temp = (P[1]->r.I >> 4) + 040;	// P2 syllable-dependent
+
         else temp = 0;// no interrupt set
 
 	CC->IAR = temp;
@@ -268,8 +270,7 @@ void timer60hz(union sigval sv) {
  */
 void initiateP2(CPU *cpu)
 {
-	prepMessage(cpu);
-        printf("initiateP2 - ");
+	prepMessage(cpu); printf("initiateP2 - ");
 
 	// always cause P2 busy IRQ (for now)
 
@@ -288,7 +289,7 @@ void initiateP2(CPU *cpu)
 
 void haltP2(CPU *cpu)
 {
-        printf("*\t%s: haltP2\n", cpu->id);
+	prepMessage(cpu); printf("haltP2");
 }
 
 

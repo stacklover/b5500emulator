@@ -127,12 +127,6 @@ WORD48 readTimer(CPU *cpu) {
                 result =  CC->TM | 0100;
         else
                 result =  CC->TM;
-
-#if 0
-        // elaborate trace
-        if (spiofile.trace)
-                fprintf(spiofile.trace, "%08u RTR=%03llo\n", instr_count, result);
-#endif
         return result;
 }
 
@@ -338,30 +332,7 @@ void memdump(void) {
 }
 
 void execute(ADDR15 addr) {
-        cpu->r.C = addr;
-        cpu->r.L = 0;
-        loadPviaC(cpu); // load the program word to P
-        switch (cpu->r.L) {
-        case 0:
-                cpu->r.T = (cpu->r.P >> 36) & 0xfff;
-                cpu->r.L = 1;
-                break;
-        case 1:
-                cpu->r.T = (cpu->r.P >> 24) & 0xfff;
-                cpu->r.L = 2;
-                break;
-        case 2:
-                cpu->r.T = (cpu->r.P >> 12) & 0xfff;
-                cpu->r.L = 3;
-                break;
-        case 3:
-                cpu->r.T = (cpu->r.P >> 0) & 0xfff;
-                cpu->r.L = 0;
-                cpu->r.C++;
-                cpu->r.PROF = false;
-                break;
-        }
-        cpu->r.TROF = true;
+	preset(cpu, addr);
 
 runagain:
         start(cpu);
@@ -626,8 +597,6 @@ int main(int argc, char *argv[])
         opt = openfile(&spiofile, "r");
         if (opt)
                 exit(2);
-
-        start(cpu);
 
         addr = 020; // boot addr
         if (CC->CLS) {

@@ -20,96 +20,109 @@
 #include <stdio.h>
 #include "common.h"
 
-/*
- * Note: Bits are numbered 0..47 from most significant to least significant!
- */
+/***********************************************************************
+* Note: Bits are numbered 0..47 from most significant to least significant!
+***********************************************************************/
 
-/*
- * bitmasks for 0..48 bits
- */
-const WORD48 bitmask[49] = {0ll,
-        01ll, 03ll, 07ll,
-        017ll, 037ll, 077ll,
-        0177ll, 0377ll, 0777ll,
-        01777ll, 03777ll, 07777ll,
-        017777ll, 037777ll, 077777ll,
-        0177777ll, 0377777ll, 0777777ll,
-        01777777ll, 03777777ll, 07777777ll,
-        017777777ll, 037777777ll, 077777777ll,
-        0177777777ll, 0377777777ll, 0777777777ll,
-        01777777777ll, 03777777777ll, 07777777777ll,
-        017777777777ll, 037777777777ll, 077777777777ll,
-        0177777777777ll, 0377777777777ll, 0777777777777ll,
-        01777777777777ll, 03777777777777ll, 07777777777777ll,
-        017777777777777ll, 037777777777777ll, 077777777777777ll,
-        0177777777777777ll, 0377777777777777ll, 0777777777777777ll,
-        01777777777777777ll, 03777777777777777ll, 07777777777777777ll};
+/***********************************************************************
+* bitmasks for 0..48 bits
+***********************************************************************/
+const WORD48 bitmask[49] = {0LL,
+	01LL, 03LL, 07LL,
+	017LL, 037LL, 077LL,
+	0177LL, 0377LL, 0777LL,
+	01777LL, 03777LL, 07777LL,
+	017777LL, 037777LL, 077777LL,
+	0177777LL, 0377777LL, 0777777LL,
+	01777777LL, 03777777LL, 07777777LL,
+	017777777LL, 037777777LL, 077777777LL,
+	0177777777LL, 0377777777LL, 0777777777LL,
+	01777777777LL, 03777777777LL, 07777777777LL,
+	017777777777LL, 037777777777LL, 077777777777LL,
+	0177777777777LL, 0377777777777LL, 0777777777777LL,
+	01777777777777LL, 03777777777777LL, 07777777777777LL,
+	017777777777777LL, 037777777777777LL, 077777777777777LL,
+	0177777777777777LL, 0377777777777777LL, 0777777777777777LL,
+	01777777777777777LL, 03777777777777777LL, 07777777777777777LL};
 
-/*
- * Inserts a bit field from value.[vstart:width] into word.[wstart:width]
- * and returns the updated word
- */
+/***********************************************************************
+* Inserts a bit field from value.[vstart:width] into word.[wstart:width]
+***********************************************************************/
 void fieldTransfer(
-        WORD48 *dest,           // word to insert into
-        unsigned wstart,        // starting bit in that word
-        unsigned width,         // number of bits
-        WORD48 value,           // value to insert
-        unsigned vstart)        // starting bit in the value
-{
-        WORD48  temp;
-
-        temp = fieldIsolate(value, vstart, width);
+	WORD48 *dest,           // word to insert into
+	unsigned wstart,        // starting bit in that word
+	unsigned width,         // number of bits
+	WORD48 value,           // value to insert
+	unsigned vstart) {       // starting bit in the value
+        WORD48 temp = fieldIsolate(value, vstart, width);
+	if (wstart + width > 48 || vstart + width > 48) {
+		printf("*\tfieldTransfer width=%u wstart=%u vstart=%u\n",
+			width, wstart, vstart);
+	}
         *dest = fieldInsert(*dest, wstart, width, temp);
 }
 
+/***********************************************************************
+* Returns a bit field from value.[start:width] right justified
+***********************************************************************/
 WORD48 fieldIsolate(
-        WORD48 word,            // value to isolate from
-        unsigned start,         // starting bit in the value
-        unsigned width)         // number of bits
-{
-        int rbitpos;            // rightmost bit position
-        WORD48  res;
-
-        rbitpos = 48-start-width;
-        res = (word >> rbitpos) & bitmask[width];
-        return res;
+	WORD48 word,            // value to isolate from
+	unsigned start,         // starting bit in the value
+	unsigned width) {         // number of bits
+	unsigned rbitpos = 48-start-width;	// rightmost bit position
+	if (start + width > 48) {
+		printf("*\tfieldIsolate width=%u start=%u\n",
+			width, start);
+	}
+	return (word >> rbitpos) & bitmask[width];
 }
 
-
+/***********************************************************************
+* Inserts a bit field into word.[start:width] from value
+* and returns the updated word
+***********************************************************************/
 WORD48 fieldInsert(
-        WORD48 word,
-        unsigned start,
-        unsigned width,
-        WORD48 value)
-{
-        int rbitpos;            // rightmost bit position
-        WORD48  res;
+	WORD48 word,
+	unsigned start,
+	unsigned width,
+	WORD48 value) {
+	unsigned rbitpos = 48-start-width;	// rightmost bit position
+	if (start + width > 48) {
+		printf("*\tfieldInsert width=%u start=%u\n",
+			width, start);
+	}
+	return (word & ~(bitmask[width] << rbitpos)) |
+		((value & bitmask[width]) << rbitpos);
+}
 
-        rbitpos = 48-start-width;
-        res = (word & ~(bitmask[width] << rbitpos)) |
-                ((value & bitmask[width]) << rbitpos);
-        return res;
+/***********************************************************************
+* Sets a bit in the word
+***********************************************************************/
+void bitSet(WORD48 *dest, unsigned bit) {
+	if (bit > 48) {
+		printf("*\tbitSet bit=%u\n", bit);
+	}
+        *dest |= 1LL << (48-bit);
+}
+
+/***********************************************************************
+* Resets a bit in the word
+***********************************************************************/
+void bitReset(WORD48 *dest, unsigned bit) {
+	if (bit > 48) {
+		printf("*\tbitSet bit=%u\n", bit);
+	}
+        *dest &= ~(1LL << (48-bit));
+}
+
+/***********************************************************************
+* Tests a bit in the word
+***********************************************************************/
+BIT bitTest(WORD48 src, unsigned bit) {
+	if (bit > 48) {
+		printf("*\tbitSet bit=%u\n", bit);
+	}
+        return src & (1LL << (48-bit)) ? true : false;
 }
 
 
-void bitSet(
-        WORD48 *dest,
-        unsigned bit)
-{
-        *dest |= 1ll << (48-bit);
-}
-
-
-void bitReset(
-        WORD48 *dest,
-        unsigned bit)
-{
-        *dest &= ~(1ll << (48-bit));
-}
-
-BIT bitTest(
-        WORD48 src,
-        unsigned bit)
-{
-        return src & (1ll << (48-bit)) ? true : false;
-}

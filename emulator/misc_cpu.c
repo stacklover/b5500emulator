@@ -30,10 +30,13 @@
 * message must be completed and ended by caller
 ***********************************************************************/
 void prepMessage(CPU *cpu) {
-	printf("*\t%s at %05o:%o: ",
-		cpu->id,
-		cpu->r.L == 0 ? cpu->r.C-1 : cpu->r.C,
-		(cpu->r.L - 1) & 3);
+	if (cpu->r.C != 0)
+		printf("*\t%s at %05o:%o ",
+			cpu->id,
+			cpu->r.L == 0 ? cpu->r.C-1 : cpu->r.C,
+			(cpu->r.L - 1) & 3);
+	else
+		printf("*\t%s at xxxxx:x ", cpu->id);
 }
 
 /***********************************************************************
@@ -477,6 +480,7 @@ void storeForInterrupt(CPU *cpu, BIT forced, BIT forTest, const char *cause)
         cpu->r.BROF = false;
         cpu->r.AROF = false;
         if (forTest) {
+		prepMessage(cpu); printf("storeForInterrupt(forTest=true)\n");
                 cpu->r.TM = 0;
                 cpu->r.MROF = false;
                 cpu->r.MWOF = false;
@@ -517,7 +521,7 @@ void storeForInterrupt(CPU *cpu, BIT forced, BIT forTest, const char *cause)
 ***********************************************************************/
 void enterCharModeInline(CPU *cpu)
 {
-	WORD48          bw;     // local copy of B reg
+	WORD48          bw;     // local copy of B reg TODO: really required?
 
 	// flush both A and B to stack, but get TOS value in A without AROF being set:
 	// make sure A is empty
@@ -577,21 +581,24 @@ void enterCharModeInline(CPU *cpu)
 	}
 }
 
-/*
- * Initiates the processor from interrupt control words stored in the
- * stack. Assumes the INCW is in TOS. "forTest" implies use from IFT
- */
+/***********************************************************************
+* Initiates the processor from interrupt control words stored in the stack
+* Assumes the INCW is in TOS
+* "forTest" implies use from IFT
+* VERIFIED against Paul's JavaScript 17-10-22
+***********************************************************************/
 void initiate(CPU *cpu, BIT forTest)
 {
-        WORD48          bw;     // local copy of B
-        BIT             saveAROF = 0;
-        BIT             saveBROF = 0;
-        unsigned        temp;
+        WORD48          bw;     // local copy of B reg TODO: really required?
+        BIT             saveAROF = false;
+        BIT             saveBROF = false;
         BIT             save_dotrcmem = dotrcmem;
 
         DPRINTF("*\t%s: initiate forTest=%u\n", cpu->id, forTest);
         dotrcmem = TRCMEM;
 
+	// make sure A is empty and TOS is in B (and bw)
+	// after this AROF and BROF do not matter
         if (cpu->r.AROF) {
                 cpu->r.B = bw = cpu->r.A;
         } else if (cpu->r.BROF) {
@@ -601,20 +608,18 @@ void initiate(CPU *cpu, BIT forTest)
                 bw = cpu->r.B;
         }
 
-        // restore the Initiate Control Word (INCW) or Initiate Test Control Word
+        // restore the Initiate Control Word (INCW) in B (or bw) to the registers
+        // 444444443333333333222222222211111111110000000000
+        // 765432109876543210987654321098765432109876543210
+        // 11000QQQQQQQQQYYYYYYZZZZZZ0TTTTTCSSSSSSSSSSSSSSS
         cpu->r.S = (bw & MASK_INCWrS) >> SHFT_INCWrS;
         cpu->r.CWMF = (bw & MASK_INCWMODE) ? true : false;
+
         if (forTest) {
+		// TODO: what exactly is supposed to happen here?
+		prepMessage(cpu); printf("initiate(forTest=true)\n");
+		// TM holds MROF MWOF CCCF NCSF J J J J
                 cpu->r.TM = (bw & MASK_INCWrTM) >> SHFT_INCWrTM;
-#if 0
-                // TODO: what is happening here??
-                // use bits 4-7 of TM to store 4 flags??
-                // WHY not set them right here???
-                (bw % 0x200000 - bw % 0x100000)/0x100000 * 16 + // NCSF
-                (bw % 0x400000 - bw % 0x200000)/0x200000 * 32 + // CCCF
-                (bw % 0x100000000000 - bw % 0x80000000000)/0x80000000000 * 64 + // MWOF
-                (bw % 0x400000000000 - bw % 0x200000000000)/0x200000000000 * 128; // MROF
-#endif
                 cpu->r.Z = (bw & MASK_INCWrZ) >> SHFT_INCWrZ;
                 cpu->r.Y = (bw & MASK_INCWrY) >> SHFT_INCWrY;
                 cpu->r.Q01F = (bw & MASK_INCWQ01F) ? true : false;
@@ -629,11 +634,16 @@ void initiate(CPU *cpu, BIT forTest)
                 // Emulator doesn't support J register, so can't set that from TM
         }
 
-        // restore the Interrupt Return Control Word (IRCW)
+        // get the Interrupt Return Control Word (IRCW) from stack to B (and bw)
         DPRINTF("\tIRCW");
         loadBviaS(cpu); // B = [S]
         --cpu->r.S;
         bw = cpu->r.B;
+
+        // restore the Interrupt Return Control Word (IRCW) in B (or bw) to the registers
+        // 444444443333333333222222222211111111110000000000
+        // 765432109876543210987654321098765432109876543210
+        // 11B0HHHVVVLLGGGKKKFFFFFFFFFFFFFFFCCCCCCCCCCCCCCC
         cpu->r.C = (bw & MASK_CREG) >> SHFT_CREG;
         cpu->r.F = (bw & MASK_FREG) >> SHFT_FREG;
         cpu->r.K = (bw & MASK_KREG) >> SHFT_KREG;
@@ -641,109 +651,137 @@ void initiate(CPU *cpu, BIT forTest)
         cpu->r.L = (bw & MASK_LREG) >> SHFT_LREG;
         cpu->r.V = (bw & MASK_VREG) >> SHFT_VREG;
         cpu->r.H = (bw & MASK_HREG) >> SHFT_HREG;
+
+	// load now addressed program word to P
         DPRINTF("\tloadP");
         loadPviaC(cpu); // load program word to P
+
+	// restore BROF if character mode or test
         if (cpu->r.CWMF || forTest) {
                 saveBROF = (bw & MASK_RCWBROF) ? true : false;
         }
 
-        // restore the Interrupt Control Word (ICW)
+        // get the Interrupt Control Word (ICW) from stack to B (and bw)
         DPRINTF("\tICW ");
         loadBviaS(cpu); // B = [S]
         --cpu->r.S;
         bw = cpu->r.B;
+
+        // restore the Interrupt Control Word (ICW) in B (or bw) to the registers
+        // 444444443333333333222222222211111111110000000000
+        // 765432109876543210987654321098765432109876543210
+        // 110000RRRRRRRRR0MS00000V00000NNNNMMMMMMMMMMMMMMM
         cpu->r.VARF = (bw & MASK_VARF) ? true : false;
         cpu->r.SALF = (bw & MASK_SALF) ? true : false;
         cpu->r.MSFF = (bw & MASK_MSFF) ? true : false;
         cpu->r.R = (bw & MASK_RREG) >> SHFT_RREG;
 
+	// restore M, N, LOOP, B and A if character mode or test
         if (cpu->r.CWMF || forTest) {
                 cpu->r.M = (bw & MASK_MREG) >> SHFT_MREG;
                 cpu->r.N = (bw & MASK_NREG) >> SHFT_NREG;
 
-                // restore the CM Interrupt Loop Control Word (ILCW)
+	        // get the Interrupt Loop Control Word (ILCW) from stack to B (and bw)
                 DPRINTF("\tILCW");
                 loadBviaS(cpu); // B = [S]
                 --cpu->r.S;
                 bw = cpu->r.B;
+
+                // restore the Interrupt Loop Control Word (ILCW) in B (or bw) to the registers
+                // 444444443333333333222222222211111111110000000000
+                // 765432109876543210987654321098765432109876543210
+                // 11A000000XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
                 cpu->r.X = bw & MASK_MANTISSA;
                 saveAROF = (bw & MASK_ILCWAROF) ? true : false;
 
-                // restore the B register
+                // restore the B register if it was occupied or test
                 if (saveBROF || forTest) {
                         DPRINTF("\tload B");
                         loadBviaS(cpu); // B = [S]
                         --cpu->r.S;
                 }
 
-                // restore the A register
+                // restore the A register if it was occupied or test
                 if (saveAROF || forTest) {
                         DPRINTF("\tload A");
                         loadAviaS(cpu); // A = [S]
                         --cpu->r.S;
                 }
 
+		// save AROF and BROF to the real flip-flops
                 cpu->r.AROF = saveAROF;
                 cpu->r.BROF = saveBROF;
+
+		// in charcater mode exchange S with the F(!) field in X
                 if (cpu->r.CWMF) {
-                        // exchange S with its field in X
-                        temp = cpu->r.S;
+                        ADDR15 temp = cpu->r.S;
                         cpu->r.S = (cpu->r.X & MASK_FREG) >> SHFT_FREG;
-                        cpu->r.X = (cpu->r.X & ~MASK_FREG)
-                                        || ((WORD48)temp << SHFT_FREG);
+                        cpu->r.X = (cpu->r.X & ~MASK_FREG) || (temp << SHFT_FREG);
                 }
         } else {
-                cpu->r.AROF = 0; // don't restore A or B for word mode --
-                cpu->r.BROF = 0; // they will pop up as necessary
+		// in word mode and not test, do not restore A and B
+		// they will pop up as necessary
+                cpu->r.AROF = 0;
+                cpu->r.BROF = 0;
         }
 
+	// load the first instruction into T
         cpu->r.T = fieldIsolate(cpu->r.P, cpu->r.L*12, 12);
         cpu->r.TROF = 1;
+
+	// in test, set some flags from the INCW (saved earlier in TM)
         if (forTest) {
-                cpu->r.NCSF = (cpu->r.TM >> 4) & 0x01;
-                cpu->r.CCCF = (cpu->r.TM >> 5) & 0x01;
-                cpu->r.MWOF = (cpu->r.TM >> 6) & 0x01;
-                cpu->r.MROF = (cpu->r.TM >> 7) & 0x01;
+                cpu->r.NCSF = (cpu->r.TM >> 4) & 1;
+                cpu->r.CCCF = (cpu->r.TM >> 5) & 1;
+                cpu->r.MWOF = (cpu->r.TM >> 6) & 1;
+                cpu->r.MROF = (cpu->r.TM >> 7) & 1;
+		// decrement stack? TODO: why?
                 --cpu->r.S;
+		// TODO: and what does this?
                 if (!cpu->r.CCCF) {
                         cpu->r.TM |= 0x80;
                 }
         } else {
+		// otherwise make sure we are in normal state
                 cpu->r.NCSF = 1;
         }
+
         dotrcmem = save_dotrcmem;
 }
 
-/*
- * Initiates the processor
- */
+/***********************************************************************
+* Initiates the processor
+* VERIFIED against Paul's JavaScript 17-10-22
+***********************************************************************/
 void start(CPU *cpu)
 {
-        DPRINTF("*\t%s: start\n", cpu->id);
-        cpu->busy = true;
+	prepMessage(cpu); printf("start\n");
+	cpu->busy = true;
 }
 
-/*
- * Stops running the processor
- */
+/***********************************************************************
+* Stops running the processor
+* VERIFIED against Paul's JavaScript 17-10-22
+***********************************************************************/
 void stop(CPU *cpu)
 {
-        DPRINTF("*\t%s: stop\n", cpu->id);
-        //cpu->r.T = 0;
-        //cpu->r.TROF = 0;      // idle the processor
-        //cpu->r.PROF = 0;
-        cpu->busy = 0;
-        cpu->cycleLimit = 0;    // exit cpu->r.run()
+	prepMessage(cpu); printf("stop\n");
+	cpu->r.T = 0;
+	cpu->r.TROF = 0;	// idle the processor
+	cpu->r.PROF = 0;
+	cpu->busy = 0;
+	cpu->cycleLimit = 0;	// exit the loop
 }
 
-/*
- * Called from CC initiate this(cpu) processor as P2. Fetches the
- * INCW from @10, injects an initiate syllable into T, and calls start()
- */
+/***********************************************************************
+* Called from CC initiate this(cpu) processor as P2. Fetches the
+* INCW from @10, injects an initiate syllable into T, and calls start()
+* VERIFIED against Paul's JavaScript 17-10-22
+***********************************************************************/
 void initiateAsP2(CPU *cpu)
 {
-	printf("*\t%s: initiateAsP2\n", cpu->id);
-	cpu->r.NCSF = 0;	// make P2 is in Control State to execute the IP1 & access low mem
+	prepMessage(cpu); printf("initiateAsP2\n");
+	cpu->r.NCSF = false;	// make P2 is in Control State to execute the IP1 & access low mem
 	cpu->r.M = AA_IODESC;	// address of the INCW
 	loadBviaM(cpu);		// B = [M]
 	cpu->r.AROF = 0;	// make sure A is invalid
@@ -752,17 +790,17 @@ void initiateAsP2(CPU *cpu)
 	start(cpu);
 }
 
-/*
- * Presets the processor registers for a load condition at C=runAddr
- */
+/***********************************************************************
+* Presets the processor registers for a load condition at C=runAddr
+* VERIFIED against Paul's JavaScript 17-10-22
+***********************************************************************/
 void preset(CPU *cpu, ADDR15 runAddr)
 {
-        DPRINTF("*\t%s: preset %05o\n", cpu->id, runAddr);
-
+	prepMessage(cpu); printf("preset to %05o\n", runAddr);
         cpu->r.C = runAddr;     // starting execution address
         cpu->r.L = 1;           // preset L to point to the second syllable
         loadPviaC(cpu);         // load the program word to P
-        cpu->r.T = (cpu->r.P >> 36) & 07777;
+        cpu->r.T = (cpu->r.P >> 36) & 07777;	// get leftmost syllable
         cpu->r.TROF = 1;
         cpu->r.R = 0;
         cpu->r.S = 0;
@@ -779,6 +817,10 @@ void preset(CPU *cpu, ADDR15 runAddr)
  */
 void run(CPU *cpu)
 {
+	if (!cpu->r.TROF) {
+		prepMessage(cpu); printf("run, TROF not set!\n");
+		while (1) ;
+	}
         cpu->runCycles = 0;     // initialze the cycle counter for cpu time slice
         do {
                 cpu->cycleCount = 1;    // general syllable execution overhead
@@ -792,7 +834,16 @@ void run(CPU *cpu)
 /***************************************************************
 *   SECL: Syllable Execution Complete Level                    *
 ***************************************************************/
-
+		// check for any registers gone wild
+#define CHECK(R,M,T) if((cpu->r.R) & ~(M))printf("*\tCHECK "T" = %llo\n", (WORD48)(cpu->r.R))
+		CHECK(A, MASK_WORD48, "A");
+		CHECK(B, MASK_WORD48, "B");
+		CHECK(C, MASK_ADDR15, "C");
+		CHECK(F, MASK_ADDR15, "F");
+		CHECK(M, MASK_ADDR15, "M");
+		CHECK(P, MASK_WORD48, "P");
+		CHECK(R, MASK_ADDR9,  "R");
+		CHECK(S, MASK_ADDR15, "S");
                 // is there an interrupt
                 if (cpu->r.NCSF && (cpu->isP1 ?
                         CC->IAR :
@@ -850,3 +901,5 @@ void run(CPU *cpu)
                 }
         } while ((cpu->runCycles += cpu->cycleCount) < cpu->cycleLimit);
 }
+
+

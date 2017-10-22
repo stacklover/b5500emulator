@@ -20,6 +20,7 @@
 #include <ctype.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <signal.h>
 #include "common.h"
 
 /*
@@ -140,6 +141,10 @@ WORD48 interrogateUnitStatus(CPU *cpu) {
         // TODO: simulate timer - this should NOT be done this way - fix it
         static int td = 0;
         if (++td > 200) {
+		union sigval sv;
+		extern void timer60hz(sigval);
+		timer60hz(sv);
+#if 0
                 CC->TM++;
                 if (CC->TM >= 63) {
                         CC->TM = 0;
@@ -148,6 +153,7 @@ WORD48 interrogateUnitStatus(CPU *cpu) {
                 } else {
                         CC->TM++;
                 }
+#endif
                 td = 0;
         }
 

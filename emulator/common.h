@@ -298,14 +298,14 @@ extern CENTRAL_CONTROL *CC;
  * 765 432 109 876 543 210 987 654 321 098 765 432 109 876 543 210
  * octet numbers         FEDCBA9876543210
  */
-#define MASK_MANTISSA   00007777777777777ll // M: 13 octets unsigned mantissa
-#define MASK_EXPONENT   00770000000000000ll // E: 2 octets unsigned exponent
-#define MASK_SIGNEXPO   01000000000000000ll // e: exponent sign bit
-#define MASK_SIGNMANT   02000000000000000ll // m: mantissa sign bit
-#define MASK_NUMBER     03777777777777777ll // meEM: the number without control bit
-#define MASK_MANTHIGH   00007000000000000ll // highest octet of mantissa
-#define MASK_MANTHBIT   00004000000000000ll // highest bit of mantissa
-#define MASK_MANTCARRY  00010000000000000ll // a carry bit (internal use only)
+#define MASK_MANTISSA   00007777777777777LL // M: 13 octets unsigned mantissa
+#define MASK_EXPONENT   00770000000000000LL // E: 2 octets unsigned exponent
+#define MASK_SIGNEXPO   01000000000000000LL // e: exponent sign bit
+#define MASK_SIGNMANT   02000000000000000LL // m: mantissa sign bit
+#define MASK_NUMBER     03777777777777777LL // meEM: the number without control bit
+#define MASK_MANTHIGH   00007000000000000LL // highest octet of mantissa
+#define MASK_MANTHBIT   00004000000000000LL // highest bit of mantissa
+#define MASK_MANTCARRY  00010000000000000LL // a carry bit (internal use only)
 #define SHFT_MANTCARRY  39
 #define SHFT_EXPONENT   39
 #define SHFT_SIGNEXPO   45
@@ -321,30 +321,30 @@ extern CENTRAL_CONTROL *CC;
  * 765 432 109 876 543 210 987 654 321 098 765 432 109 876 543 210
  * octet numbers         FEDCBA9876543210
  */
-#define MASK_FLAG       04000000000000000ll // 1: the control bit [0:1]
-#define MASK_CODE       02000000000000000ll // c: the code bit (0=data) [1:1]
-#define MASK_PBIT       01000000000000000ll // p: the presence bit [2:1]
-#define MASK_XBIT       00400000000000000ll // x: the execute bit (1=PD, 0=CW) [3:1]
-#define MASK_MODE       00200000000000000ll // m: word/char mode bit [4:1]
-#define MASK_ARGS       00100000000000000ll // a: arguments required [5:1]
-#define MASK_TYPE       03400000000000000ll // the type bits [1:3]
-#define MASK_WCNT       00017770000000000ll // W: word count [8:10]
-#define MASK_HREG       00340000000000000ll // H: H register [4:3]
-#define MASK_VREG       00034000000000000ll // V: V register [7:3]
-#define MASK_LREG       00003000000000000ll // L: L register [10:2]
-#define MASK_GREG       00000700000000000ll // G: G register [12:3]
-#define MASK_KREG       00000070000000000ll // K: K register [15:3]
-#define MASK_MSFF       00000020000000000ll // m: MSFF bit [16:1]
-#define MASK_SALF       00000010000000000ll // s: SALF bit [17:1]
-#define MASK_INTG       00000002000000000ll // j: integer bit [19:1]
-#define MASK_CONT       00000001000000000ll // k: continuity bit [20:1]
-#define MASK_VARF       00000000100000000ll // v: VARF bit [23:1]
-#define MASK_RREG       00077700000000000ll // R: R register [6:9]
-#define MASK_FREG       00000007777700000ll // F: F register [18:15]
-#define MASK_NREG       00000000001700000ll // N: N register [29:4]
-#define MASK_MREG       00000000000077777ll // M: M register [33:15]
-#define MASK_CREG       00000000000077777ll // C: C register [33:15]
-#define MASK_ADDR       00000000000077777ll // A: memory or disk address [33:15]
+#define MASK_FLAG       04000000000000000LL // 1: the control bit [0:1]
+#define MASK_CODE       02000000000000000LL // c: the code bit (0=data) [1:1]
+#define MASK_PBIT       01000000000000000LL // p: the presence bit [2:1]
+#define MASK_XBIT       00400000000000000LL // x: the execute bit (1=PD, 0=CW) [3:1]
+#define MASK_MODE       00200000000000000LL // m: word/char mode bit [4:1]
+#define MASK_ARGS       00100000000000000LL // a: arguments required [5:1]
+#define MASK_TYPE       03400000000000000LL // the type bits [1:3]
+#define MASK_WCNT       00017770000000000LL // W: word count [8:10]
+#define MASK_HREG       00340000000000000LL // H: H register [4:3]
+#define MASK_VREG       00034000000000000LL // V: V register [7:3]
+#define MASK_LREG       00003000000000000LL // L: L register [10:2]
+#define MASK_GREG       00000700000000000LL // G: G register [12:3]
+#define MASK_KREG       00000070000000000LL // K: K register [15:3]
+#define MASK_MSFF       00000020000000000LL // m: MSFF bit [16:1]
+#define MASK_SALF       00000010000000000LL // s: SALF bit [17:1]
+#define MASK_INTG       00000002000000000LL // j: integer bit [19:1]
+#define MASK_CONT       00000001000000000LL // k: continuity bit [20:1]
+#define MASK_VARF       00000000100000000LL // v: VARF bit [23:1]
+#define MASK_RREG       00077700000000000LL // R: R register [6:9]
+#define MASK_FREG       00000007777700000LL // F: F register [18:15]
+#define MASK_NREG       00000000001700000LL // N: N register [29:4]
+#define MASK_MREG       00000000000077777LL // M: M register [33:15]
+#define MASK_CREG       00000000000077777LL // C: C register [33:15]
+#define MASK_ADDR       00000000000077777LL // A: memory or disk address [33:15]
 #define SHFT_TYPE       44
 #define SHFT_HREG       41
 #define SHFT_VREG       38
@@ -369,19 +369,19 @@ extern CENTRAL_CONTROL *CC;
  * data descriptor:
  * 10P 000 00W WWW WWW WWW 0IC 000 000 000 000 AAA AAA AAA AAA AAA
  */
-#define INIT_DD         04000000000000000ll // 10: fixed bits
+#define INIT_DD         04000000000000000LL // 10: fixed bits
 
 /*
  * mark stack control word:
  * 110 000 RRR RRR RRR 0ms FFF FFF FFF FFF FFF 000 000 000 000 000
  */
-#define INIT_MSCW       06000000000000000ll // 11: fixed bits
+#define INIT_MSCW       06000000000000000LL // 11: fixed bits
 
 /*
  * program descriptor word:
  * 11P 1ma 000 000 000 000 FFF FFF FFF FFF FFF AAA AAA AAA AAA AAA
  */
-#define INIT_PCW        06400000000000000ll // 11- 1: fixed bits
+#define INIT_PCW        06400000000000000LL // 11- 1: fixed bits
 
 /*
  * return control word:
@@ -390,9 +390,9 @@ extern CENTRAL_CONTROL *CC;
  * 11b 0HH HVV VLL GGG KKK FFF FFF FFF FFF FFF CCC CCC CCC CCC CCC
  * octet numbers         FEDCBA9876543210
  */
-#define INIT_RCW        06000000000000000ll // 11: fixed bits
-#define MASK_RCWTYPE    01000000000000000ll // t: type (OPDC/DESC) bit OR
-#define MASK_RCWBROF    01000000000000000ll // b: BROF bit
+#define INIT_RCW        06000000000000000LL // 11: fixed bits
+#define MASK_RCWTYPE    01000000000000000LL // t: type (OPDC/DESC) bit OR
+#define MASK_RCWBROF    01000000000000000LL // b: BROF bit
 
 /*
  * interrupt control word:
@@ -401,15 +401,15 @@ extern CENTRAL_CONTROL *CC;
  * 765 432 109 876 543 210 987 654 321 098 765 432 109 876 543 210
  * octet numbers         FEDCBA9876543210
  */
-#define INIT_ICW        06000000000000000ll // 110: fixed bits
+#define INIT_ICW        06000000000000000LL // 110: fixed bits
 
 /*
  * loop control word (only 39 bits while in X):
  * 110 000 000 0LL rrr rrr FFF FFF FFF FFF FFF CCC CCC CCC CCC CCC
  * octet numbers         FEDCBA9876543210
  */
-#define INIT_LCW        06000000000000000ll // 110: fixed bits
-#define MASK_LCWrpt     00000770000000000ll // r: repeat count
+#define INIT_LCW        06000000000000000LL // 110: fixed bits
+#define MASK_LCWrpt     00000770000000000LL // r: repeat count
 #define SHFT_LCWrpt     30
 
 /*
@@ -417,29 +417,29 @@ extern CENTRAL_CONTROL *CC;
  * 11a 000 000 XXX XXX XXX XXX XXX XXX XXX XXX XXX XXX XXX XXX XXX
  * octet numbers         FEDCBA9876543210
  */
-#define INIT_ILCW       06000000000000000ll // 11: fixed bits
-#define MASK_ILCWAROF   01000000000000000ll // a: saved AROF bit
+#define INIT_ILCW       06000000000000000LL // 11: fixed bits
+#define MASK_ILCWAROF   01000000000000000LL // a: saved AROF bit
 
 /*
  * initiate control word:
  * 110 00Q QQQ QQQ QQY YYY YYZ ZZZ ZZ0 ttt ttm SSS SSS SSS SSS SSS
  * octet numbers         FEDCBA9876543210
  */
-#define INIT_INCW       06000000000000000ll // 110: fixed bits
-#define MASK_INCWQ09F   00100000000000000ll // Q: Q09F bit
-#define MASK_INCWQ08F   00040000000000000ll // Q: Q08F bit
-#define MASK_INCWQ07F   00020000000000000ll // Q: Q07F bit
-#define MASK_INCWQ06F   00010000000000000ll // Q: Q06F bit
-#define MASK_INCWQ05F   00004000000000000ll // Q: Q05F bit
-#define MASK_INCWQ04F   00002000000000000ll // Q: Q04F bit
-#define MASK_INCWQ03F   00001000000000000ll // Q: Q03F bit
-#define MASK_INCWQ02F   00000400000000000ll // Q: Q02F bit
-#define MASK_INCWQ01F   00000200000000000ll // Q: Q01F bit
-#define MASK_INCWrY     00000176000000000ll // Y: Y register
-#define MASK_INCWrZ     00000001760000000ll // Z: Z register
-#define MASK_INCWrTM    00000000007600000ll // t: TM bits 1-5
-#define MASK_INCWMODE   00000000000100000ll // m: word/char mode bit
-#define MASK_INCWrS     00000000000077777ll // S: S register
+#define INIT_INCW       06000000000000000LL // 110: fixed bits
+#define MASK_INCWQ09F   00100000000000000LL // Q: Q09F bit
+#define MASK_INCWQ08F   00040000000000000LL // Q: Q08F bit
+#define MASK_INCWQ07F   00020000000000000LL // Q: Q07F bit
+#define MASK_INCWQ06F   00010000000000000LL // Q: Q06F bit
+#define MASK_INCWQ05F   00004000000000000LL // Q: Q05F bit
+#define MASK_INCWQ04F   00002000000000000LL // Q: Q04F bit
+#define MASK_INCWQ03F   00001000000000000LL // Q: Q03F bit
+#define MASK_INCWQ02F   00000400000000000LL // Q: Q02F bit
+#define MASK_INCWQ01F   00000200000000000LL // Q: Q01F bit
+#define MASK_INCWrY     00000176000000000LL // Y: Y register
+#define MASK_INCWrZ     00000001760000000LL // Z: Z register
+#define MASK_INCWrTM    00000000007600000LL // t: TM bits 1-5
+#define MASK_INCWMODE   00000000000100000LL // m: word/char mode bit
+#define MASK_INCWrS     00000000000077777LL // S: S register
 #define SHFT_INCWrY     28
 #define SHFT_INCWrZ     22
 #define SHFT_INCWrTM    16
@@ -450,14 +450,14 @@ extern CENTRAL_CONTROL *CC;
  * --- UUU UUW WWW WWW WWW m-- bdw r-- sss sss AAA AAA AAA AAA AAA
  * octet numbers         FEDCBA9876543210
  */
-#define MASK_IODUNIT    00760000000000000ll // U: unit designation
-#define MASK_IODMI      00000004000000000ll // m: memory inhibit
-#define MASK_IODBINARY  00000000400000000ll // b: binary mode (0=alpha)
-#define MASK_IODTAPEDIR 00000000200000000ll // d: tape direction (1=reverse)
-#define MASK_IODUSEWC   00000000100000000ll // w: use word counter
-#define MASK_IODREAD    00000000040000000ll // r: read mode (0=write)
-#define MASK_IODSEGCNT  00000000007700000ll // s: segment count
-#define MASK_DSKFILADR  00077777777777777ll // disk file address
+#define MASK_IODUNIT    00760000000000000LL // U: unit designation
+#define MASK_IODMI      00000004000000000LL // m: memory inhibit
+#define MASK_IODBINARY  00000000400000000LL // b: binary mode (0=alpha)
+#define MASK_IODTAPEDIR 00000000200000000LL // d: tape direction (1=reverse)
+#define MASK_IODUSEWC   00000000100000000LL // w: use word counter
+#define MASK_IODREAD    00000000040000000LL // r: read mode (0=write)
+#define MASK_IODSEGCNT  00000000007700000LL // s: segment count
+#define MASK_DSKFILADR  00077777777777777LL // disk file address
 #define SHFT_IODUNIT    40
 //#define SHFT_IODRESULT  15
 #define SHFT_IODSEGCNT  15
@@ -467,19 +467,19 @@ extern CENTRAL_CONTROL *CC;
  * --m --- --- --p baz ccc --- --- --A FEP NDB AAA AAA AAA AAA AAA
  * octet numbers         FEDCBA9876543210
  */
-#define MASK_IORISMOD3  01000000000000000ll // m: TAPE - Model III
-#define MASK_IORMEMPAR  00001000000000000ll // p: TAPE - Mem. Parity
-#define MASK_IORBLANK   00000400000000000ll // b: TAPE - Blank Tape
-#define MASK_IORBOT     00000200000000000ll // a: TAPE - Begin of Tape
-#define MASK_IOREOT     00000100000000000ll // z: TAPE - End of Tape
-#define MASK_IORCHARS   00000070000000000ll // ccc: TAPE - Chars in last word
-#define MASK_IORMAE     00000000010000000ll // A: Memory Access Error
-#define MASK_IORD21     00000000004000000ll // F: unit specific END
-#define MASK_IORD20     00000000002000000ll // E: unit specific ERR
-#define MASK_IORD19     00000000001000000ll // P: unit specific PAR
-#define MASK_IORNRDY    00000000000400000ll // N: not ready
-#define MASK_IORDPE     00000000000200000ll // D: descriptor parity error
-#define MASK_IORBUSY    00000000000100000ll // B: busy
+#define MASK_IORISMOD3  01000000000000000LL // m: TAPE - Model III
+#define MASK_IORMEMPAR  00001000000000000LL // p: TAPE - Mem. Parity
+#define MASK_IORBLANK   00000400000000000LL // b: TAPE - Blank Tape
+#define MASK_IORBOT     00000200000000000LL // a: TAPE - Begin of Tape
+#define MASK_IOREOT     00000100000000000LL // z: TAPE - End of Tape
+#define MASK_IORCHARS   00000070000000000LL // ccc: TAPE - Chars in last word
+#define MASK_IORMAE     00000000010000000LL // A: Memory Access Error
+#define MASK_IORD21     00000000004000000LL // F: unit specific END
+#define MASK_IORD20     00000000002000000LL // E: unit specific ERR
+#define MASK_IORD19     00000000001000000LL // P: unit specific PAR
+#define MASK_IORNRDY    00000000000400000LL // N: not ready
+#define MASK_IORDPE     00000000000200000LL // D: descriptor parity error
+#define MASK_IORBUSY    00000000000100000LL // B: busy
 #define SHFT_IORCHARS   30
 
 /*
