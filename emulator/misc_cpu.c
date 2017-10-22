@@ -17,8 +17,6 @@
 *   overhaul of file names
 ***********************************************************************/
 
-#define NEW_INITIATEP2 1
-
 #define	TRACE_IRQ 0
 
 #include <stdio.h>
@@ -64,44 +62,519 @@ void causeSyllableIrq(CPU *cpu, WORD8 irq, const char *reason) {
 #endif
 }
 
-/*
- * Implements the 4441=CMN syllable
- */
+/***********************************************************************
+* Computes an absolute memory address from the relative "offset" parameter
+* and leaves it in the M register. See Table 6-1 in the B5500 Reference
+* Manual. "cEnable" determines whether C-relative addressing is permitted.
+* VERIFIED against Paul's JavaScript 17-10-16
+***********************************************************************/
+void computeRelativeAddr(CPU *cpu, unsigned offset, BIT cEnabled)
+{
+	// This offset must be in (0..1023)
+	if (offset > 01777) {
+		prepMessage(cpu);
+		printf("computeRelativeAddr offset(%04o) >01777\n", offset);
+		stop(cpu);
+	}
+
+        if (dotrcmem)
+                printf("\tRelAddr(%04o,%u) -> ", offset, cEnabled);
+
+        cpu->cycleCount += 2; // approximate the timing
+
+        if (cpu->r.SALF) {
+                // subroutine level - check upper 3 bits of the 10 bit offset
+                switch ((offset >> 7) & 7) {
+                case 0: case 1: case 2: case 3:
+                        // pattern 0 xxx xxx xxx - R+ relative
+                        // reach 0..511
+                        offset &= 0777;
+                        cpu->r.M = (cpu->r.R<<RSHIFT) + offset;
+                        if (dotrcmem)
+                                printf("R+%o -> M=%05o\n", offset, cpu->r.M);
+                        break;
+                case 4: case 5:
+                        // pattern 1 0xx xxx xxx - F+ or (R+7)+ relative
+                        // reach 0..255
+                        offset &= 0377;
+                        if (cpu->r.MSFF) {
+                                // during function parameter loading its (R+7)+
+                                cpu->r.M = (cpu->r.R<<RSHIFT) + RR_MSCW;
+                                loadMviaM(cpu); // M = [M].[18:15]
+                                cpu->r.M += offset;
+                                if (dotrcmem)
+                                        printf("(R+7)+%o -> M=%05o\n", offset, cpu->r.M);
+                        } else {
+                                // inside function its F+
+                                cpu->r.M = cpu->r.F + offset;
+                                if (dotrcmem)
+                                        printf("F+%o -> M=%05o\n", offset, cpu->r.M);
+                        }
+                        break;
+                case 6:
+                        // pattern 1 10x xxx xxx - C+ relative on read, R+ on write
+                        // reach 0..127
+                        offset &= 0177;
+                        if (cEnabled) {
+                                // adjust C for fetch offset from
+                                // syllable the instruction was in
+                                cpu->r.M = (cpu->r.L > 0 ? cpu->r.C : cpu->r.C-1) + offset;
+                                if (dotrcmem)
+                                        printf("C+%o -> M=%05o\n", offset, cpu->r.M);
+                        } else {
+                                cpu->r.M = (cpu->r.R<<RSHIFT) + offset;
+                                if (dotrcmem)
+                                        printf("R+%o -> M=%05o\n", offset, cpu->r.M);
+                        }
+                        break;
+                case 7:
+                        // pattern 1 11x xxx xxx - F- or (R+7)- relative
+                        // reach 0..127 (negative direction)
+                        offset &= 0177;
+                        if (cpu->r.MSFF) {
+                                // during function parameter loading its (R+7)-
+                                cpu->r.M = (cpu->r.R<<RSHIFT) + RR_MSCW;
+                                loadMviaM(cpu); // M = [M].[18:15]
+                                cpu->r.M -= offset;
+                                if (dotrcmem)
+                                        printf("(R+7)-%o -> M=%05o\n", offset, cpu->r.M);
+                        } else {
+                                // inside function its F-
+                                cpu->r.M = cpu->r.F - offset;
+                                if (dotrcmem)
+                                        printf("F-%o -> M=%05o\n", offset, cpu->r.M);
+                        }
+                        break;
+                } // switch
+        } else {
+                // program level - all 10 bits are offset
+                offset &= 001777; // redundant
+                cpu->r.M = (cpu->r.R<<RSHIFT) + offset;
+                if (dotrcmem)
+                        printf("R+%o,M=%05o\n", offset, cpu->r.M);
+        }
+
+        // Reset variant-mode R-relative addressing, if it was enabled
+        if (cpu->r.VARF) {
+                if (dotrcmem)
+                        printf("Resetting VARF\n");
+                cpu->r.SALF = true;
+                cpu->r.VARF = false;
+        }
+}
+
+/***********************************************************************
+* Test the presence bit [2:1] of the "word" parameter.
+*
+* if SET: returns true
+*
+* if RESET and in NORMAL STATE:
+* optionally a warning is printed
+* causes presence bit IRQ and returns false
+*
+* if RESET and in CONTROL STATE:
+* an error message is printed
+* not a good idea: stops the cpu and returns false
+* VERIFIED against Paul's JavaScript 17-10-16
+***********************************************************************/
+BIT presenceTest(CPU *cpu, WORD48 word)
+{
+	if (word & MASK_PBIT)
+		return true;
+
+	if (cpu->r.NCSF) {
+		// NORMAL STATE
+#if 1
+		prepMessage(cpu);
+		printf("presenceTest failed (%016llo)\n", word);
+#endif
+		causeSyllableIrq(cpu, IRQ_PBIT, "PBIT=0");
+		return false;
+	}
+	// CONTROL STATE
+	prepMessage(cpu);
+	printf("presenceTest failed (%016llo) in CONTROL STATE\n", word);
+	//stop(cpu);
+	return false;
+}
+
+/***********************************************************************
+* OPDC, the moral equivalent of "load accumulator" on lesser
+* machines. Assumes the syllable has already loaded a word into A.
+* See Figures 6-1, 6-3, and 6-4 in the B5500 Reference Manual
+* VERIFIED against Paul's JavaScript 17-10-16
+***********************************************************************/
+void operandCall(CPU *cpu)
+{
+	BIT interrupted = false; // interrupt occurred
+
+	// If A contains a simple operand, just leave it there
+	if (OPERAND(cpu->r.A))
+		return;
+
+	// It's not a simple operand
+	switch ((cpu->r.A & MASK_TYPE) >> SHFT_TYPE) { // A.[1:3]
+
+	case 2: // CODE=0, PBIT=1, XBIT=0
+	case 3: // CODE=0, PBIT=1, XBIT=1
+		// Present data descriptor: see if it must be indexed
+		if (cpu->r.A & MASK_WCNT) { // A.[8:10]
+			// TODO: indexDescriptor ensures AB full (again) and implicitly uses A
+			interrupted = indexDescriptor(cpu);
+			// else descriptor is already indexed (word count 0)
+		}
+		if (!interrupted) {
+			// indexing reported no issue
+			cpu->r.M = cpu->r.A & MASKMEM;
+			// get the value, which now should be an operand
+			loadAviaM(cpu); // A = [M]
+			if (DESCRIPTOR(cpu->r.A) && cpu->r.NCSF) {
+				// Flag bit is set and NORMAL state
+			        causeSyllableIrq(cpu, IRQ_FLAG, "operandCall FLAG SET");
+			}
+		}
+		break;
+
+	case 7: // CODE=1, PBIT=1, XBIT=1
+		// Present program descriptor
+		enterSubroutine(cpu, false);
+		break;
+
+	case 0: // CODE=0, PBIT=0, XBIT=0
+	case 1: // CODE=0, PBIT=0, XBIT=1
+	case 5: // CODE=1, PBIT=0, XBIT=1
+		// Absent data or program descriptor
+		if (cpu->r.NCSF) {
+			causeSyllableIrq(cpu, IRQ_PBIT, "operandCall NOT PBIT");
+		}
+		// else if Control State, we're done
+		break;
+
+	default: // cases 4, 6  // CODE=1, PBIT=0/1, XBIT=0
+		// Miscellaneous control word -- leave as is
+		break;
+	}
+}
+
+/***********************************************************************
+* DESC, the moral equivalent of "load address" on lesser machines.
+* Assumes the syllable has already loaded a word into A, and that the
+* address of that word is in M.
+* See Figures 6-2, 6-3, and 6-4 in the B5500 Reference Manual
+* VERIFIED against Paul's JavaScript 17-10-16
+***********************************************************************/
+void descriptorCall(CPU *cpu)
+{
+	BIT interrupted = false; // interrupt occurred
+
+	if (OPERAND(cpu->r.A)) {
+		// It's a simple operand
+		// create a present data descriptor to its address (is in M)
+		cpu->r.A = cpu->r.M | MASK_FLAG | MASK_PBIT;
+		return;
+	}
+
+	// It's not a simple operand
+	switch ((cpu->r.A & MASK_TYPE) >> SHFT_TYPE) { // A.[1:3]
+
+	case 2: // CODE=0, PBIT=1, XBIT=0
+	case 3: // CODE=0, PBIT=1, XBIT=1
+	        // Present data descriptor: see if it must be indexed
+	        if (cpu->r.A & MASK_WCNT) { // aw.[8:10]
+			// TODO: indexDescriptor ensures AB full (again) and implicitly uses A
+	                interrupted = indexDescriptor(cpu);
+	                if (!interrupted) {
+	                        // set word count to zero
+	                        cpu->r.A &= ~MASK_WCNT;
+	                }
+	                // else descriptor is already indexed (word count 0)
+	        }
+	        break;
+
+	case 7: // CODE=1, PBIT=1, XBIT=1
+	        // Present program descriptor
+	        enterSubroutine(cpu, true);
+	        break;
+
+	case 0: // CODE=0, PBIT=0, XBIT=0
+	case 1: // CODE=0, PBIT=0, XBIT=1
+	case 5: // CODE=1, PBIT=0, XBIT=1
+	        // Absent data or program descriptor
+		if (cpu->r.NCSF) {
+			causeSyllableIrq(cpu, IRQ_PBIT, "descriptorCall NOT PBIT");
+		}
+                // else if Control State, we're done
+	        break;
+
+	default: // cases 4, 6  // CODE=1, PBIT=0/1, XBIT=0
+	        // Miscellaneous control word
+		// create a present data descriptor to its address (is in M)
+	        cpu->r.A = cpu->r.M | MASK_FLAG | MASK_PBIT;
+	        break;
+	}
+}
+
+/***********************************************************************
+* Implements the 3011=SFI operator and the parts of 3411=SFT that are
+* common to it
+* "forced" implies Q07F: a hardware-induced SFI syllable
+* "forTest" implies use from SFT
+* VERIFIED against Paul's JavaScript 17-10-22
+***********************************************************************/
+void storeForInterrupt(CPU *cpu, BIT forced, BIT forTest, const char *cause)
+{
+	BIT		saveAROF = cpu->r.AROF;
+	BIT		saveBROF = cpu->r.BROF;
+	ADDR15		temp;
+	BIT		save_dotrcmem = dotrcmem;
+
+#if DEBUG
+        DPRINTF("*\t%s: %s storeForInterrupt forced=%u forTest=%u\n", cpu->id, cause, forced, forTest);
+#endif
+        dotrcmem = TRCMEM;
+
+        if (forced || forTest) {
+                cpu->r.NCSF = false; // switch to Control State
+        }
+
+        if (cpu->r.CWMF) {
+                // in Character Mode, get the correct TOS address from X
+                // exchange S with F-field of X
+                temp = cpu->r.S;
+                cpu->r.S = (cpu->r.X & MASK_FREG) >> SHFT_FREG;
+                cpu->r.X = (cpu->r.X & ~MASK_FREG) | (temp << SHFT_FREG);
+
+                if (saveAROF || forTest) {
+                        ++cpu->r.S;
+                        DPRINTF("\tsave A");
+                        storeAviaS(cpu); // [S] = A
+                }
+
+                if (saveBROF || forTest) {
+                        ++cpu->r.S;
+                        DPRINTF("\tsave B");
+                        storeBviaS(cpu); // [S] = B
+                }
+
+                // store Character Mode Interrupt Loop-Control Word (ILCW)
+                // 444444443333333333222222222211111111110000000000
+                // 765432109876543210987654321098765432109876543210
+                // 11A000000XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+                cpu->r.B = INIT_ILCW | cpu->r.X;
+                if (saveAROF)
+                        cpu->r.B |= MASK_ILCWAROF;
+                ++cpu->r.S;
+                DPRINTF("\tILCW");
+                storeBviaS(cpu); // [S] = ILCW
+        } else {
+                // in word mode, save B and A if not empty
+                if (saveBROF || forTest) {
+                        ++cpu->r.S;
+                        DPRINTF("\tsave B");
+                        storeBviaS(cpu); // [S] = B
+                }
+
+                if (saveAROF || forTest) {
+                        ++cpu->r.S;
+                        DPRINTF("\tsave A");
+                        storeAviaS(cpu); // [S] = A
+                }
+        }
+
+        // store Interrupt Control Word (ICW)
+        // 444444443333333333222222222211111111110000000000
+        // 765432109876543210987654321098765432109876543210
+        // 110000RRRRRRRRR0MS00000V00000NNNNMMMMMMMMMMMMMMM
+        cpu->r.B = INIT_ICW |
+                (((WORD48)cpu->r.M) << SHFT_MREG) |
+                (((WORD48)cpu->r.N) << SHFT_NREG) |
+                (((WORD48)cpu->r.R) << SHFT_RREG);
+        if (cpu->r.VARF)
+                cpu->r.B |= MASK_VARF;
+        if (cpu->r.SALF)
+                cpu->r.B |= MASK_SALF;
+        if (cpu->r.MSFF)
+                cpu->r.B |= MASK_MSFF;
+        ++cpu->r.S;
+        DPRINTF("\tICW ");
+        storeBviaS(cpu); // [S] = ICW
+
+        // store Interrupt Return Control Word (IRCW)
+        // 444444443333333333222222222211111111110000000000
+        // 765432109876543210987654321098765432109876543210
+        // 11B0HHHVVVLLGGGKKKFFFFFFFFFFFFFFFCCCCCCCCCCCCCCC
+        cpu->r.B = INIT_RCW |
+                (((WORD48)cpu->r.C) << SHFT_CREG) |
+                (((WORD48)cpu->r.F) << SHFT_FREG) |
+                (((WORD48)cpu->r.K) << SHFT_KREG) |
+                (((WORD48)cpu->r.G) << SHFT_GREG) |
+                (((WORD48)cpu->r.L) << SHFT_LREG) |
+                (((WORD48)cpu->r.V) << SHFT_VREG) |
+                (((WORD48)cpu->r.H) << SHFT_HREG);
+        if (saveBROF)
+                cpu->r.B |= MASK_RCWBROF;
+        ++cpu->r.S;
+        DPRINTF("\tIRCW");
+        storeBviaS(cpu); // [S] = IRCW
+
+	// in order to store the Initiate Control Word at [R+8]
+	// and if we are in character mode
+	// we need to get the true R value from the last MSCW
+        if (cpu->r.CWMF) {
+                // exchange S with F
+                temp = cpu->r.F;
+                cpu->r.F = cpu->r.S;
+                cpu->r.S = temp;
+
+                DPRINTF("\tlast RCW ");
+                loadBviaS(cpu); // B = [S]: get last RCW
+                cpu->r.S = (cpu->r.B & MASK_FREG) >> SHFT_FREG;
+
+                DPRINTF("\tlast MSCW");
+                loadBviaS(cpu); // B = [S]: get last MSCW
+                cpu->r.R = (cpu->r.B & MASK_RREG) >> SHFT_RREG;
+                cpu->r.S = cpu->r.F;
+        }
+
+        // build the Initiate Control Word (INCW)
+        // 444444443333333333222222222211111111110000000000
+        // 765432109876543210987654321098765432109876543210
+        // 11000QQQQQQQQQYYYYYYZZZZZZ0TTTTTCSSSSSSSSSSSSSSS
+        cpu->r.B = INIT_INCW |
+                (((WORD48)cpu->r.S) << SHFT_INCWrS) |
+                ((((WORD48)cpu->r.TM) << SHFT_INCWrTM) & MASK_INCWrTM) |
+                (((WORD48)cpu->r.Z) << SHFT_INCWrZ) |
+                (((WORD48)cpu->r.Y) << SHFT_INCWrY);
+        if (cpu->r.CWMF)
+                cpu->r.B |= MASK_INCWMODE;
+        if (cpu->r.Q01F)
+                cpu->r.B |= MASK_INCWQ01F;
+        if (cpu->r.Q02F)
+                cpu->r.B |= MASK_INCWQ02F;
+        if (cpu->r.Q03F)
+                cpu->r.B |= MASK_INCWQ03F;
+        if (cpu->r.Q04F)
+                cpu->r.B |= MASK_INCWQ04F;
+        if (cpu->r.Q05F)
+                cpu->r.B |= MASK_INCWQ05F;
+        if (cpu->r.Q06F)
+                cpu->r.B |= MASK_INCWQ06F;
+        if (cpu->r.Q07F)
+                cpu->r.B |= MASK_INCWQ07F;
+        if (cpu->r.Q08F)
+                cpu->r.B |= MASK_INCWQ08F;
+        if (cpu->r.Q09F)
+                cpu->r.B |= MASK_INCWQ09F;
+        cpu->r.M = (cpu->r.R<<RSHIFT) + RR_INCW; // store initiate word at R+@10
+        DPRINTF("\tINCW");
+        storeBviaM(cpu); // [M] = INCW
+
+	// clean some registers
+        cpu->r.M = 0;
+        cpu->r.R = 0;
+        cpu->r.MSFF = false;
+        cpu->r.SALF = false;
+        cpu->r.BROF = false;
+        cpu->r.AROF = false;
+        if (forTest) {
+                cpu->r.TM = 0;
+                cpu->r.MROF = false;
+                cpu->r.MWOF = false;
+        }
+
+	// if SECL detected IRQ or TEST, ensure word more
+        if (forced || forTest) {
+                cpu->r.CWMF = false;
+        }
+
+	// are we P1?
+        if (cpu->isP1) {
+                // we are P1
+                if (forTest) {
+                        DPRINTF("\tload DD");
+                        loadBviaM(cpu); // B = [M]: load DD for test
+                        cpu->r.C = (cpu->r.B & MASK_CREG) >> SHFT_CREG;
+                        cpu->r.L = 0;
+                        cpu->r.PROF = false; // require fetch at SECL
+                        cpu->r.G = 0;
+                        cpu->r.H = 0;
+                        cpu->r.K = 0;
+                        cpu->r.V = 0;
+                } else {
+                        cpu->r.T = 0211; // inject 0211=ITI into P1's T register
+                }
+        } else {
+                // we are P2
+                stop(cpu); // idle the P2 processor
+                CC->P2BF = false; // tell CC and P1 we've stopped
+        }
+        dotrcmem = save_dotrcmem;
+}
+
+/***********************************************************************
+* Implements the 4441=CMN syllable
+* VERIFIED against Paul's JavaScript 17-10-22
+***********************************************************************/
 void enterCharModeInline(CPU *cpu)
 {
-        WORD48          bw;     // local copy of B reg
+	WORD48          bw;     // local copy of B reg
 
-        adjustAEmpty(cpu);      // flush TOS registers, but tank TOS value in A
-        if (cpu->r.BROF) {
-                cpu->r.A = cpu->r.B;    // tank the DI address in A
-                adjustBEmpty(cpu);
-        } else {
-                loadAviaS(cpu); // A = [S]: load the DI address
-                cpu->r.AROF = false;
-        }
-        cpu->r.B = buildRCW(cpu, false);
-        cpu->r.BROF = true;
-        adjustBEmpty(cpu);
-        cpu->r.MSFF = false;
-        cpu->r.SALF = true;
-        cpu->r.F = cpu->r.S;
-        cpu->r.R = 0;
-        cpu->r.CWMF = true;
-        cpu->r.X = (WORD39)cpu->r.S << SHFT_FREG; // inserting S into X.[18:15], but X is zero at this point
-        cpu->r.V = 0;
-        cpu->r.B = bw = cpu->r.A;
+	// flush both A and B to stack, but get TOS value in A without AROF being set:
+	// make sure A is empty
+	// if B is full, copy B value to A (AROF stays reset) and flush B to stack
+	// if B is empty, load A fromstack and reset AROF
+	// a now holds the DI
+	adjustAEmpty(cpu);
+	if (cpu->r.BROF) {
+		cpu->r.A = cpu->r.B;
+		adjustBEmpty(cpu);
+	} else {
+		loadAviaS(cpu);
+		cpu->r.AROF = false;
+	}
 
-        // execute the portion of CM XX04=RDA operator starting at J=2
-        cpu->r.S = bw & MASKMEM;
-        if (!(bw & MASK_FLAG)) {
-                // if it's an operand
-                cpu->r.K = (bw >> 15) & 7; // set K from [30:3]
-        } else {
-                // otherwise, force K to zero and
-                cpu->r.K = 0;
-                // just take the side effect of any p-bit interrupt
-                presenceTest(cpu, bw);
-        }
+	// build a RCW(OPDC) and push it onto the stack
+	cpu->r.B = buildRCW(cpu, false);
+	cpu->r.BROF = true;
+	adjustBEmpty(cpu);
+
+	// reset and set flags to show we are in subroutine mode, RCW is last
+	cpu->r.MSFF = false;
+	cpu->r.SALF = true;
+
+	// save S in F for character mode
+	cpu->r.F = cpu->r.S;
+
+	// clear tally
+	cpu->r.R = 0;
+
+	// now in character mode
+	cpu->r.CWMF = true;
+
+	// create first loop control word
+	// insert S into X.[18:15], but X is zero at this point	
+	cpu->r.X = ((WORD39)cpu->r.S) << SHFT_FREG;
+
+	// clear V
+	cpu->r.V = 0;
+
+	// save DI in bw and also to B
+	cpu->r.B = bw = cpu->r.A;
+
+	// execute the portion of CM XX04=RDA operator starting at J=2
+	// S = DI
+	cpu->r.S = bw & MASKMEM;
+
+	// if DI is an operand
+	if (OPERAND(bw)) {
+		// it's an operand - set K from F field
+		cpu->r.K = (bw >> SHFT_FREG) & 7;
+	} else {
+		// otherwise, force K to zero and
+		cpu->r.K = 0;
+		// just take the side effect of any p-bit interrupt
+		presenceTest(cpu, bw);
+	}
 }
 
 /*
@@ -261,6 +734,22 @@ void stop(CPU *cpu)
         //cpu->r.PROF = 0;
         cpu->busy = 0;
         cpu->cycleLimit = 0;    // exit cpu->r.run()
+}
+
+/*
+ * Called from CC initiate this(cpu) processor as P2. Fetches the
+ * INCW from @10, injects an initiate syllable into T, and calls start()
+ */
+void initiateAsP2(CPU *cpu)
+{
+	printf("*\t%s: initiateAsP2\n", cpu->id);
+	cpu->r.NCSF = 0;	// make P2 is in Control State to execute the IP1 & access low mem
+	cpu->r.M = AA_IODESC;	// address of the INCW
+	loadBviaM(cpu);		// B = [M]
+	cpu->r.AROF = 0;	// make sure A is invalid
+	cpu->r.T = 04111;	// inject 4111=IP1 into P2's T register
+	cpu->r.TROF = 1;
+	start(cpu);
 }
 
 /*

@@ -143,6 +143,7 @@ BIT applyRCW(CPU *cpu, WORD48 word, BIT in_line)
         return (word & MASK_RCWTYPE) ? true : false;
 }
 
+#if 0
 /*
  * OPDC, the moral equivalent of "load accumulator" on lesser
  * machines. Assumes the syllable has already loaded a word into A.
@@ -253,6 +254,7 @@ void descriptorCall(CPU *cpu)
         }
         //printf("\n");
 }
+#endif
 
 /*
  * Enters a subroutine via the present Program Descriptor in A as part

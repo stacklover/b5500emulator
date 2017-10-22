@@ -148,6 +148,7 @@ void accessError(CPU *cpu)
         }
 }
 
+#if 0
 /*
  * Computes an absolute memory address from the relative "offset" parameter
  * and leaves it in the M register. See Table 6-1 in the B5500 Reference
@@ -243,6 +244,7 @@ void computeRelativeAddr(CPU *cpu, unsigned offset, BIT cEnabled)
                 cpu->r.VARF = false;
         }
 }
+#endif
 
 #if NEW_INDEXDESCRIPTOR
 /*

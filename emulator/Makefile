@@ -28,7 +28,7 @@ OBJTEST	=	$(ODIR)/test.o \
 		$(ODIR)/pdp_text.o $(ODIR)/init_shares.o \
 		$(ODIR)/execute_cm.o $(ODIR)/execute_wm.o \
 		$(ODIR)/stack.o $(ODIR)/memory.o $(ODIR)/jump_call.o \
-		$(ODIR)/irq_io.o $(ODIR)/single.o $(ODIR)/double.o \
+		$(ODIR)/single.o $(ODIR)/double.o \
 		$(ODIR)/misc_cpu.o $(ODIR)/bitfield.o $(ODIR)/stream.o \
 		$(ODIR)/instr_table.o
 
@@ -37,7 +37,7 @@ OBJPANEL =	$(ODIR)/processor_panel.o $(ODIR)/pdp_text.o $(ODIR)/init_shares.o
 OBJEMULATOR =	$(ODIR)/emulator.o $(ODIR)/init_shares.o \
 		$(ODIR)/execute_cm.o $(ODIR)/execute_wm.o \
 		$(ODIR)/stack.o $(ODIR)/memory.o $(ODIR)/jump_call.o \
-		$(ODIR)/irq_io.o $(ODIR)/single.o $(ODIR)/double.o \
+		$(ODIR)/single.o $(ODIR)/double.o \
 		$(ODIR)/misc_cpu.o $(ODIR)/bitfield.o $(ODIR)/stream.o \
 		$(ODIR)/cc_irq.o \
 		$(ODIR)/cc_io.o \
@@ -53,7 +53,7 @@ OBJASMNRUN =	$(ODIR)/asm-n-run.o \
 		$(ODIR)/pdp_text.o $(ODIR)/init_shares.o \
 		$(ODIR)/execute_cm.o $(ODIR)/execute_wm.o \
 		$(ODIR)/stack.o $(ODIR)/memory.o $(ODIR)/jump_call.o \
-		$(ODIR)/irq_io.o $(ODIR)/single.o $(ODIR)/double.o \
+		$(ODIR)/single.o $(ODIR)/double.o \
 		$(ODIR)/misc_cpu.o $(ODIR)/bitfield.o $(ODIR)/stream.o \
 		$(ODIR)/translatetables.o	\
 		$(ODIR)/instr_table.o
@@ -62,7 +62,7 @@ OBJSPTEST =	$(ODIR)/sptest.o \
 		$(ODIR)/pdp_text.o $(ODIR)/init_shares.o \
 		$(ODIR)/execute_cm.o $(ODIR)/execute_wm.o \
 		$(ODIR)/stack.o $(ODIR)/memory.o $(ODIR)/jump_call.o \
-		$(ODIR)/irq_io.o $(ODIR)/single.o $(ODIR)/double.o \
+		$(ODIR)/single.o $(ODIR)/double.o \
 		$(ODIR)/misc_cpu.o $(ODIR)/bitfield.o $(ODIR)/stream.o \
 		$(ODIR)/translatetables.o	\
 		$(ODIR)/instr_table.o
