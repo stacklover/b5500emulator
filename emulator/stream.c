@@ -270,30 +270,26 @@ void compareSourceWithDest(CPU *cpu, unsigned count, BIT numeric)
  */
 void fieldArithmetic(CPU *cpu, unsigned count, BIT adding)
 {
-        unsigned        aBit;           // A register bit nr
-        WORD48          aw;             // current A register word
-        unsigned        bBit;           // B register bit nr
-        WORD48          bw;             // current B register word
         BIT             carry = false;  // carry/borrow bit
         BIT             compla = false; // complement addition (i.e., subtract the digits)
-        BIT             TFFF;           // local copy of TFFF/TFFF
-        BIT             Q03F;           // local copy of Q03F
         BIT             resultNegative; // sign of result is negative
         unsigned        sd;             // digit sum
         BIT             ycompl = false; // complement source digits
-        unsigned        yd;             // source digit
         BIT             zcompl = false; // complement destination digits
-        unsigned        zd;             // destination digit
-//printf("fA\n");
-        compareSourceWithDest(cpu, count, true);
-        cpu->cycleCount += 2;   // approximate the timing thus far
-        if (cpu->r.Q06F) {      // Q06F => count > 0, so there's characters to add
-                cpu->r.Q06F = false;
-                cpu->r.Q04F = false;    // reset Q06F and Q04F
-                TFFF = cpu->r.TFFF;     // get TFFF as a Boolean
-                Q03F = cpu->r.Q03F;     // get Q03F as a Boolean
 
-                // Back down the pointers to the last characters of their respective fields
+	// scan the fields to beyond their ends - leaves Q06F set if count > 0
+        compareSourceWithDest(cpu, count, true);
+
+        cpu->cycleCount += 2;   // approximate the timing thus far
+
+	// Q06F => count > 0, so there's characters to add
+        if (cpu->r.Q06F) {
+		// reset Q06F and Q04F
+                cpu->r.Q06F = false;
+                cpu->r.Q04F = false;
+		// results of compareSourceWithDest are TFFF and Q03F
+
+                // Back the pointers to the last characters of their respective fields
                 if (cpu->r.K > 0) {
                         --cpu->r.K;
                 } else {
@@ -301,6 +297,7 @@ void fieldArithmetic(CPU *cpu, unsigned count, BIT adding)
                         cpu->r.BROF = false;
                         --cpu->r.S;
                 }
+
                 if (cpu->r.G > 0) {
                         --cpu->r.G;
                 } else {
@@ -312,28 +309,27 @@ void fieldArithmetic(CPU *cpu, unsigned count, BIT adding)
                 if (!cpu->r.BROF) {
                         loadBviaS(cpu); // B = [S]
                 }
+
                 if (!cpu->r.AROF) {
                         loadAviaM(cpu); // A = [M]
                 }
 
                 cpu->r.Q08F = true; // set Q08F (for display only)
-                aBit = cpu->r.G*6; // A-bit number
-                aw = cpu->r.A;
-                bBit = cpu->r.K*6; // B-bit number
-                bw = cpu->r.B;
-                yd = fieldIsolate(aw, aBit, 2) == 2 ? 2 : 0; // source sign
-                zd = fieldIsolate(bw, bBit, 2) == 2 ? 2 : 0; // dest sign
-                compla = (yd == zd ? !adding : adding); // determine if complement needed
+
+                cpu->r.Y = fieldIsolate(cpu->r.A, cpu->r.G*6, 2) == 2 ? 2 : 0; // source sign
+                cpu->r.Z = fieldIsolate(cpu->r.B, cpu->r.K*6, 2) == 2 ? 2 : 0; // dest sign
+                compla = (cpu->r.Y == cpu->r.Z ? !adding : adding); // determine if complement needed
+
                 resultNegative = !( // determine sign of result
-                        (zd == 0 && !compla) ||
-                        (zd == 0 && Q03F && !TFFF) ||
-                        (zd != 0 && compla && Q03F && TFFF) ||
-                        (compla && !Q03F));
+                        (cpu->r.Z == 0 && !compla) ||
+                        (cpu->r.Z == 0 && cpu->r.Q03F && !cpu->r.TFFF) ||
+                        (cpu->r.Z != 0 && compla && cpu->r.Q03F && cpu->r.TFFF) ||
+                        (compla && !cpu->r.Q03F));
                 if (compla) {
                         cpu->r.Q07F = true;
                         cpu->r.Q02F = true; // set Q07F and Q02F (for display only)
                         carry = true; // preset the carry/borrow bit (Q07F)
-                        if (TFFF) {
+                        if (cpu->r.TFFF) {
                                 cpu->r.Q04F = true; // set Q04F (for display only)
                                 zcompl = true;
                         } else {
@@ -345,9 +341,9 @@ void fieldArithmetic(CPU *cpu, unsigned count, BIT adding)
                 do {
                         --count;
                         cpu->cycleCount += 2;
-                        yd = fieldIsolate(aw, aBit+2, 4); // get the source digit
-                        zd = fieldIsolate(bw, bBit+2, 4); // get the dest digit
-                        sd = (ycompl ? 9-yd : yd) + (zcompl ? 9-zd : zd) + carry; // develop binary digit sum
+                        cpu->r.Y = fieldIsolate(cpu->r.A, cpu->r.G*6+2, 4); // get the source digit
+                        cpu->r.Z = fieldIsolate(cpu->r.B, cpu->r.K*6+2, 4); // get the dest digit
+                        sd = (ycompl ? 9-cpu->r.Y : cpu->r.Y) + (zcompl ? 9-cpu->r.Z : cpu->r.Z) + carry; // develop binary digit sum
                         if (sd <= 9) {
                                 carry = false;
                         } else {
@@ -359,33 +355,25 @@ void fieldArithmetic(CPU *cpu, unsigned count, BIT adding)
                                 resultNegative = false;
                         }
 
-                        bw = fieldInsert(bw, bBit, 6, sd);
+                        cpu->r.B = fieldInsert(cpu->r.B, cpu->r.K*6, 6, sd);
 
                         if (count == 0) {
-                                cpu->r.B = bw;
                                 storeBviaS(cpu); // [S] = B, store final dest word
                         } else {
-                                if (bBit > 0) {
-                                        bBit -= 6;
+                                if (cpu->r.K > 0) {
                                         --cpu->r.K;
                                 } else {
-                                        bBit = 42;
                                         cpu->r.K = 7;
-                                        cpu->r.B = bw;
                                         storeBviaS(cpu); // [S] = B
                                         --cpu->r.S;
                                         loadBviaS(cpu); // B = [S]
-                                        bw = cpu->r.B;
                                 }
-                                if (aBit > 0) {
-                                        aBit -= 6;
+                                if (cpu->r.G > 0) {
                                         --cpu->r.G;
                                 } else {
-                                        aBit = 42;
                                         cpu->r.G = 7;
                                         --cpu->r.M;
                                         loadAviaM(cpu); // A = [M]
-                                        aw = cpu->r.A;
                                 }
                         }
                 } while (count);
@@ -414,11 +402,9 @@ void fieldArithmetic(CPU *cpu, unsigned count, BIT adding)
                                 ++cpu->r.M;
                         }
                 }
-                cpu->r.A = aw;
-                cpu->r.B = bw;
                 cpu->r.AROF = cpu->r.BROF = false;
                 cpu->r.H = cpu->r.V = cpu->r.N = 0;
-                cpu->r.TFFF = (compla ? 1-carry : carry); // TFFF/TFFF = overflow indicator
+                cpu->r.TFFF = (compla ? 1-carry : carry); // TFFF = overflow indicator
         }
 }
 
