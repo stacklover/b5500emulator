@@ -22,7 +22,24 @@
 #include <fcntl.h>
 #include "common.h"
 
+/***********************************************************************
+* analysy of possible buffer overrun situations
+************************************************************************
+* char *fgets(char *s, int size, FILE *stream);
+*
+* fgets() reads in at most one less than size characters from stream and
+* stores them into the buffer pointed to by s. Reading stops after an
+* EOF or a newline. If a newline is read, it is stored into the buffer.
+* A '\0' is stored after the last character in the buffer.
+*
+* risk asessment:
+* 1. if called with a static buffer and sizeof of the buffer: none
+* 2. it is also guaranteed, that a '\0' is at the end of data and within
+*    the buffer limits
+***********************************************************************/
+
 #define NAMELEN 100
+#define	BUFLEN 80
 
 /*
  * the SPO
@@ -30,10 +47,8 @@
 char	filename[NAMELEN];
 FILE	*fp = stdin;
 BIT	ready;
-char	spoinbuf[80];
-char	*spoinp;
-char	spooutbuf[80];
-char	*spooutp;
+char	spoinbuf[BUFLEN];
+char	spooutbuf[BUFLEN];
 
 /*
  * set spo (no function)
@@ -86,7 +101,7 @@ BIT spo_ready(unsigned index) {
         FD_ZERO(&fds);
         FD_SET(0, &fds);
         if (select(1, &fds, NULL, NULL, &tv)) {
-                spoinp = fgets(spoinbuf, sizeof spoinbuf, stdin);
+		char *spoinp = fgets(spoinbuf, sizeof spoinbuf, stdin); // no buffer overrun possible
 		// any input ?
 		if (spoinp != NULL) {
 			// remove trailing control codes
@@ -97,6 +112,8 @@ BIT spo_ready(unsigned index) {
 			// divert input starting with '#' to our scanner
 			if (*spoinp == '#') {
 				handle_option(spoinp+1);
+				// mark the input buffer empty again
+				spoinbuf[0] = 0;
 			} else {
 				// signal input request
 				CC->CCI05F = true;
@@ -114,70 +131,82 @@ BIT spo_ready(unsigned index) {
  * write a single line
  */
 WORD48 spo_write(WORD48 iocw) {
-        int count;
-        ACCESSOR acc;
+	int count;
+	ACCESSOR acc;
+	char *spooutp = spooutbuf;
 
-        acc.id = "SPO";
-        acc.MAIL = false;
-        acc.addr = iocw & MASKMEM;
+	acc.id = "SPO";
+	acc.MAIL = false;
+	acc.addr = iocw & MASKMEM;
 
-        spooutp = spooutbuf;
+loop:	fetch(&acc);
+	for (count=0; count<8; count++) {
+		// prevent buffer overrun
+		if (spooutp >= spooutbuf + sizeof spooutbuf - 1)
+		  goto done;
+		if (((acc.word >> 42) & 0x3f) == 037)
+		  goto done;
+		*spooutp++ = translatetable_bic2ascii[(acc.word>>42) & 0x3f];
+		acc.word <<= 6;
+	}
+	acc.addr++;
+	goto loop;
 
-loop:   fetch(&acc);
-        for (count=0; count<8; count++) {
-                  if (spooutp >= spooutbuf + sizeof spooutbuf - 1)
-                          goto done;
-                  if (((acc.word >> 42) & 0x3f) == 037)
-                          goto done;
-                  *spooutp++ = translatetable_bic2ascii[(acc.word>>42) & 0x3f];
-                  acc.word <<= 6;
-        }
-        acc.addr++;
-        goto loop;
-
-done:   *spooutp++ = 0;
-        printf ("%s\n", spooutbuf);
-        return (iocw & (MASK_IODUNIT | MASK_IODREAD)) | acc.addr;
+done:	*spooutp++ = 0;
+	printf ("%s\n", spooutbuf);
+	return (iocw & (MASK_IODUNIT | MASK_IODREAD)) | acc.addr;
 }
 
 /*
  * read a single line
  */
 WORD48 spo_read(WORD48 iocw) {
-        int count;
-        ACCESSOR acc;
-	BIT gmset = false;
+	int count;
+	ACCESSOR acc;
+	BIT gmset = false;		// remember if we have stored a GM already
+	char *spoinp = spoinbuf;
 
-        acc.id = "SPO";
-        acc.MAIL = false;
-        acc.addr = iocw & MASKMEM;
-        spoinp = spoinbuf;
+	acc.id = "SPO";
+	acc.MAIL = false;
+	acc.addr = iocw & MASKMEM;
 
-        // convert until EOL or any other control char found
-        while (*spoinp >= ' ') {
-                acc.word = 0ll;
-                for (count=0; count<8; count++) {
-                          acc.word <<= 6;
-                          if (*spoinp >= ' ') {
-                                  // printable char
-                                  acc.word |= translatetable_ascii2bic[*spoinp++ & 0x7f];
-                          } else {
-                                  // EOL or other char, fill word with GM
-                                  acc.word |= 037;
-				  gmset = true;
-                          }
-                }
-                // store the complete word
-                store(&acc);
-                acc.addr++;
-        }
+	// convert until EOL or any other control char found
+	// there should also be a limitation of the number of words
+	// unclear how much the MCP allocated, one place its 60 words(?)
+	// with a buflen of 80 (chars) we should be safe
+
+	// do while words (8 characters) while we have more data
+	while (*spoinp >= ' ') {
+		acc.word = 0;
+		for (count=0; count<8; count++) {
+			acc.word <<= 6;
+			// note that spoinp stays on the invalid char
+			// causing the rest of the word to be filled with
+			// GM
+			if (*spoinp >= ' ') {
+				// printable char
+				acc.word |= translatetable_ascii2bic[*spoinp++ & 0x7f];
+			} else {
+				// EOL or other char, fill word with GM
+				acc.word |= 037;
+				gmset = true;
+			}
+		}
+		// store the complete word
+		store(&acc);
+		acc.addr++;
+	}
+
 	// store one word with GM, if no GM was entered
 	if (!gmset) {
 		acc.word = 03737373737373737LL;
-                store(&acc);
-                acc.addr++;
+		store(&acc);
+		acc.addr++;
 	}
-        return (iocw & (MASK_IODUNIT | MASK_IODREAD)) | acc.addr;
-}
 
+	// mark the input buffer empty
+	spoinbuf[0] = 0;
+
+	return (iocw & (MASK_IODUNIT | MASK_IODREAD)) | acc.addr;
+}
 

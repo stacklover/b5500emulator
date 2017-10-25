@@ -47,12 +47,13 @@ void b5500_execute_cm(CPU *cpu)
         opcode = cpu->r.T;
 
 again:
-        variant = opcode >> 6;
+	variant = opcode >> 6;
+	opcode &= 077;
 
         // force off by default (set by CRF)
         repeat = 0;
 
-        switch (opcode & 077) {
+        switch (opcode) {
         case 000:       // XX00: CMX, EXC: Exit character mode
                 if (cpu->r.BROF) {
                         // store destination string
@@ -539,28 +540,64 @@ again:
                 }
                 break;
 
-        case 044:       // XX44: JNC=Jump out of loop conditional
-                if (!cpu->r.TFFF) {
-                        jumpOutOfLoop(cpu, variant);
-                }
-                break;
+/***********************************************************************
+* XX44: JNC=Jump out of loop conditional
+* XX46: JNS=Jump out of loop
+***********************************************************************/
+	case 044:
+		if (cpu->r.TFFF)
+			return; // TFFF set - no jump
+		// else fall through
+	case 046:
+		// save S
+		t1 = cpu->r.S;
+		// get prior LCW addr from X value
+		cpu->r.S = (cpu->r.X & MASK_FREG) >> SHFT_FREG;
+		loadAviaS(cpu); // A = [S], fetch prior LCW from stack
+		// invalidate A
+		cpu->r.AROF = 0;
+		// store prior LCW (39 bits: less control bits) in X
+		cpu->r.X = cpu->r.A & MASK_MANTISSA;
+		// restore S
+		cpu->r.S = t1;
+		if (variant) {
+			// convert C:L to word, adjust it, convert back
+			t1 = (cpu->r.C << 2) + cpu->r.L;
+			t1 += variant;
+			cpu->r.C = t1 >> 2;
+			cpu->r.L = t1 & 3;
+			cpu->r.PROF = false;
+		}
+		return;
 
-        case 045:       // XX45: JFC=Jump forward conditional
-                if (!cpu->r.TFFF) {
-                        // conditional on TFFF
-                        cpu->cycleCount += (variant >> 2) + (variant & 3);
-                        jumpSyllables(cpu, variant);
-                }
-                break;
-
-        case 046:       // XX46: JNS=Jump out of loop
-                jumpOutOfLoop(cpu, variant);
-                break;
-
-        case 047:       // XX47: JFW=Jump forward unconditional
-                cpu->cycleCount += (variant >> 2) + (variant & 3);
-                jumpSyllables(cpu, variant);
-                break;
+/***********************************************************************
+* XX45: JFC=Jump forward conditional
+* XX47: JFW=Jump forward unconditional
+* XX55: JRC=Jump reverse conditional
+* XX57: JRV=Jump reverse unconditional
+***********************************************************************/
+	case 045:
+	case 055:
+		if (cpu->r.TFFF)
+			return; // TFFF set - no jump
+		// else fall through
+	case 047:
+	case 057:
+		if (variant) {
+			// convert C:L to word, adjust it, convert back
+			t1 = (cpu->r.C << 2) + cpu->r.L;
+			if (opcode & 010) {
+				// reverse
+				t1 -= variant;
+			} else {
+				// forward
+				t1 += variant;
+			}
+			cpu->r.C = t1 >> 2;
+			cpu->r.L = t1 & 3;
+			cpu->r.PROF = false;
+		}
+		return;
 
         case 050:       // XX50: RCA=Recall control address
                 cpu->cycleCount += variant;
@@ -728,14 +765,6 @@ again:
                 cpu->r.AROF = false;
                 break;
 
-        case 055:       // XX55: JRC=Jump reverse conditional
-                if (!cpu->r.TFFF) {
-                        // conditional on TFFF
-                        cpu->cycleCount += (variant >> 2) + (variant & 3);
-                        jumpSyllables(cpu, -variant);
-                }
-                break;
-
         case 056:       // XX56: TSA=Transfer source address
                 streamAdjustSourceChar(cpu);
                 if (cpu->r.BROF) {
@@ -765,11 +794,6 @@ again:
                 cpu->r.G = (cpu->r.B >> 15) & 7;
                 // invalidate A
                 cpu->r.AROF = false;
-                break;
-
-        case 057:       // XX57: JRV=Jump reverse unconditional
-                cpu->cycleCount += (variant >> 2) + (variant & 3);
-                jumpSyllables(cpu, -variant);
                 break;
 
         case 060:       // XX60: CEQ=Compare equal

@@ -582,94 +582,128 @@ void b5500_execute_wm(CPU *cpu)
 /***********************************************************************
 * 0131: BBC=branch backward conditional
 * 0231: BFC=branch forward conditional
+* 2131: LBC=branch backward word conditional
+* 2231: LFC=branch forward word conditional
 ***********************************************************************/
                 case 001:
                 case 002:
-                        adjustABFull(cpu);
+                case 021:
+                case 022:
+                        adjustABFull(cpu);	// condition in B, destination in A
+                        cpu->r.BROF = false;	// condition used
                         if (cpu->r.B & 1) {
                                 // true => no branch
-                                cpu->r.AROF = cpu->r.BROF = false;
-                                break;
+                                cpu->r.AROF = false;
+                                return;
                         }
-                        cpu->r.BROF = false;
-                        goto common_branch;
+			goto common_branch;
 
 /***********************************************************************
 * 4131: BBW=branch backward unconditional
 * 4231: BFW=branch forward unconditional
-***********************************************************************/
-                case 041:
-                case 042: // 4231: BFW=branch forward unconditional
-                        adjustAFull(cpu);
-common_branch:
-                        if (OPERAND(cpu->r.A)) {
-                                // simple operand
-                                if (variant == 001 || variant == 041)
-                                        jumpSyllables(cpu, -(cpu->r.A & 0xfff));
-                                else
-                                        jumpSyllables(cpu, cpu->r.A & 0xfff);
-                                cpu->r.AROF = false;
-                        } else {
-                                // descriptor
-                                if (cpu->r.L == 0) {
-                                        --cpu->r.C;
-                                        // adjust for Inhibit Fetch
-                                }
-                                if (presenceTest(cpu, cpu->r.A)) {
-                                        cpu->r.C = cpu->r.A & MASKMEM;
-                                        cpu->r.L = 0;
-                                        // require fetch at SECL
-                                        cpu->r.PROF = false;
-                                        cpu->r.AROF = false;
-                                }
-                        }
-                        return;
-
-/***********************************************************************
-* 2131: LBC=branch backward word conditional
-* 2231: LFC=branch forward word conditional
-***********************************************************************/
-                case 021:
-                case 022:
-                        adjustABFull(cpu);
-                        if (cpu->r.B & 1) {
-                                // true => no branch
-                                cpu->r.AROF = cpu->r.BROF = false;
-                                break;
-                        }
-                        cpu->r.BROF = false;
-                        goto common_branch_word;
-
-/***********************************************************************
 * 6131: LBU=branch backward word unconditional
 * 6231: LFU=branch forward word unconditional
 ***********************************************************************/
+                case 041:
+                case 042:
                 case 061:
                 case 062:
                         adjustAFull(cpu);
-common_branch_word:
-                        if (cpu->r.L == 0) {
-                                --cpu->r.C;
-                                // adjust for Inhibit Fetch
-                        }
-                        if (OPERAND(cpu->r.A)) {
-                                // simple operand
-                                if (variant == 021 || variant == 061)
-                                        jumpWords(cpu, -(cpu->r.A & 0x03ff));
-                                else
-                                        jumpWords(cpu, cpu->r.A & 0x03ff);
-                                cpu->r.AROF = false;
-                        } else {
-                                // descriptor
+		common_branch:
+			if (DESCRIPTOR(cpu->r.A)) {
+				// descriptor
                                 if (presenceTest(cpu, cpu->r.A)) {
+					// present descriptor contains absolute address!
                                         cpu->r.C = cpu->r.A & MASKMEM;
                                         cpu->r.L = 0;
                                         // require fetch at SECL
                                         cpu->r.PROF = false;
                                         cpu->r.AROF = false;
-                                }
+					return;
+				}
+				// absent descriptor. IRQ caused by presenceTest
+				// backup to branch word. syllable not changed. TODO: why??
+                                if (cpu->r.L == 0)
+                                        --cpu->r.C;
+				// set BROF for word branches. TODO: why?
+				// more logical is to set it for conditional branches!
+                                if ((variant & 040) == 0)
+					cpu->r.BROF = true;
+				return;
                         }
-                        return;
+			// operand
+			// back up to branch op
+			if (cpu->r.L == 0) {
+				cpu->r.L = 3;
+				--cpu->r.C;
+				cpu->r.PROF = false;
+			} else {
+				--cpu->r.L;
+			}
+			// Follow logic based on real hardware
+			if ((variant & 020) == 0) {
+				// Syllable branch
+				if (variant & 002) {
+					// Forward
+					if (cpu->r.A & 1) {
+						// N = 0
+						cpu->r.L++;
+						cpu->r.C += (cpu->r.L >> 2);
+						cpu->r.L &= 3;
+					}
+					cpu->r.A >>= 1;
+					if (cpu->r.A & 1) {
+						cpu->r.L+=2;
+						cpu->r.C += (cpu->r.L >> 2);
+						cpu->r.L &= 3;
+					}
+					cpu->r.A >>= 1;
+				} else {
+					// Backward
+					if (cpu->r.A & 1) {
+						// N = 0
+						if (cpu->r.L == 0) {
+							cpu->r.C--;
+							cpu->r.L = 3;
+						} else {
+							cpu->r.L--;
+						}
+					}
+					cpu->r.A >>= 1;
+					if (cpu->r.A & 1) {
+						// N = 1
+						if (cpu->r.L < 2) {
+							cpu->r.C--;
+							cpu->r.L += 2;
+						} else {
+							cpu->r.L -= 2;
+						}
+					}
+					cpu->r.A >>= 1;
+				}
+				// Fix up for backward step
+				if (cpu->r.L == 3) {
+					// N = 3
+					cpu->r.C++;
+					cpu->r.L = 0;
+				} else {
+					cpu->r.L++;
+				}
+			} else {
+				cpu->r.L = 0;
+			}
+			if (variant & 02) {
+				// Forward
+				cpu->r.C += cpu->r.A & 01777;
+			} else {
+				// Backward
+				cpu->r.C -= cpu->r.A & 01777;
+			}
+			// now transfer
+			cpu->r.C &= MASK_ADDR15;
+			cpu->r.AROF = 0;
+			cpu->r.PROF = 0;
+			return;
 
 /***********************************************************************
 * 0431: SSN=set sign bit (set negative)
@@ -741,8 +775,8 @@ common_branch_word:
                                 cpu->r.S = (cpu->r.B >> SHFT_FREG) & MASKMEM;
                                 cpu->r.C = cpu->r.B & MASKMEM;
                                 cpu->r.L = 0;
-                                cpu->r.PROF = false;
                                 // require fetch at SECL
+                                cpu->r.PROF = false;
                                 loadBviaS(cpu);
                                 // B = [S], fetch MSCW
                                 --cpu->r.S;
@@ -789,7 +823,11 @@ common_branch_word:
                         }
                         return;
 
-                case 004: // 0435: XIT=exit procedure
+/***********************************************************************
+* 0435: XIT=exit procedure
+* ?
+***********************************************************************/
+                case 004:
                         cpu->r.AROF = false;
                         cpu->r.S = cpu->r.F;
                         loadBviaS(cpu);
@@ -801,22 +839,41 @@ common_branch_word:
                 }
                 return;
 
-        case 041: // XX41: index, mark stack, etc.
+/***********************************************************************
+* XX41: index, mark stack, etc.
+* ?
+***********************************************************************/
+        case 041:
                 switch (variant) {
-                case 001: // 0141: INX=index
+
+/***********************************************************************
+* 0141: INX=index
+* ?
+***********************************************************************/
+                case 001:
                         adjustABFull(cpu);
                         cpu->r.M = (cpu->r.A + cpu->r.B) & MASKMEM;
                         cpu->r.A = (cpu->r.A & ~MASKMEM) | cpu->r.M;
                         cpu->r.BROF = false;
                         return;
 
-                case 002: // 0241: COC=construct operand call
+
+/***********************************************************************
+* 0241: COC=construct operand call
+* ?
+***********************************************************************/
+                case 002:
                         exchangeTOS(cpu);
                         cpu->r.A |= MASK_FLAG;
                         // set [0:1]
                         operandCall(cpu);
                         return;
-                case 004: // 0441: MKS=mark stack
+
+/***********************************************************************
+* 0441: MKS=mark stack
+* ?
+***********************************************************************/
+                case 004:
                         adjustABEmpty(cpu);
                         cpu->r.B = buildMSCW(cpu);
                         cpu->r.BROF = true;
@@ -831,13 +888,23 @@ common_branch_word:
                                 cpu->r.MSFF = true;
                         }
                         return;
-                case 012: // 1241: CDC=construct descriptor call
+
+/***********************************************************************
+* 1241: CDC=construct descriptor call
+* ?
+***********************************************************************/
+                case 012:
                         exchangeTOS(cpu);
                         cpu->r.A |= MASK_FLAG;
                         // set [0:1]
                         descriptorCall(cpu);
                         return;
-                case 021: // 2141: SSF=F & S register set/store
+
+/***********************************************************************
+* 2141: SSF=F & S register set/store
+* ?
+***********************************************************************/
+                case 021:
                         adjustABFull(cpu);
                         switch (cpu->r.A & 3) {
                         case 0: // store F into B.[18:15]
@@ -858,7 +925,12 @@ common_branch_word:
                         }
                         cpu->r.AROF = false;
                         return;
-                case 025: // 2541: LLL=link list look-up
+
+/***********************************************************************
+* 2541: LLL=link list look-up
+* ?
+***********************************************************************/
+                case 025:
                         adjustABFull(cpu);
                         // get test field
                         t1 = cpu->r.A & MASK_MANTISSA;
@@ -879,13 +951,24 @@ common_branch_word:
                                 }
                         } while (true);
                         return;
-                case 044: // 4441: CMN=enter character mode inline
+
+/***********************************************************************
+* 4441: CMN=enter character mode inline
+* ?
+***********************************************************************/
+                case 044:
                         enterCharModeInline(cpu);
                         return;
+
 		default: goto unused;
                 }
                 return;
-        case 045: // XX45: ISO=Variable Field Isolate op
+
+/***********************************************************************
+* XX45: ISO=Variable Field Isolate op
+* ?
+***********************************************************************/
+        case 045:
                 adjustAFull(cpu);
                 t2 = variant >> 3; // number of whole chars
                 if (t2) {
@@ -906,9 +989,20 @@ common_branch_word:
                         cpu->r.H = 0;
                 }
                 return;
-        case 051: // XX51: delete & conditional branch ops
-                if (variant < 4) {
-                        // 0051=DEL: delete TOS (or field branch with zero-length field)
+
+/***********************************************************************
+* XX51: delete & conditional branch ops
+* 0051:      DEL=delete TOS (or field branch with zero-length field)
+* X051/X451: CFN=non-zero field branch forward nondestructive
+* X151/X551: CBN=non-zero field branch backward nondestructive
+* X251/X651: CFD=non-zero field branch forward destructive
+* X351/X751: CBD=non-zero field branch backward destructive
+***********************************************************************/
+        case 051:
+		// get field length (1-15 bits)
+		t2 = variant >> 2;
+                if (t2 == 0) {
+			// field length 0 means false, so just delete word on TOS
                         if (cpu->r.AROF) {
                                 cpu->r.AROF = false;
                         } else if (cpu->r.BROF) {
@@ -916,70 +1010,38 @@ common_branch_word:
                         } else {
                                 --cpu->r.S;
                         }
-                } else {
-                        adjustABFull(cpu);
-                        // field length (1-15 bits)
-                        t2 = variant >> 2;
-                        t1 = fieldIsolate(cpu->r.B, cpu->r.G*6+cpu->r.H, t2);
-                        // approximate the shift counts
-                        cpu->cycleCount += cpu->r.G + cpu->r.H + (t2 >> 1);
-                        // A is unconditionally empty at end
-                        cpu->r.AROF = false;
-                        switch (variant & 0x03) {
-                        case 0x02: // X251/X651: CFD=non-zero field branch forward destructive
-                                cpu->r.BROF = false;
-                                // no break: fall through
-                        case 0x00: // X051/X451: CFN=non-zero field branch forward nondestructive
-                                if (t1) {
-                                        if (OPERAND(cpu->r.A)) {
-                                                // simple operand
-                                                jumpSyllables(cpu, cpu->r.A & 0x0fff);
-                                        } else {
-                                                // descriptor
-                                                if (cpu->r.L == 0) {
-                                                        // adjust for Inhibit Fetch
-                                                        --cpu->r.C;
-                                                }
-                                                if (presenceTest(cpu, cpu->r.A)) {
-                                                        cpu->r.C = cpu->r.A & MASKMEM;
-                                                        cpu->r.L = 0;
-                                                        // require fetch at SEQL
-                                                        cpu->r.PROF = false;
-                                                }
-                                        }
-                                }
-                                return;
-                        case 0x03: // X351/X751: CBD=non-zero field branch backward destructive
-                                cpu->r.BROF = false;
-                                // no break: fall through
-                        case 0x01: // X151/X551: CBN=non-zero field branch backward nondestructive
-                                if (t1) {
-                                        if (OPERAND(cpu->r.A)) {
-                                                // simple operand
-                                                jumpSyllables(cpu, -(cpu->r.A & 0x0fff));
-                                        } else {
-                                                // descriptor
-                                                if (cpu->r.L == 0) {
-                                                        // adjust for Inhibit Fetch
-                                                        --cpu->r.C;
-                                                }
-                                                if (presenceTest(cpu, cpu->r.A)) {
-                                                        cpu->r.C = cpu->r.A & MASKMEM;
-                                                        cpu->r.L = 0;
-                                                        // require fetch at SEQL
-                                                        cpu->r.PROF = false;
-                                                }
-                                        }
-                                }
-                        return;
-                        }
+			return;
                 }
-                return;
+		// non-zero field
+		adjustABFull(cpu);
+		// isolate the number of bits to test
+		t1 = fieldIsolate(cpu->r.B, cpu->r.G*6+cpu->r.H, t2);
+		// approximate the shift counts
+		cpu->cycleCount += cpu->r.G + cpu->r.H + (t2 >> 1);
+		// A is unconditionally empty at end
+		cpu->r.AROF = false;
+		// destructive branch?
+		if (variant & 002)
+			cpu->r.BROF = false;
+		// test the field
+		if (t1) {
+			// continue at other branch code
+			if (variant & 001) {
+				// branch backwards
+				variant = 041;
+			} else {
+				// branch forwards
+				variant = 042;
+			}
+			goto common_branch;
+		}
+		// branch not taken, remove destination
+		cpu->r.AROF = false;
+		return;
 
 /***********************************************************************
 * 0055: NOP=no operation
-* gh55: DIA=Dial A
-* set G and H registers
+* gh55: DIA=Dial A - set G and H registers
 ***********************************************************************/
         case 055:
                 if (variant) {
@@ -990,8 +1052,7 @@ common_branch_word:
 
 /***********************************************************************
 * 0061: XRT=Temporarily set full PRT addressing mode
-* kv61: DIB=Dial B
-* set K and V registers
+* kv61: DIB=Dial B - set K and V registers
 ***********************************************************************/
         case 061:
                 if (variant) {
@@ -1094,71 +1155,6 @@ common_branch_word:
                 }
                 cpu->r.A = true;
 		return;
-
-/***********************************************************************
-* common finals for all branches
-* branch_word_forward:
-* branch_word_backward:
-* descriptorbranch_adjust_c:
-*   since C:L already points to the next syllable, backup C if that is
-*   in the next word (L==0)
-* descriptorbranch:
-*   test for presence bit, cause IRQ in normal state if not present
-*   set C:L to address in descriptor
-*   mark A register empty
-*   mark P register empty
-***********************************************************************/
-#if 0
-	branch_syll_forward:
-		if (OPERAND(cpu->r.A)) {
-			// simple operand
-			jumpSyllables(cpu, cpu->r.A & 0xfff);
-			cpu->r.AROF = false;
-			return;
-		}
-		goto descriptorbranch_adjust_c;
-
-	branch_syll_backward:
-		if (OPERAND(cpu->r.A)) {
-			// simple operand
-			jumpSyllables(cpu, -(cpu->r.A & 0xfff));
-			cpu->r.AROF = false;
-			return;
-		}
-		goto descriptorbranch_adjust_c;
-
-	branch_word_forward:
-		if (OPERAND(cpu->r.A)) {
-			// simple operand
-			if (cpu->r.L == 0) --cpu->r.C;
-			jumpWords(cpu, cpu->r.A & MASK_ADDR10);
-			cpu->r.AROF = false;
-			return;
-		}
-		goto descriptorbranch_adjust_c;
-
-	branch_word_backward:
-		if (OPERAND(cpu->r.A)) {
-			// simple operand
-			if (cpu->r.L == 0) --cpu->r.C;
-			jumpWords(cpu, -(cpu->r.A & MASK_ADDR10));
-			cpu->r.AROF = false;
-			return;
-		}
-		goto descriptorbranch_adjust_c;
-
-	descriptorbranch_adjust_c:
-		// TODO: adjust before presence test?
-		if (cpu->r.L == 0) --cpu->r.C;
-		if (presenceTest(cpu, cpu->r.A)) {
-		        cpu->r.C = cpu->r.A & MASKMEM;
-		        cpu->r.L = 0;
-		        // require fetch at SECL
-		        cpu->r.PROF = false;
-		        cpu->r.AROF = false;
-		}
-		return;
-#endif
 
 /***********************************************************************
 * inofficially, all unused opcodes are NOP

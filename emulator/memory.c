@@ -19,13 +19,9 @@
 *   some refactoring in the functions, added documentation
 ***********************************************************************/
 
-#define NEW_INDEXDESCRIPTOR 1
-#define NEW_INTEGERSTORE 1
-
 #include <stdio.h>
 #include "common.h"
 
-#if NEW_INDEXDESCRIPTOR || NEW_INTEGERSTORE
 /*
  * local function to integerize a REAL value to an INTEGER
  * return true on integer overflow
@@ -72,7 +68,6 @@ static BIT integerize(WORD48 *v) {
 
 	return false;
 }
-#endif
 
 /*
  * Called by a requestor module passing accessor object "acc" to fetch a
@@ -148,105 +143,6 @@ void accessError(CPU *cpu)
         }
 }
 
-#if 0
-/*
- * Computes an absolute memory address from the relative "offset" parameter
- * and leaves it in the M register. See Table 6-1 in the B5500 Reference
- * Manual. "cEnable" determines whether C-relative addressing is permitted.
- * This offset must be in (0..1023)
- */
-void computeRelativeAddr(CPU *cpu, unsigned offset, BIT cEnabled)
-{
-        if (dotrcmem)
-                printf("\tRelAddr(%04o,%u) -> ",
-                        offset, cEnabled);
-        cpu->cycleCount += 2; // approximate the timing
-        if (cpu->r.SALF) {
-                // subroutine level - check upper 3 bits of the 10 bit offset
-                switch ((offset >> 7) & 7) {
-                case 0:
-                case 1:
-                case 2:
-                case 3:
-                        // pattern 0xx xxxxxxx - R+ relative
-                        // reach 0..511
-                        offset &= 0x1ff;
-                        cpu->r.M = (cpu->r.R<<6) + offset;
-                        if (dotrcmem)
-                                printf("R+%o -> M=%05o\n", offset, cpu->r.M);
-                        break;
-                case 4:
-                case 5:
-                        // pattern 10x xxxxxxx - F+ or (R+7)+ relative
-                        // reach 0..255
-                        offset &= 0xff;
-                        if (cpu->r.MSFF) {
-                                // during function parameter loading its (R+7)+
-                                cpu->r.M = (cpu->r.R<<6) + RR_MSCW;
-                                loadMviaM(cpu); // M = [M].[18:15]
-                                cpu->r.M += offset;
-                                if (dotrcmem)
-                                        printf("(R+7)+%o -> M=%05o\n", offset, cpu->r.M);
-                        } else {
-                                // inside function its F+
-                                cpu->r.M = cpu->r.F + (offset & 0xff);
-                                if (dotrcmem)
-                                        printf("F+%o -> M=%05o\n", offset, cpu->r.M);
-                        }
-                        break;
-                case 6:
-                        // pattern 110 xxxxxxx - C+ relative on read, R+ on write
-                        // reach 0..127
-                        offset &= 0x7f;
-                        if (cEnabled) {
-                                // adjust C for fetch offset from
-                                // syllable the instruction was in
-                                cpu->r.M = (cpu->r.L ? cpu->r.C : cpu->r.C-1)
-                                        + offset;
-                                if (dotrcmem)
-                                        printf("C+%o -> M=%05o\n", offset, cpu->r.M);
-                        } else {
-                                cpu->r.M = (cpu->r.R<<6) + offset;
-                                if (dotrcmem)
-                                        printf("R+%o -> M=%05o\n", offset, cpu->r.M);
-                        }
-                        break;
-                case 7:
-                        // pattern 111 xxxxxxx - F- or (R+7)- relative
-                        // reach 0..127 (negative direction)
-                        offset &= 0x7f;
-                        if (cpu->r.MSFF) {
-                                cpu->r.M = (cpu->r.R<<6) + RR_MSCW;
-                                loadMviaM(cpu); // M = [M].[18:15]
-                                cpu->r.M -= offset;
-                                if (dotrcmem)
-                                        printf("(R+7)-%o -> M=%05o\n", offset, cpu->r.M);
-                        } else {
-                                cpu->r.M = cpu->r.F - offset;
-                                if (dotrcmem)
-                                        printf("F-%o -> M=%05o\n", offset, cpu->r.M);
-                        }
-                        break;
-                } // switch
-        } else {
-                // program level - all 10 bits are offset
-                offset &= 0x3ff;
-                cpu->r.M = (cpu->r.R<<6) + offset;
-                if (dotrcmem)
-                        printf("R+%o,M=%05o\n", offset, cpu->r.M);
-        }
-
-        // Reset variant-mode R-relative addressing, if it was enabled
-        if (cpu->r.VARF) {
-                if (dotrcmem)
-                        printf("Resetting VARF\n");
-                cpu->r.SALF = true;
-                cpu->r.VARF = false;
-        }
-}
-#endif
-
-#if NEW_INDEXDESCRIPTOR
 /*
  * Indexes a descriptor and, if successful leaves the indexed value in
  * the A register. Returns 1 if an interrupt is set and the syllable is
@@ -307,74 +203,6 @@ BIT indexDescriptor(CPU *cpu)
         }
         return interrupted;
 }
-
-#else
-
-/*
- * Indexes a descriptor and, if successful leaves the indexed value in
- * the A register. Returns 1 if an interrupt is set and the syllable is
- * to be exited
- */
-BIT indexDescriptor(CPU *cpu)
-{
-        WORD48  aw;     // local copy of A reg
-        BIT             interrupted = false;    // fatal error, interrupt set
-        NUM             I;      // index
-
-        adjustABFull(cpu);
-        aw = cpu->r.A;
-
-        num_extract(&cpu->r.B, &I);
-        // Normalize the index, if necessary
-        if (I.e < 0) {
-                // index exponent is negative
-                cpu->cycleCount += num_right_shift_exp(&I, 0);
-                // round up the index
-                num_round(&I);
-        } else if (I.e > 0) {
-                // index exponent is positive
-                cpu->cycleCount += num_left_shift_exp(&I, 0);
-                if (I.e != 0) {
-                        // oops... integer overflow normalizing the index
-                        interrupted = true;
-                        if (cpu->r.NCSF) {
-                                // set I07/8: integer overflow
-                                cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_INTO;
-                                signalInterrupt(cpu->id, "INX Overflow");
-                        }
-                }
-        }
-        // look only at lowest 10 bits
-        I.m &= 0x3ff;
-
-        // Now we have an integerized index value in I
-        if (!interrupted) {
-                if (I.s && I.m) {
-                        // Oops... index is negative
-                        interrupted = true;
-                        if (cpu->r.NCSF) {
-                                // set I05/8: invalid-index
-                                cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_INDEX;
-                                signalInterrupt(cpu->id, "INX<0");
-                        }
-                } else if (I.m < ((aw & MASK_WCNT) >> SHFT_WCNT)) {
-                        // We finally have a valid index
-                        I.m = (aw + I.m) & MASK_ADDR;
-                        cpu->r.A = (aw & ~MASK_ADDR) | I.m;
-                        cpu->r.BROF = false;
-                } else {
-                        // Oops... index not less than size
-                        interrupted = true;
-                        if (cpu->r.NCSF) {
-                                // set I05/8: invalid-index
-                                cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_INDEX;
-                                signalInterrupt(cpu->id, "INX>WC");
-                        }
-                }
-        }
-        return interrupted;
-}
-#endif
 
 /*
  * load registers from memory
@@ -580,7 +408,6 @@ void integerStore(CPU *cpu, BIT conditional, BIT destructive)
 
         if (normalize) {
 
-#if NEW_INTEGERSTORE
 		if (integerize(&cpu->r.B)) {
                         // oops... integer overflow normalizing the mantisa
                         doStore = false;
@@ -592,32 +419,6 @@ void integerStore(CPU *cpu, BIT conditional, BIT destructive)
 				return;
 			}
 		}
-#else
-
-                num_extract(&cpu->r.B, &B);
-
-                if (B.e < 0) {
-                        // exponent is negative
-                        cpu->cycleCount += num_right_shift_exp(&B, 0);
-                        // round up the number
-                        num_round(&B);
-                } else if (B.e > 0) {
-                        // exponent is positive
-                        cpu->cycleCount += num_left_shift_exp(&B, 0);
-                        if (B.e != 0) {
-                                // oops... integer overflow normalizing the mantisa
-                                doStore = false;
-                                if (cpu->r.NCSF) {
-                                        // set I07/8: integer overflow
-                                        cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_INTO;
-                                        signalInterrupt(cpu->id, "ISD/ISN Overflow");
-                                }
-                        }
-                }
-                if (doStore) {
-                        num_compose(&B, &cpu->r.B);
-                }
-#endif
         }
 
         if (doStore) {
