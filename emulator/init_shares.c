@@ -42,7 +42,7 @@ int	shm_main,   // main memory
 	msg_cc;	    // messages	to CC
 
 WORD48		*MAIN;
-CPU		*P[2];
+CPU2		*P[2];
 CENTRAL_CONTROL	*CC;
 
 void b5500_init_shares(void)
@@ -52,12 +52,12 @@ void b5500_init_shares(void)
 		perror("shmget MAIN");
 		exit(2);
 	}
-	shm_cpu[0] = shmget(SHM_CPUA, sizeof(CPU), IPC_CREAT|0644);
+	shm_cpu[0] = shmget(SHM_CPUA, sizeof(CPU2), IPC_CREAT|0644);
 	if (shm_cpu[0] < 0) {
 		perror("shmget P1");
 		exit(2);
 	}
-	shm_cpu[1] = shmget(SHM_CPUB, sizeof(CPU), IPC_CREAT|0644);
+	shm_cpu[1] = shmget(SHM_CPUB, sizeof(CPU2), IPC_CREAT|0644);
 	if (shm_cpu[1] < 0) {
 		perror("shmget P2");
 		exit(2);
@@ -89,12 +89,12 @@ void b5500_init_shares(void)
 		perror("shmat MAIN");
 		exit(2);
 	}
-	P[0] = (CPU *)shmat(shm_cpu[0],	NULL,	0);
+	P[0] = (CPU2 *)shmat(shm_cpu[0], NULL,	0);
 	if ((int)P[0]	== -1) {
 		perror("shmat P1");
 		exit(2);
 	}
-	P[1] = (CPU *)shmat(shm_cpu[1],	NULL,	0);
+	P[1] = (CPU2 *)shmat(shm_cpu[1], NULL,	0);
 	if ((int)P[1]	== -1) {
 		perror("shmat P2");
 		exit(2);

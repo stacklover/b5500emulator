@@ -17,8 +17,9 @@
 #   overhaul of file names
 #**********************************************************************/
 
-ALL =		$(ODIR)/processor_panel.exe \
-		$(ODIR)/emulator.exe
+ALL =		$(ODIR)/emulator2.exe
+		#$(ODIR)/processor_panel.exe \
+		#$(ODIR)/emulator.exe \
 		#$(ODIR)/asm-n-run.exe \
 		#$(ODIR)/sptest.exe \
 
@@ -46,7 +47,18 @@ OBJEMULATOR =	$(ODIR)/emulator.o $(ODIR)/init_shares.o \
 		$(ODIR)/dev_mt.o \
 		$(ODIR)/dev_lp.o \
 		$(ODIR)/dev_dk.o \
-		$(ODIR)/translatetables.o	\
+		$(ODIR)/translatetables.o \
+		$(ODIR)/instr_table.o
+
+OBJEMULATOR2 =	$(ODIR)/emulator2.o $(ODIR)/init_shares.o \
+		$(ODIR)/b5500_cpu.o \
+		$(ODIR)/cc2.o \
+		$(ODIR)/dev_spo.o \
+		$(ODIR)/dev_cr.o \
+		$(ODIR)/dev_mt.o \
+		$(ODIR)/dev_lp.o \
+		$(ODIR)/dev_dk.o \
+		$(ODIR)/translatetables.o \
 		$(ODIR)/instr_table.o
 
 OBJASMNRUN =	$(ODIR)/asm-n-run.o \
@@ -55,7 +67,7 @@ OBJASMNRUN =	$(ODIR)/asm-n-run.o \
 		$(ODIR)/stack.o $(ODIR)/memory.o $(ODIR)/jump_call.o \
 		$(ODIR)/single.o $(ODIR)/double.o \
 		$(ODIR)/misc_cpu.o $(ODIR)/bitfield.o $(ODIR)/stream.o \
-		$(ODIR)/translatetables.o	\
+		$(ODIR)/translatetables.o \
 		$(ODIR)/instr_table.o
 
 OBJSPTEST =	$(ODIR)/sptest.o \
@@ -64,13 +76,13 @@ OBJSPTEST =	$(ODIR)/sptest.o \
 		$(ODIR)/stack.o $(ODIR)/memory.o $(ODIR)/jump_call.o \
 		$(ODIR)/single.o $(ODIR)/double.o \
 		$(ODIR)/misc_cpu.o $(ODIR)/bitfield.o $(ODIR)/stream.o \
-		$(ODIR)/translatetables.o	\
+		$(ODIR)/translatetables.o \
 		$(ODIR)/instr_table.o
 
-INC =		common.h
+INC =		common.h b5500_defs.h
 
 CFLAGS		= -D_LARGEFILE64_SOURCE	-D_FILE_OFFSET_BITS=64 -pipe -Os \
-		  -D_THREAD_SAFE -D_REENTRANT -Wall
+		  -D_THREAD_SAFE -D_REENTRANT -DNOSIMH -Wall
 
 LFLAGS		= #-lfltk_images -lfltk	-lpng -lz -ljpeg  -lXext -lXft \
 		  #-lfontconfig	-lXinerama -lpthread -ldl -lm -lX11
@@ -88,6 +100,10 @@ $(ODIR)/processor_panel.exe:	 $(OBJPANEL) Makefile
 $(ODIR)/emulator.exe:	 $(OBJEMULATOR) Makefile
 	@echo "*** Linking $@..."
 	$(CXX) $(LFLAGS) -o $(ODIR)/emulator.exe $(OBJEMULATOR)
+
+$(ODIR)/emulator2.exe:	 $(OBJEMULATOR2) Makefile
+	@echo "*** Linking $@..."
+	$(CXX) $(LFLAGS) -o $(ODIR)/emulator2.exe $(OBJEMULATOR2)
 
 $(ODIR)/asm-n-run.exe:	$(OBJASMNRUN) Makefile
 	@echo "*** Linking $@..."

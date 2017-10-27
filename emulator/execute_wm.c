@@ -68,15 +68,42 @@ void b5500_execute_wm(CPU *cpu)
 * Subroutines might be called
 ***********************************************************************/
 	if (variant == 2) {
-                adjustAEmpty(cpu);
-                computeRelativeAddr(cpu, opcode >> 2, true);
-                loadAviaM(cpu);
-                if (DESCRIPTOR(cpu->r.A)) {
-                        // if it's a control word, evaluate it
-                        operandCall(cpu);
-                }
-                // otherwise, just leave it in A
-                return;
+		adjustAEmpty(cpu);
+		computeRelativeAddr(cpu, opcode >> 2, true);
+		loadAviaM(cpu);
+		cpu->r.SALF |= cpu->r.VARF;
+		cpu->r.VARF = false;
+operandcall:	// entry fŕom COC
+		if (DESCRIPTOR(cpu->r.A)) {
+			if ((cpu->r.A & MASK_CODE) != 0 && (cpu->r.A & MASK_XBIT) == 0) {
+				// control word, just leave it on stack
+				return;
+			}
+			if (presenceTest(cpu, cpu->r.A)) {
+				// present descriptor
+				if ((cpu->r.A & MASK_CODE) != 0 && (cpu->r.A & MASK_XBIT) != 0) {
+					// program descriptor
+					enterSubroutine(cpu, false);
+					return;
+				}
+				// data descriptor
+				if (indexDescriptor(cpu)) {
+					// indexing failed, IRQ already caused
+					return;
+				}
+				// get value
+				loadAviaM(cpu); // A = [M]
+				if (DESCRIPTOR(cpu->r.A) && cpu->r.NCSF) {
+					// Flag bit is set and NORMAL state
+				        causeSyllableIrq(cpu, IRQ_FLAG, "OPDC FLAG SET");
+				}
+				
+			}
+			// not present, IRQ already caused
+			return;
+		}
+		// simple operand, just leave it in A
+		return;
 	}
 
 /***********************************************************************
@@ -85,11 +112,34 @@ void b5500_execute_wm(CPU *cpu)
 * Subroutines might be called
 ***********************************************************************/
 	if (variant == 3) {
-                adjustAEmpty(cpu);
-                computeRelativeAddr(cpu, opcode >> 2, true);
-                loadAviaM(cpu);
-                descriptorCall(cpu);
-                return;
+		adjustAEmpty(cpu);
+		computeRelativeAddr(cpu, opcode >> 2, true);
+		loadAviaM(cpu);
+		cpu->r.SALF |= cpu->r.VARF;
+		cpu->r.VARF = false;
+descriptorcall:	// entry fŕom CDC
+		if (DESCRIPTOR(cpu->r.A)) {
+			if ((cpu->r.A & MASK_CODE) != 0 && (cpu->r.A & MASK_XBIT) == 0) {
+				// control word, just leave its address present on stack
+				cpu->r.A = MASK_FLAG | MASK_PBIT | cpu->r.M;
+				return;
+			}
+			if (presenceTest(cpu, cpu->r.A)) {
+				// present descriptor
+				if ((cpu->r.A & MASK_CODE) != 0 && (cpu->r.A & MASK_XBIT) != 0) {
+					// program descriptor
+					enterSubroutine(cpu, true);
+					return;
+				}
+				// Data descriptor
+				if (indexDescriptor(cpu))
+					return;
+				cpu->r.A |= MASK_FLAG | MASK_PBIT;
+			}
+			return;
+		}
+		cpu->r.A = MASK_FLAG | MASK_PBIT | cpu->r.M;
+		return;
         }
 
 /***********************************************************************
@@ -788,51 +838,57 @@ void b5500_execute_wm(CPU *cpu)
 /***********************************************************************
 * 0235: RTN=return normal
 * 1235: RTS=return special
-* ?
+* If A is an operand or a present descriptor,
+* proceed with the return,
+* otherwise throw a p-bit interrupt
+* 0435: XIT=exit procedure
 ***********************************************************************/
                 case 002:
                 case 012:
-                        adjustAFull(cpu);
-                        // If A is an operand or a present descriptor,
-                        // proceed with the return,
-                        // otherwise throw a p-bit interrupt
-                        // (cpu isn't well-documented)
-                        if (OPERAND(cpu->r.A) || presenceTest(cpu, cpu->r.A)) {
-                                if (variant == 002) {
-                                        // RTN - reset stack to F to be at RCW
-                                        cpu->r.S = cpu->r.F;
-                                } else {
-                                        // RTS - stack already at RCW
-                                }
-                                loadBviaS(cpu);
-                                // B = [S], fetch the RCW
-                                switch (exitSubroutine(cpu, false)) {
-                                case 0:
-                                        cpu->r.X = 0;
-                                        operandCall(cpu);
-                                        break;
-                                case 1:
-                                        // set Q05F, for display only
-                                        cpu->r.Q05F = true;
-                                        cpu->r.X = 0;
-                                        descriptorCall(cpu);
-                                        break;
-                                case 2: // flag-bit interrupt occurred, do nothing
-                                        break;
-                                }
-                        }
-                        return;
-
-/***********************************************************************
-* 0435: XIT=exit procedure
-* ?
-***********************************************************************/
+			adjustAFull(cpu);
+			if (DESCRIPTOR(cpu->r.A) && !presenceTest(cpu, cpu->r.A)) {
+				return;
+			}
+			// fall through
                 case 004:
-                        cpu->r.AROF = false;
-                        cpu->r.S = cpu->r.F;
-                        loadBviaS(cpu);
-                        // B = [S], fetch the RCW
-                        exitSubroutine(cpu, false);
+			if (variant & 04) // XIT only
+				cpu->r.AROF = 0;
+			cpu->r.BROF = 0;
+			cpu->r.PROF = 0;
+			if ((variant & 010) == 0) // RTN and XIT only
+				cpu->r.S = cpu->r.F;	// reset stack to last RCW
+			loadBviaS(cpu);		// get RCW
+			if (OPERAND(cpu->r.B)) {
+				// OOPS, not a control word
+				if (cpu->r.NCSF)
+					causeSyllableIrq(cpu, IRQ_FLAG, "RTN/RTS/XIT RCW FLAG RESET");
+				return;
+			}
+			// set registers from RCW
+			t1 = applyRCW(cpu, cpu->r.B, false, false); /* Restore registers */
+			cpu->r.S = cpu->r.F;	// reset stack to MSCW
+			cpu->r.BROF = 0;
+			loadBviaS(cpu);		// get MSCW
+			cpu->r.S--; // TODO check for wrap
+			// set registers from MSCW
+			applyMSCW(cpu, cpu->r.B);
+			// TODO: whats this for?
+			if (cpu->r.MSFF && cpu->r.SALF) {
+				cpu->r.M = cpu->r.F;
+				do {
+					/* B = [M], M = B[F-FIELD]; */
+					loadMviaM(cpu);	/* Grab previous MCSW */
+				} while(cpu->r.B & MASK_SALF);
+				cpu->r.M = (cpu->r.R << RSHIFT) | RR_MSCW;
+				storeBviaS(cpu);
+			}
+			cpu->r.BROF = 0;
+			if (variant & 02) {	/* RTS and RTN */
+				if (t1)
+					goto descriptorcall;
+				else
+					goto operandcall;
+			}
                         return;
 
 		default: goto unused;
@@ -860,14 +916,17 @@ void b5500_execute_wm(CPU *cpu)
 
 /***********************************************************************
 * 0241: COC=construct operand call
-* ?
+* 1241: CDC=construct descriptor call
 ***********************************************************************/
                 case 002:
-                        exchangeTOS(cpu);
-                        cpu->r.A |= MASK_FLAG;
-                        // set [0:1]
-                        operandCall(cpu);
-                        return;
+                        adjustABFull(cpu);
+			t1 = cpu->r.A;
+			cpu->r.A = cpu->r.B | MASK_FLAG;
+			cpu->r.B = t1;
+			if (variant & 010)
+				goto descriptorcall;
+			else
+				goto operandcall;
 
 /***********************************************************************
 * 0441: MKS=mark stack
@@ -887,17 +946,6 @@ void b5500_execute_wm(CPU *cpu)
                                 }
                                 cpu->r.MSFF = true;
                         }
-                        return;
-
-/***********************************************************************
-* 1241: CDC=construct descriptor call
-* ?
-***********************************************************************/
-                case 012:
-                        exchangeTOS(cpu);
-                        cpu->r.A |= MASK_FLAG;
-                        // set [0:1]
-                        descriptorCall(cpu);
                         return;
 
 /***********************************************************************

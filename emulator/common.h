@@ -201,6 +201,77 @@ typedef struct cpu {
 } CPU;
 
 /*
+ * all the data defining one processor (version 2)
+ */
+typedef struct cpu2 {
+        WORD48          rA;      // A register
+        WORD48          rB;      // B register
+        ADDR15          rC;      // C register (program address)
+        WORD6           rE;      // E Memory access control register
+        ADDR15          rF;      // F register (frame address)
+        WORD6           rGH;     // Character/Bit index register for A
+        WORD8           rI;      // I register (interrupts)
+        WORD4           rJ;      // J state machine register
+        WORD6           rKV;     // Character/Bit index register for B
+        WORD2           rL;      // Instruction syllable index in P
+        ADDR15          rM;      // M register (memory address)
+        WORD4           rN;      // Octal shift counter for B
+        WORD48          rP;      // Current program instruction word register
+// Q register is handled as BITs, see below
+        ADDR15          rR;      // High-order 9 bits of PRT base address (TALLY in char mode)
+				 // lower 6 bits MUST be kept clear
+        ADDR15          rS;      // S register (stack pointer)
+        WORD12          rT;      // Current program syllable register
+        WORD39          rX;      // Mantissa extension for B (loop control in CM)
+        WORD48          rY;      // Serial character register for A (TODO: Richard uses this as 2nd X register in double precision)
+        WORD6           rZ;      // Serial character register for B
+        WORD8           rTM;     // Temporary maintenance storage register
+// Q register as BITs (not all are used in accordance with the real B5500)
+        BIT             bQ01F;   // Q register Bit 01
+        BIT             bQ02F;   // Q register Bit 02
+        BIT             bQ03F;   // Q register Bit 03
+        BIT             bQ04F;   // Q register Bit 04
+        BIT             bQ05F;   // Q register Bit 05
+        BIT             bQ06F;   // Q register Bit 06
+        BIT             bQ07F;   // Q register Bit 07
+        BIT             bQ08F;   // Q register Bit 08
+        BIT             bQ09F;   // Q register Bit 09
+        BIT             bQ12F;   // Q register Bit 12
+// Q12F: MSFF (word mode: MSCW is pending RCW)
+// Q12F: TFFF (char mode: True-False Flip-Flop)
+#define bMSFF           bQ12F
+#define bTFFF           bQ12F
+// other status and flag registers (not all are currently used)
+        BIT             bAROF;   // A register occupied flag
+        BIT             bBROF;   // B register occupied flag
+        BIT             bCCCF;   // Clock-count control FF (maintenance only)
+        BIT             bCWMF;   // Character/word mode FF (1=CM)
+        BIT             bEIHF;   // E-register Inhibit Address FF
+        BIT             bHLTF;   // Processor halt FF
+        BIT             bMRAF;   // Memory read access FF
+        BIT             bMROF;   // Memory read obtained FF
+        BIT             bMWOF;   // Memory write obtained FF
+        BIT             bNCSF;   // Normal/Control State FF (1=normal)
+        BIT             bPROF;   // P contents valid
+        BIT             bSALF;   // Program/subroutine state FF (1=subroutine)
+        BIT             bTROF;   // T contents valid
+        BIT             bVARF;   // Variant-mode FF (enables full PRT indexing)
+        BIT             bUS14X;  // Operator Halt Switch
+        BIT             bzzzF;   // one lamp in display right of Q1 has no label
+
+        ACCESSOR        acc;            // memory access
+        const char      *id;            // pointer to name of CPU (for display/debug only)
+        unsigned        cycleCount;     // approx of CPU cycles needed
+        unsigned        cycleLimit;     // Cycle limit for this.run()
+        unsigned        normalCycles;   // Current normal-state cycle count (for UI display)
+        unsigned        controlCycles;  // Current control-state cycle count (for UI display)
+        unsigned        runCycles;      // Current cycle count for this.run()
+        unsigned        totalCycles;    // Total cycles executed on this processor
+        BIT             isP1;           // we are CPU #1
+        BIT             busy;           // CPU is busy
+} CPU2;
+
+/*
  * structure defining physical units (emulated or real)
  */
 typedef struct unit {
@@ -252,7 +323,7 @@ typedef struct irq {
  * global (IPC) memory areas
  */
 extern WORD48 *MAIN;
-extern CPU *P[2];
+extern CPU2 *P[2];
 extern CENTRAL_CONTROL *CC;
 
 /*
@@ -548,22 +619,22 @@ extern void jumpOutOfLoop(CPU *, int count);
 extern WORD48 buildMSCW(CPU *);
 extern void applyMSCW(CPU *, WORD48 mscw);
 extern WORD48 buildRCW(CPU *, BIT descriptorCall);
-extern BIT applyRCW(CPU *, WORD48 word, BIT in_line);
+extern BIT applyRCW(CPU *cpu, WORD48 word, BIT no_set_lc, BIT no_bits);
 extern void operandCall(CPU *);
 extern void descriptorCall(CPU *);
 extern void enterSubroutine(CPU *, BIT descriptorCall);
 extern int exitSubroutine(CPU *, int how);
 
 /* interrupts & IO */
-extern void prepMessage(CPU *);
-extern void causeMemoryIrq(CPU *, WORD8, const char *cause);
-extern void causeSyllableIrq(CPU *, WORD8, const char *cause);
+extern void prepMessage(CPU2 *);
+extern void causeMemoryIrq(CPU2 *, WORD8, const char *cause);
+extern void causeSyllableIrq(CPU2 *, WORD8, const char *cause);
 extern BIT presenceTest(CPU *, WORD48 word);
-extern WORD48 interrogateUnitStatus(CPU *);
-extern WORD48 interrogateIOChannel(CPU *);
+extern WORD48 interrogateUnitStatus(CPU2 *);
+extern WORD48 interrogateIOChannel(CPU2 *);
 extern void storeForInterrupt(CPU *, BIT forced, BIT forTest, const char *);
 extern void clearInterrupt(ADDR15);
-extern void initiateIO(CPU *);
+extern void initiateIO(CPU2 *);
 extern void signalInterrupt(const char *id, const char *cause);
 
 /* single precision */
@@ -597,14 +668,19 @@ extern void streamOutputConvert(CPU *, unsigned count);
 extern void enterCharModeInline(CPU *);
 extern void initiate(CPU *, BIT forTest);
 extern void initiateP2(CPU *);
-extern void start(CPU *);
-extern void stop(CPU *);
+extern void start(CPU2 *);
+extern void stop(CPU2 *);
 extern void haltP2(CPU *);
-extern WORD48 readTimer(CPU *);
-extern void preset(CPU *, ADDR15 runAddr);
+extern WORD48 readTimer(CPU2 *);
+extern void preset(CPU2 *, ADDR15 runAddr);
 extern void b5500_execute_cm(CPU *);
 extern void b5500_execute_wm(CPU *);
-extern void run(CPU *);
+extern void run(CPU2 *);
+
+/* Richards simulator code */
+extern int sim_instr(void);
+/* and callbacks */
+extern void sim_traceinstr(void);
 
 /* devices */
 extern int spo_init(const char *info);

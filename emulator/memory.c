@@ -150,58 +150,43 @@ void accessError(CPU *cpu)
  */
 BIT indexDescriptor(CPU *cpu)
 {
-        WORD48  aw;     // local copy of A reg
-        BIT             interrupted = false;    // fatal error, interrupt set
+	unsigned wcnt;
 	ADDR15	index;
 	BIT	sign;
 
-        adjustABFull(cpu);
-        aw = cpu->r.A;
-
-        // Normalize the index
-	if (integerize(&cpu->r.B)) {
-		// oops... integer overflow normalizing the index
-		interrupted = true;
-		if (cpu->r.NCSF) {
-			//causeSyllableIrq(cpu, IRQ_INTO, "INX Overflow");
-                        // set I07/8: integer overflow
-                        cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_INTO;
-                        signalInterrupt(cpu->id, "INX Overflow");
+	// Data descriptor: see if it must be indexed
+	wcnt = (cpu->r.A & MASK_WCNT) << SHFT_WCNT; // A.[8:10]
+	if (wcnt) {
+		adjustABFull(cpu);
+		// Normalize the index
+		if (integerize(&cpu->r.B)) {
+			// oops... integer overflow normalizing the index
+			if (cpu->r.NCSF) {
+				causeSyllableIrq(cpu, IRQ_INTO, "INX Overflow");
+				return true;
+			}
 		}
-        }
-
-        // look only at lowest 10 bits
-        index = cpu->r.B & 01777;
-	sign = (cpu->r.B & MASK_SIGNMANT);
-
-        // Now we have an integerized index value in I
-        if (!interrupted) {
-                if (sign && index) {
-                        // index is negative
-                        interrupted = true;
-                        if (cpu->r.NCSF) {
-				//causeSyllableIrq(cpu, IRQ_INDEX, "INX<0");
-                                // set I05/8: invalid-index
-                                cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_INDEX;
-                                signalInterrupt(cpu->id, "INX<0");
-                        }
-                } else if (index < ((aw & MASK_WCNT) >> SHFT_WCNT)) {
-                        // We finally have a valid index
-                        index = (aw + index) & MASK_ADDR;
-                        cpu->r.A = (aw & ~MASK_ADDR) | index;
-                        cpu->r.BROF = false;
-                } else {
-                        // index not less than size
-                        interrupted = true;
-                        if (cpu->r.NCSF) {
-				//causeSyllableIrq(cpu, IRQ_INDEX, "INX>WC");
-                                // set I05/8: invalid-index
-                                cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_INDEX;
-                                signalInterrupt(cpu->id, "INX>WC");
-                        }
-                }
-        }
-        return interrupted;
+		// check index to be in range of 0..(wcnt-1)
+	        index = cpu->r.B & MASK_MANTISSA;
+		sign = (cpu->r.B & MASK_SIGNMANT) ? true : false;
+		if (sign && index) {
+			// negative
+			causeSyllableIrq(cpu, IRQ_INDEX, "INX<0");
+			return true;
+		}
+		if ((index & 01777) >= wcnt) {
+			// index error
+			causeSyllableIrq(cpu, IRQ_INDEX, "INX>WC");
+			return true;
+		}
+		cpu->r.M = (cpu->r.A + (index & 01777)) & MASK_ADDR;
+		cpu->r.A &= ~(MASK_WCNT | MASK_ADDR);
+		cpu->r.A |= cpu->r.M;
+		cpu->r.BROF = false;
+		return false;
+	}
+	cpu->r.M = cpu->r.A & MASK_ADDR;
+	return false;
 }
 
 /*
@@ -279,6 +264,7 @@ void loadMviaM(CPU *cpu)
 {
         // note: this is only used to get the saved F registers value from
         // the saved MSCW at R+7.
+	// side effect: sets B
         if (dotrcmem)
                 printf("\t[M]~>M ");
         cpu->r.E = 6;           // Just to show the world what's happening
@@ -289,7 +275,8 @@ void loadMviaM(CPU *cpu)
         if (cpu->acc.MAED || cpu->acc.MPED) {
                 accessError(cpu);
         } else {
-                cpu->r.M = (cpu->acc.word & MASK_FREG) >> SHFT_FREG;
+		cpu->r.B = cpu->acc.word;
+                cpu->r.M = (cpu->r.B & MASK_FREG) >> SHFT_FREG;
         }
 }
 
@@ -383,7 +370,7 @@ void storeBviaM(CPU *cpu)
 void integerStore(CPU *cpu, BIT conditional, BIT destructive)
 {
         WORD48  aw;     // local copy of A reg
-        NUM             B;      // B mantissa
+        //NUM             B;      // B mantissa
         BIT             doStore = true;         // okay to store
         BIT             normalize = true;       // okay to integerize
 

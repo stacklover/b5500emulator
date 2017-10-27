@@ -201,6 +201,7 @@ BIT presenceTest(CPU *cpu, WORD48 word)
 	return false;
 }
 
+#if 0
 /***********************************************************************
 * OPDC, the moral equivalent of "load accumulator" on lesser
 * machines. Assumes the syllable has already loaded a word into A.
@@ -258,7 +259,9 @@ void operandCall(CPU *cpu)
 		break;
 	}
 }
+#endif
 
+#if 0
 /***********************************************************************
 * DESC, the moral equivalent of "load address" on lesser machines.
 * Assumes the syllable has already loaded a word into A, and that the
@@ -316,6 +319,7 @@ void descriptorCall(CPU *cpu)
 	        break;
 	}
 }
+#endif
 
 /***********************************************************************
 * Implements the 3011=SFI operator and the parts of 3411=SFT that are

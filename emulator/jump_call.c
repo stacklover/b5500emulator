@@ -70,19 +70,21 @@ WORD48 buildRCW(CPU *cpu, BIT descriptorCall)
  * the "word" parameter. If "inline" is truthy, C & L are NOT restored from
  * the RCW. Returns the state of the OPDC/DESC bit [2:1]
  */
-BIT applyRCW(CPU *cpu, WORD48 word, BIT in_line)
+BIT applyRCW(CPU *cpu, WORD48 word, BIT no_set_lc, BIT no_bits)
 {
-        if (!in_line) {
-                cpu->r.C = (word & MASK_CREG) >> SHFT_CREG;
-                cpu->r.L = (word & MASK_LREG) >> SHFT_LREG;
-                cpu->r.PROF = false;    // require fetch at SECL
-        }
-        cpu->r.F = (word & MASK_FREG) >> SHFT_FREG;
-        cpu->r.K = (word & MASK_KREG) >> SHFT_KREG;
-        cpu->r.G = (word & MASK_GREG) >> SHFT_GREG;
-        cpu->r.V = (word & MASK_VREG) >> SHFT_VREG;
-        cpu->r.H = (word & MASK_HREG) >> SHFT_HREG;
-        return (word & MASK_RCWTYPE) ? true : false;
+	if (!no_set_lc) {
+		cpu->r.C = (word & MASK_CREG) >> SHFT_CREG;
+		cpu->r.L = (word & MASK_LREG) >> SHFT_LREG;
+		cpu->r.PROF = false;    // require fetch at SECL
+	}
+	cpu->r.F = (word & MASK_FREG) >> SHFT_FREG;
+	if (!no_bits) {
+		cpu->r.K = (word & MASK_KREG) >> SHFT_KREG;
+		cpu->r.G = (word & MASK_GREG) >> SHFT_GREG;
+		cpu->r.V = (word & MASK_VREG) >> SHFT_VREG;
+		cpu->r.H = (word & MASK_HREG) >> SHFT_HREG;
+	}
+	return (word & MASK_PBIT) ? true : false;
 }
 
 /*
@@ -142,6 +144,7 @@ void enterSubroutine(CPU *cpu, BIT descriptorCall)
         }
 }
 
+#if 1
 /*
  * Exits a subroutine by restoring the processor state from RCW and MSCW words
  * in the stack. "inline" indicates the C & L registers are NOT restored from the
@@ -168,7 +171,7 @@ int exitSubroutine(CPU *cpu, int in_line)
                 }
         } else {
                 // flag bit is set
-                result = applyRCW(cpu, cpu->r.B, in_line);
+                result = applyRCW(cpu, cpu->r.B, in_line, false);
                 cpu->r.X = cpu->r.B & MASK_MANTISSA;
                 // save F setting from RCW to restore S at end
                 cpu->r.S = cpu->r.F;
@@ -190,3 +193,6 @@ int exitSubroutine(CPU *cpu, int in_line)
         //printf("exitSubroutine: %d\n", result);
         return result;
 }
+#endif
+
+
