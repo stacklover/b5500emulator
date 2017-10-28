@@ -35,7 +35,7 @@ static FILE *traceio = NULL;
 * Prepare a debug message
 * message must be completed and ended by caller
 ***********************************************************************/
-void prepMessage(CPU2 *cpu) {
+void prepMessage(CPU *cpu) {
 	if (traceirq == NULL)
 		return;
 	if (cpu->rC != 0)
@@ -50,7 +50,7 @@ void prepMessage(CPU2 *cpu) {
 /***********************************************************************
 * Cause a memory access based IRQ
 ***********************************************************************/
-void causeMemoryIrq(CPU2 *cpu, WORD8 irq, const char *reason) {
+void causeMemoryIrq(CPU *cpu, WORD8 irq, const char *reason) {
 	cpu->rI |= irq;
 	signalInterrupt(cpu->id, reason);
 	if (traceirq == NULL)
@@ -63,7 +63,7 @@ void causeMemoryIrq(CPU2 *cpu, WORD8 irq, const char *reason) {
 /***********************************************************************
 * Cause a syllable based IRQ
 ***********************************************************************/
-void causeSyllableIrq(CPU2 *cpu, WORD8 irq, const char *reason) {
+void causeSyllableIrq(CPU *cpu, WORD8 irq, const char *reason) {
 	cpu->rI = (cpu->rI & IRQ_MASKL) | irq;
 	signalInterrupt(cpu->id, reason);
 	if (traceirq == NULL)
@@ -305,7 +305,7 @@ void timer60hz(union sigval sv) {
  * interrupt. Otherwise, loads the INCW into P2's A register and initiates
  * the processor
  */
-void initiateP2(CPU2 *cpu)
+void initiateP2(CPU *cpu)
 {
 	if (traceirq != NULL) {
 		prepMessage(cpu);
@@ -328,7 +328,7 @@ void initiateP2(CPU2 *cpu)
 	}
 }
 
-void haltP2(CPU2 *cpu)
+void haltP2(CPU *cpu)
 {
 	if (traceirq != NULL) {
 		prepMessage(cpu);
@@ -379,7 +379,7 @@ UNIT unit[32][2] = {
 /*
  * the IIO operation is executed here
  */
-void initiateIO(CPU2 *cpu) {
+void initiateIO(CPU *cpu) {
         ACCESSOR acc;
         WORD48 iocw;
         WORD48 result;
@@ -442,7 +442,7 @@ void initiateIO(CPU2 *cpu) {
 /*
  * check which units are ready
  */
-WORD48 interrogateUnitStatus(CPU2 *cpu) {
+WORD48 interrogateUnitStatus(CPU *cpu) {
 	int i, j;
 	WORD48 unitsready = 0LL;
 
@@ -477,7 +477,7 @@ WORD48 interrogateUnitStatus(CPU2 *cpu) {
 /*
  * interrogate the next free I/O channel
  */
-WORD48 interrogateIOChannel(CPU2 *cpu) {
+WORD48 interrogateIOChannel(CPU *cpu) {
         WORD48 result = 0;
 
         // report I/O control unit 1

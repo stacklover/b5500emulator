@@ -60,7 +60,7 @@ char name[MAXNAME][29];
 /* instruction execution counter */
 unsigned instr_count;
 
-CPU2 *cpu;
+CPU *cpu;
 
 
 int openfile(FILEHANDLE *f, const char *mode) {
@@ -120,7 +120,7 @@ void getlin(FILEHANDLE *f) { /* get next line */
         linep = linebuf;
 }
 
-WORD48 readTimer(CPU2 *cpu) {
+WORD48 readTimer(CPU *cpu) {
         WORD48 result = 0;
 
         if (CC->CCI03F)
@@ -334,7 +334,7 @@ void memdump(void) {
 /***********************************************************************
 * Starts the processor
 ***********************************************************************/
-void start(CPU2 *cpu)
+void start(CPU *cpu)
 {
 	prepMessage(cpu); printf("start\n");
 	cpu->busy = true;
@@ -343,7 +343,7 @@ void start(CPU2 *cpu)
 /***********************************************************************
 * Stops running the processor
 ***********************************************************************/
-void stop(CPU2 *cpu)
+void stop(CPU *cpu)
 {
 	prepMessage(cpu); printf("stop\n");
 	cpu->rT = 0;
@@ -356,7 +356,7 @@ void stop(CPU2 *cpu)
 /***********************************************************************
 * Presets the processor registers for a load condition at C=runAddr
 ***********************************************************************/
-void preset(CPU2 *cpu, ADDR15 runAddr)
+void preset(CPU *cpu, ADDR15 runAddr)
 {
 	prepMessage(cpu); printf("preset to %05o\n", runAddr);
         cpu->rC = runAddr;
@@ -377,7 +377,7 @@ void preset(CPU2 *cpu, ADDR15 runAddr)
  * must point to the next syllable to be executed.
  * This routine will continue to run while cpu->r.runCycles < cpu->r.cycleLimit
  */
-void run(CPU2 *cpu)
+void run(CPU *cpu)
 {
 	// execute one instruction
 	sim_instr();

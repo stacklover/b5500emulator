@@ -193,7 +193,7 @@ uint8 rank[64] = {
 
 
 #ifdef NOSIMH
-extern CPU2 *cpu; // TODO: shall become a parameter to sim_instr()
+extern CPU *cpu; // TODO: shall become a parameter to sim_instr()
 #define M MAIN
 #else
 int                 cpu_index;                  /* Current running cpu */
