@@ -15,6 +15,8 @@
 *   changed "this" to "cpu" to avoid errors when using g++
 * 2017-09-30  R.Meyer
 *   overhaul of file names
+* 2017-10-28  R.Meyer
+*   adaption to new CPU structure
 ***********************************************************************/
 
 #include <stdio.h>
@@ -235,11 +237,11 @@ int singlePrecisionCompare(CPU *cpu)
 
     cpu->cycleCount += 4;       // estimate some general overhead
     adjustABFull(cpu);
-    cpu->r.AROF = 0;            // A is unconditionally marked empty
+    cpu->bAROF = 0;            // A is unconditionally marked empty
 
         // extract the numbers
-        num_extract(&cpu->r.A, &A);
-        num_extract(&cpu->r.B, &B);
+        num_extract(&cpu->rA, &A);
+        num_extract(&cpu->rB, &B);
 
 #if DEBUG
         if (dotrcmat) {
@@ -299,11 +301,11 @@ void singlePrecisionAdd(CPU *cpu, BIT add)
 
     cpu->cycleCount += 2;       // estimate some general overhead
     adjustABFull(cpu);
-    cpu->r.AROF = 0;            // A is unconditionally marked empty
+    cpu->bAROF = 0;            // A is unconditionally marked empty
 
         // extract the numbers
-        num_extract(&cpu->r.A, &A);
-        num_extract(&cpu->r.B, &B);
+        num_extract(&cpu->rA, &A);
+        num_extract(&cpu->rB, &B);
 
 #if DEBUG
         if (dotrcmat) {
@@ -320,12 +322,12 @@ void singlePrecisionAdd(CPU *cpu, BIT add)
         // trivial cases
         if (A.m == 0) {
                 // result is already in B
-                cpu->r.B &= MASK_NUMBER;
+                cpu->rB &= MASK_NUMBER;
                 return;
         }
         if (B.m == 0) {
                 // result is in A
-                num_compose(&A, &cpu->r.B);
+                num_compose(&A, &cpu->rB);
                 return;
         }
 
@@ -337,14 +339,14 @@ void singlePrecisionAdd(CPU *cpu, BIT add)
                 // Scale B until its exponent matches (mantissa may go to zero)
                 cpu->cycleCount += num_right_shift_exp(&B, A.e);
                 // for display only
-                cpu->r.X = B.x;
+                cpu->rX = B.x;
         } else if (A.e < B.e) {
                 // Normalize B for 39 bits (13 octades)
                 cpu->cycleCount += num_left_shift_exp(&B, A.e);
                 // Scale A until its exponent matches (mantissa may go to zero)
                 cpu->cycleCount += num_right_shift_exp(&A, B.e);
                 // for display only
-                cpu->r.X = A.x;
+                cpu->rX = A.x;
         }
 
         // At cpu point, the exponents are aligned,
@@ -372,7 +374,7 @@ void singlePrecisionAdd(CPU *cpu, BIT add)
                 if (B.m & MASK_MANTCARRY) {
                         num_right_shift_cnt(&B, 1);
                         // for display only
-                        cpu->r.X = B.x;
+                        cpu->rX = B.x;
                 }
         } else {
                 // we must subtract and will do it unsigned, so:
@@ -429,18 +431,18 @@ void singlePrecisionAdd(CPU *cpu, BIT add)
         // Check for exponent overflow
         if (B.e > 63) {
                 B.e &= 63;
-                if (cpu->r.NCSF) {
+                if (cpu->bNCSF) {
                         // signal overflow here
                         // set I05/6/8: exponent-overflow
-                        cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_EXPO;
+                        cpu->rI = (cpu->rI & IRQ_MASKL) | IRQ_EXPO;
                         signalInterrupt(cpu->id, "ADD EXP OFL");
                 }
         }
         // underflow cannot happen here
 
-        num_compose(&B, &cpu->r.B);
+        num_compose(&B, &cpu->rB);
         // for display only
-        cpu->r.X = B.x;
+        cpu->rX = B.x;
 }
 
 /* Multiplies the contents of the A register to the B register, leaving the
@@ -457,11 +459,11 @@ void singlePrecisionMultiply(CPU *cpu)
 
     cpu->cycleCount += 2;       // estimate some general overhead
     adjustABFull(cpu);
-    cpu->r.AROF = 0;            // A is unconditionally marked empty
+    cpu->bAROF = 0;            // A is unconditionally marked empty
 
         // extract the numbers
-        num_extract(&cpu->r.A, &A);
-        num_extract(&cpu->r.B, &B);
+        num_extract(&cpu->rA, &A);
+        num_extract(&cpu->rB, &B);
 
 #if DEBUG
         if (dotrcmat) {
@@ -474,7 +476,7 @@ void singlePrecisionMultiply(CPU *cpu)
         // trivial case, either operand is zero
         if ((A.m == 0) || (B.m == 0)) {
                 // if A or B mantissa is zero
-                cpu->r.B = 0;
+                cpu->rB = 0;
                 return;
         }
 
@@ -482,7 +484,7 @@ void singlePrecisionMultiply(CPU *cpu)
         // Otherwise, normalize both operands
         if ((A.e == 0) && (B.e == 0)) {
                 // integer multiply operation: set Q05F
-                cpu->r.Q05F = true;
+                cpu->bQ05F = true;
         } else {
                 // Normalize A for 39 bits (13 octades)
                 cpu->cycleCount += num_left_shift_exp(&A, -63);
@@ -531,7 +533,7 @@ void singlePrecisionMultiply(CPU *cpu)
 #endif
 
         // Normalize the result
-        if (cpu->r.Q05F && (B.m == 0)) {
+        if (cpu->bQ05F && (B.m == 0)) {
                 // if it's integer multiply (Q05F) with integer result
                 // just use the low-order 39 bits
                 B.m = B.x;
@@ -557,9 +559,9 @@ void singlePrecisionMultiply(CPU *cpu)
         }
 
         // Round the result
-        cpu->r.Q05F = false;
+        cpu->bQ05F = false;
         // required by specs due to the way rounding addition worked
-        cpu->r.A = 0;
+        cpu->rA = 0;
 
         // Normalize and round as necessary
         if (emode)
@@ -584,28 +586,28 @@ exit1:
         if (B.m == 0) {
                 // don't see how cpu could be necessary here, but
                 // the TM says to do it anyway
-                cpu->r.B = 0;
+                cpu->rB = 0;
         } else {
                 // Check for exponent under/overflow
                 if (B.e > 63) {
                         B.e &= 63;
-                        if (cpu->r.NCSF) {
+                        if (cpu->bNCSF) {
                                 // set I05/6/8: exponent-overflow
-                                cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_EXPO;
+                                cpu->rI = (cpu->rI & IRQ_MASKL) | IRQ_EXPO;
                                 signalInterrupt(cpu->id, "MUL EXP OFL");
                         }
                 } else if (B.e < -63) {
                         // mod the exponent
                         B.e = -((-B.e) & 63);
-                        if (cpu->r.NCSF) {
+                        if (cpu->bNCSF) {
                                 // set I06/8: exponent-underflow
-                                cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_EXPU;
+                                cpu->rI = (cpu->rI & IRQ_MASKL) | IRQ_EXPU;
                                 signalInterrupt(cpu->id, "MUL EXP UFL");
                         }
                 }
         }
-        num_compose(&B, &cpu->r.B);
-        cpu->r.X = B.x;
+        num_compose(&B, &cpu->rB);
+        cpu->rX = B.x;
 }
 
 /*
@@ -622,11 +624,11 @@ void singlePrecisionDivide(CPU *cpu)
 
     cpu->cycleCount += 2;       // estimate some general overhead
     adjustABFull(cpu);
-    cpu->r.AROF = 0;            // A is unconditionally marked empty
+    cpu->bAROF = 0;            // A is unconditionally marked empty
 
         // extract the numbers
-        num_extract(&cpu->r.A, &A);
-        num_extract(&cpu->r.B, &B);
+        num_extract(&cpu->rA, &A);
+        num_extract(&cpu->rB, &B);
 
 #if DEBUG
         if (dotrcmat) {
@@ -640,9 +642,9 @@ void singlePrecisionDivide(CPU *cpu)
         if (A.m == 0) {
                 // if A mantissa is zero
                 // and we're in Normal State
-                if (cpu->r.NCSF) {
+                if (cpu->bNCSF) {
                         // set I05/7/8: divide by zero
-                        cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_DIVZ;
+                        cpu->rI = (cpu->rI & IRQ_MASKL) | IRQ_DIVZ;
                         signalInterrupt(cpu->id, "DIV BY ZERO");
                 }
                 return;
@@ -650,7 +652,7 @@ void singlePrecisionDivide(CPU *cpu)
         // if B is zero...
         if (B.m == 0) {
                 // ...result is all zeroes
-                cpu->r.A = cpu->r.B = 0;
+                cpu->rA = cpu->rB = 0;
                 return;
         }
 
@@ -709,10 +711,10 @@ void singlePrecisionDivide(CPU *cpu)
         B.e -= A.e - 1;                 // compute the exponent, accounting for the shifts
 
         // Round the result (it's already normalized)
-        cpu->r.A = 0;   // required by specs due to the way rounding addition worked
+        cpu->rA = 0;   // required by specs due to the way rounding addition worked
         B.x = 0;
         if (q >= 4) {   // if high-order bit of last quotient digit is 1
-                cpu->r.Q01F = true;     // set Q01F (for display purposes only)
+                cpu->bQ01F = true;     // set Q01F (for display purposes only)
                 B.x = MASK_MANTHBIT;    // round up the result
         }
 
@@ -743,24 +745,24 @@ void singlePrecisionDivide(CPU *cpu)
         // Check for exponent under/overflow
         if (B.e > 63) {
                 B.e &= 63;
-                if (cpu->r.NCSF) {
+                if (cpu->bNCSF) {
                         // set I05/6/8: exponent-overflow
-                        cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_EXPO;
+                        cpu->rI = (cpu->rI & IRQ_MASKL) | IRQ_EXPO;
                         signalInterrupt(cpu->id, "DIV EXP OFL");
                 }
         } else if (B.e < -63) {
                 // mod the exponent
                 B.e = -((-B.e) & 63);
-                if (cpu->r.NCSF) {
+                if (cpu->bNCSF) {
                         // set I06/8: exponent-underflow
-                        cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_EXPU;
+                        cpu->rI = (cpu->rI & IRQ_MASKL) | IRQ_EXPU;
                         signalInterrupt(cpu->id, "DIV EXP UFL");
                 }
         }
 
 exit1:
-        num_compose(&B, &cpu->r.B);
-        cpu->r.X = B.x;
+        num_compose(&B, &cpu->rB);
+        cpu->rX = B.x;
 }
 
 /*
@@ -777,11 +779,11 @@ void integerDivide(CPU *cpu)
 
     cpu->cycleCount += 4;       // estimate some general overhead
     adjustABFull(cpu);
-    cpu->r.AROF = 0;            // A is unconditionally marked empty
+    cpu->bAROF = 0;            // A is unconditionally marked empty
 
         // extract the numbers
-        num_extract(&cpu->r.A, &A);
-        num_extract(&cpu->r.B, &B);
+        num_extract(&cpu->rA, &A);
+        num_extract(&cpu->rB, &B);
 
 #if DEBUG
         if (dotrcmat) {
@@ -795,9 +797,9 @@ void integerDivide(CPU *cpu)
         if (A.m == 0) {
                 // if A mantissa is zero
                 // and we're in Normal State
-                if (cpu->r.NCSF) {
+                if (cpu->bNCSF) {
                         // set I05/7/8: divide by zero
-                        cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_DIVZ;
+                        cpu->rI = (cpu->rI & IRQ_MASKL) | IRQ_DIVZ;
                         signalInterrupt(cpu->id, "IDIV BY ZERO");
                 }
                 return;
@@ -805,7 +807,7 @@ void integerDivide(CPU *cpu)
         // if B is zero...
         if (B.m == 0) {
                 // ...result is all zeroes
-                cpu->r.A = cpu->r.B = 0;
+                cpu->rA = cpu->rB = 0;
                 return;
         }
 
@@ -817,7 +819,7 @@ void integerDivide(CPU *cpu)
         if (A.e > B.e) {
                 // if divisor has greater magnitude
                 // quotient is < 1, so set result to zero
-                cpu->r.A = cpu->r.B = 0;
+                cpu->rA = cpu->rB = 0;
                 return;
         }
 
@@ -883,18 +885,18 @@ void integerDivide(CPU *cpu)
                 // integer result developed
                 B.e = 0;
         } else {
-                if (cpu->r.NCSF) {
+                if (cpu->bNCSF) {
                         // integer overflow result
                         // set I07/8: integer-overflow
-                        cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_INTO;
+                        cpu->rI = (cpu->rI & IRQ_MASKL) | IRQ_INTO;
                         signalInterrupt(cpu->id, "IDIV INT OFL");
                 }
                 B.e = (B.e-A.e) & 63;
         }
 
-        cpu->r.A = 0;
-        num_compose(&B, &cpu->r.B);
-        cpu->r.X = B.x;
+        cpu->rA = 0;
+        num_compose(&B, &cpu->rB);
+        cpu->rX = B.x;
 }
 
 /*
@@ -913,11 +915,11 @@ void remainderDivide(CPU *cpu)
 
     cpu->cycleCount += 4;       // estimate some general overhead
     adjustABFull(cpu);
-    cpu->r.AROF = 0;            // A is unconditionally marked empty
+    cpu->bAROF = 0;            // A is unconditionally marked empty
 
         // extract the numbers
-        num_extract(&cpu->r.A, &A);
-        num_extract(&cpu->r.B, &B);
+        num_extract(&cpu->rA, &A);
+        num_extract(&cpu->rB, &B);
 
 #if DEBUG
         if (dotrcmat) {
@@ -933,9 +935,9 @@ void remainderDivide(CPU *cpu)
         if (A.m == 0) {
                 // if A mantissa is zero
                 // and we're in Normal State
-                if (cpu->r.NCSF) {
+                if (cpu->bNCSF) {
                         // set I05/7/8: divide by zero
-                        cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_DIVZ;
+                        cpu->rI = (cpu->rI & IRQ_MASKL) | IRQ_DIVZ;
                         signalInterrupt(cpu->id, "REM BY ZERO");
                 }
                 return;
@@ -943,7 +945,7 @@ void remainderDivide(CPU *cpu)
         // if B is zero...
         if (B.m == 0) {
                 // ...result is all zeroes
-                cpu->r.A = cpu->r.B = 0;
+                cpu->rA = cpu->rB = 0;
                 return;
         }
 
@@ -955,12 +957,12 @@ void remainderDivide(CPU *cpu)
         if (A.e > B.e) {
                 // if divisor has greater magnitude
                 // quotient is < 1, so set A to zero and
-                cpu->r.A = 0;
+                cpu->rA = 0;
                 // EMODE: normalize B before returning
                 if (emode)
                         goto normalize;
                 // B5500: the result is original B (less the flag bit)
-                cpu->r.B &= MASK_NUMBER;
+                cpu->rB &= MASK_NUMBER;
                 return;
         }
 
@@ -1024,9 +1026,9 @@ void remainderDivide(CPU *cpu)
         if (B.e < -63) {
                 // if so, exponent is mod 64
                 B.e = -(-B.e & 63);
-                if (cpu->r.NCSF) {
+                if (cpu->bNCSF) {
                         // set I06/8: exponent-underflow
-                        cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_EXPU;
+                        cpu->rI = (cpu->rI & IRQ_MASKL) | IRQ_EXPU;
                         signalInterrupt(cpu->id, "REM EXP UFL");
                 }
         } else if (A.e == B.e) {
@@ -1040,10 +1042,10 @@ void remainderDivide(CPU *cpu)
                         B.e %= 64;
                 }
         } else {
-                if (cpu->r.NCSF) {
+                if (cpu->bNCSF) {
                         // integer overflow result
                         // set I07/8: integer-overflow
-                        cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_INTO;
+                        cpu->rI = (cpu->rI & IRQ_MASKL) | IRQ_INTO;
                         signalInterrupt(cpu->id, "REM INT OFL");
                 }
                 // result in B will be all zeroes
@@ -1067,7 +1069,7 @@ normalize:
                         num_right_shift_exp(&B, 0);
         }
 
-        cpu->r.A = 0;
-        num_compose(&B, &cpu->r.B);
-        cpu->r.X = B.x;
+        cpu->rA = 0;
+        num_compose(&B, &cpu->rB);
+        cpu->rX = B.x;
 }

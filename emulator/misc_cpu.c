@@ -15,6 +15,8 @@
 *   changed "this" to "cpu" to avoid errors when using g++
 * 2017-09-30  R.Meyer
 *   overhaul of file names
+* 2017-10-28  R.Meyer
+*   adaption to new CPU structure
 ***********************************************************************/
 
 #define	TRACE_IRQ 0
@@ -30,11 +32,11 @@
 * message must be completed and ended by caller
 ***********************************************************************/
 void prepMessage(CPU *cpu) {
-	if (cpu->r.C != 0)
+	if (cpu->rC != 0)
 		printf("*\t%s at %05o:%o ",
 			cpu->id,
-			cpu->r.L == 0 ? cpu->r.C-1 : cpu->r.C,
-			(cpu->r.L - 1) & 3);
+			cpu->rL == 0 ? cpu->rC-1 : cpu->rC,
+			(cpu->rL - 1) & 3);
 	else
 		printf("*\t%s at xxxxx:x ", cpu->id);
 }
@@ -43,12 +45,12 @@ void prepMessage(CPU *cpu) {
 * Cause a memory access based IRQ
 ***********************************************************************/
 void causeMemoryIrq(CPU *cpu, WORD8 irq, const char *reason) {
-	cpu->r.I |= irq;
+	cpu->rI |= irq;
 	signalInterrupt(cpu->id, reason);
 #if TRACE_IRQ
 	prepMessage(cpu);
 	printf("IRQ %02x caused reason %s (I now %02x)\n",
-		irq, reason, cpu->r.I);
+		irq, reason, cpu->rI);
 #endif
 }
 
@@ -56,12 +58,12 @@ void causeMemoryIrq(CPU *cpu, WORD8 irq, const char *reason) {
 * Cause a syllable based IRQ
 ***********************************************************************/
 void causeSyllableIrq(CPU *cpu, WORD8 irq, const char *reason) {
-	cpu->r.I = (cpu->r.I & IRQ_MASKL) | irq;
+	cpu->rI = (cpu->rI & IRQ_MASKL) | irq;
 	signalInterrupt(cpu->id, reason);
 #if TRACE_IRQ
 	prepMessage(cpu);
 	printf("IRQ %02x caused reason %s (I now %02x)\n",
-		irq, reason, cpu->r.I);
+		irq, reason, cpu->rI);
 #endif
 }
 
@@ -85,33 +87,33 @@ void computeRelativeAddr(CPU *cpu, unsigned offset, BIT cEnabled)
 
         cpu->cycleCount += 2; // approximate the timing
 
-        if (cpu->r.SALF) {
+        if (cpu->bSALF) {
                 // subroutine level - check upper 3 bits of the 10 bit offset
                 switch ((offset >> 7) & 7) {
                 case 0: case 1: case 2: case 3:
                         // pattern 0 xxx xxx xxx - R+ relative
                         // reach 0..511
                         offset &= 0777;
-                        cpu->r.M = (cpu->r.R<<RSHIFT) + offset;
+                        cpu->rM = (cpu->rR/*TODO SHIFT*/<<RSHIFT) + offset;
                         if (dotrcmem)
-                                printf("R+%o -> M=%05o\n", offset, cpu->r.M);
+                                printf("R+%o -> M=%05o\n", offset, cpu->rM);
                         break;
                 case 4: case 5:
                         // pattern 1 0xx xxx xxx - F+ or (R+7)+ relative
                         // reach 0..255
                         offset &= 0377;
-                        if (cpu->r.MSFF) {
+                        if (cpu->bMSFF) {
                                 // during function parameter loading its (R+7)+
-                                cpu->r.M = (cpu->r.R<<RSHIFT) + RR_MSCW;
+                                cpu->rM = (cpu->rR/*TODO SHIFT*/<<RSHIFT) + RR_MSCW;
                                 loadMviaM(cpu); // M = [M].[18:15]
-                                cpu->r.M += offset;
+                                cpu->rM += offset;
                                 if (dotrcmem)
-                                        printf("(R+7)+%o -> M=%05o\n", offset, cpu->r.M);
+                                        printf("(R+7)+%o -> M=%05o\n", offset, cpu->rM);
                         } else {
                                 // inside function its F+
-                                cpu->r.M = cpu->r.F + offset;
+                                cpu->rM = cpu->rF + offset;
                                 if (dotrcmem)
-                                        printf("F+%o -> M=%05o\n", offset, cpu->r.M);
+                                        printf("F+%o -> M=%05o\n", offset, cpu->rM);
                         }
                         break;
                 case 6:
@@ -121,48 +123,48 @@ void computeRelativeAddr(CPU *cpu, unsigned offset, BIT cEnabled)
                         if (cEnabled) {
                                 // adjust C for fetch offset from
                                 // syllable the instruction was in
-                                cpu->r.M = (cpu->r.L > 0 ? cpu->r.C : cpu->r.C-1) + offset;
+                                cpu->rM = (cpu->rL > 0 ? cpu->rC : cpu->rC-1) + offset;
                                 if (dotrcmem)
-                                        printf("C+%o -> M=%05o\n", offset, cpu->r.M);
+                                        printf("C+%o -> M=%05o\n", offset, cpu->rM);
                         } else {
-                                cpu->r.M = (cpu->r.R<<RSHIFT) + offset;
+                                cpu->rM = (cpu->rR/*TODO SHIFT*/<<RSHIFT) + offset;
                                 if (dotrcmem)
-                                        printf("R+%o -> M=%05o\n", offset, cpu->r.M);
+                                        printf("R+%o -> M=%05o\n", offset, cpu->rM);
                         }
                         break;
                 case 7:
                         // pattern 1 11x xxx xxx - F- or (R+7)- relative
                         // reach 0..127 (negative direction)
                         offset &= 0177;
-                        if (cpu->r.MSFF) {
+                        if (cpu->bMSFF) {
                                 // during function parameter loading its (R+7)-
-                                cpu->r.M = (cpu->r.R<<RSHIFT) + RR_MSCW;
+                                cpu->rM = (cpu->rR/*TODO SHIFT*/<<RSHIFT) + RR_MSCW;
                                 loadMviaM(cpu); // M = [M].[18:15]
-                                cpu->r.M -= offset;
+                                cpu->rM -= offset;
                                 if (dotrcmem)
-                                        printf("(R+7)-%o -> M=%05o\n", offset, cpu->r.M);
+                                        printf("(R+7)-%o -> M=%05o\n", offset, cpu->rM);
                         } else {
                                 // inside function its F-
-                                cpu->r.M = cpu->r.F - offset;
+                                cpu->rM = cpu->rF - offset;
                                 if (dotrcmem)
-                                        printf("F-%o -> M=%05o\n", offset, cpu->r.M);
+                                        printf("F-%o -> M=%05o\n", offset, cpu->rM);
                         }
                         break;
                 } // switch
         } else {
                 // program level - all 10 bits are offset
                 offset &= 001777; // redundant
-                cpu->r.M = (cpu->r.R<<RSHIFT) + offset;
+                cpu->rM = (cpu->rR/*TODO SHIFT*/<<RSHIFT) + offset;
                 if (dotrcmem)
-                        printf("R+%o,M=%05o\n", offset, cpu->r.M);
+                        printf("R+%o,M=%05o\n", offset, cpu->rM);
         }
 
         // Reset variant-mode R-relative addressing, if it was enabled
-        if (cpu->r.VARF) {
+        if (cpu->bVARF) {
                 if (dotrcmem)
                         printf("Resetting VARF\n");
-                cpu->r.SALF = true;
-                cpu->r.VARF = false;
+                cpu->bSALF = true;
+                cpu->bVARF = false;
         }
 }
 
@@ -185,7 +187,7 @@ BIT presenceTest(CPU *cpu, WORD48 word)
 	if (word & MASK_PBIT)
 		return true;
 
-	if (cpu->r.NCSF) {
+	if (cpu->bNCSF) {
 		// NORMAL STATE
 #if 1
 		prepMessage(cpu);
@@ -213,26 +215,26 @@ void operandCall(CPU *cpu)
 	BIT interrupted = false; // interrupt occurred
 
 	// If A contains a simple operand, just leave it there
-	if (OPERAND(cpu->r.A))
+	if (OPERAND(cpu->rA))
 		return;
 
 	// It's not a simple operand
-	switch ((cpu->r.A & MASK_TYPE) >> SHFT_TYPE) { // A.[1:3]
+	switch ((cpu->rA & MASK_TYPE) >> SHFT_TYPE) { // A.[1:3]
 
 	case 2: // CODE=0, PBIT=1, XBIT=0
 	case 3: // CODE=0, PBIT=1, XBIT=1
 		// Present data descriptor: see if it must be indexed
-		if (cpu->r.A & MASK_WCNT) { // A.[8:10]
+		if (cpu->rA & MASK_WCNT) { // A.[8:10]
 			// TODO: indexDescriptor ensures AB full (again) and implicitly uses A
 			interrupted = indexDescriptor(cpu);
 			// else descriptor is already indexed (word count 0)
 		}
 		if (!interrupted) {
 			// indexing reported no issue
-			cpu->r.M = cpu->r.A & MASKMEM;
+			cpu->rM = cpu->rA & MASKMEM;
 			// get the value, which now should be an operand
 			loadAviaM(cpu); // A = [M]
-			if (DESCRIPTOR(cpu->r.A) && cpu->r.NCSF) {
+			if (DESCRIPTOR(cpu->rA) && cpu->bNCSF) {
 				// Flag bit is set and NORMAL state
 			        causeSyllableIrq(cpu, IRQ_FLAG, "operandCall FLAG SET");
 			}
@@ -248,7 +250,7 @@ void operandCall(CPU *cpu)
 	case 1: // CODE=0, PBIT=0, XBIT=1
 	case 5: // CODE=1, PBIT=0, XBIT=1
 		// Absent data or program descriptor
-		if (cpu->r.NCSF) {
+		if (cpu->bNCSF) {
 			causeSyllableIrq(cpu, IRQ_PBIT, "operandCall NOT PBIT");
 		}
 		// else if Control State, we're done
@@ -273,25 +275,25 @@ void descriptorCall(CPU *cpu)
 {
 	BIT interrupted = false; // interrupt occurred
 
-	if (OPERAND(cpu->r.A)) {
+	if (OPERAND(cpu->rA)) {
 		// It's a simple operand
 		// create a present data descriptor to its address (is in M)
-		cpu->r.A = cpu->r.M | MASK_FLAG | MASK_PBIT;
+		cpu->rA = cpu->rM | MASK_FLAG | MASK_PBIT;
 		return;
 	}
 
 	// It's not a simple operand
-	switch ((cpu->r.A & MASK_TYPE) >> SHFT_TYPE) { // A.[1:3]
+	switch ((cpu->rA & MASK_TYPE) >> SHFT_TYPE) { // A.[1:3]
 
 	case 2: // CODE=0, PBIT=1, XBIT=0
 	case 3: // CODE=0, PBIT=1, XBIT=1
 	        // Present data descriptor: see if it must be indexed
-	        if (cpu->r.A & MASK_WCNT) { // aw.[8:10]
+	        if (cpu->rA & MASK_WCNT) { // aw.[8:10]
 			// TODO: indexDescriptor ensures AB full (again) and implicitly uses A
 	                interrupted = indexDescriptor(cpu);
 	                if (!interrupted) {
 	                        // set word count to zero
-	                        cpu->r.A &= ~MASK_WCNT;
+	                        cpu->rA &= ~MASK_WCNT;
 	                }
 	                // else descriptor is already indexed (word count 0)
 	        }
@@ -306,7 +308,7 @@ void descriptorCall(CPU *cpu)
 	case 1: // CODE=0, PBIT=0, XBIT=1
 	case 5: // CODE=1, PBIT=0, XBIT=1
 	        // Absent data or program descriptor
-		if (cpu->r.NCSF) {
+		if (cpu->bNCSF) {
 			causeSyllableIrq(cpu, IRQ_PBIT, "descriptorCall NOT PBIT");
 		}
                 // else if Control State, we're done
@@ -315,7 +317,7 @@ void descriptorCall(CPU *cpu)
 	default: // cases 4, 6  // CODE=1, PBIT=0/1, XBIT=0
 	        // Miscellaneous control word
 		// create a present data descriptor to its address (is in M)
-	        cpu->r.A = cpu->r.M | MASK_FLAG | MASK_PBIT;
+	        cpu->rA = cpu->rM | MASK_FLAG | MASK_PBIT;
 	        break;
 	}
 }
@@ -330,8 +332,8 @@ void descriptorCall(CPU *cpu)
 ***********************************************************************/
 void storeForInterrupt(CPU *cpu, BIT forced, BIT forTest, const char *cause)
 {
-	BIT		saveAROF = cpu->r.AROF;
-	BIT		saveBROF = cpu->r.BROF;
+	BIT		saveAROF = cpu->bAROF;
+	BIT		saveBROF = cpu->bBROF;
 	ADDR15		temp;
 	BIT		save_dotrcmem = dotrcmem;
 
@@ -341,24 +343,24 @@ void storeForInterrupt(CPU *cpu, BIT forced, BIT forTest, const char *cause)
         dotrcmem = TRCMEM;
 
         if (forced || forTest) {
-                cpu->r.NCSF = false; // switch to Control State
+                cpu->bNCSF = false; // switch to Control State
         }
 
-        if (cpu->r.CWMF) {
+        if (cpu->bCWMF) {
                 // in Character Mode, get the correct TOS address from X
                 // exchange S with F-field of X
-                temp = cpu->r.S;
-                cpu->r.S = (cpu->r.X & MASK_FREG) >> SHFT_FREG;
-                cpu->r.X = (cpu->r.X & ~MASK_FREG) | (temp << SHFT_FREG);
+                temp = cpu->rS;
+                cpu->rS = (cpu->rX & MASK_FREG) >> SHFT_FREG;
+                cpu->rX = (cpu->rX & ~MASK_FREG) | (temp << SHFT_FREG);
 
                 if (saveAROF || forTest) {
-                        ++cpu->r.S;
+                        ++cpu->rS;
                         DPRINTF("\tsave A");
                         storeAviaS(cpu); // [S] = A
                 }
 
                 if (saveBROF || forTest) {
-                        ++cpu->r.S;
+                        ++cpu->rS;
                         DPRINTF("\tsave B");
                         storeBviaS(cpu); // [S] = B
                 }
@@ -367,22 +369,22 @@ void storeForInterrupt(CPU *cpu, BIT forced, BIT forTest, const char *cause)
                 // 444444443333333333222222222211111111110000000000
                 // 765432109876543210987654321098765432109876543210
                 // 11A000000XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-                cpu->r.B = INIT_ILCW | cpu->r.X;
+                cpu->rB = INIT_ILCW | cpu->rX;
                 if (saveAROF)
-                        cpu->r.B |= MASK_ILCWAROF;
-                ++cpu->r.S;
+                        cpu->rB |= MASK_ILCWAROF;
+                ++cpu->rS;
                 DPRINTF("\tILCW");
                 storeBviaS(cpu); // [S] = ILCW
         } else {
                 // in word mode, save B and A if not empty
                 if (saveBROF || forTest) {
-                        ++cpu->r.S;
+                        ++cpu->rS;
                         DPRINTF("\tsave B");
                         storeBviaS(cpu); // [S] = B
                 }
 
                 if (saveAROF || forTest) {
-                        ++cpu->r.S;
+                        ++cpu->rS;
                         DPRINTF("\tsave A");
                         storeAviaS(cpu); // [S] = A
                 }
@@ -392,17 +394,17 @@ void storeForInterrupt(CPU *cpu, BIT forced, BIT forTest, const char *cause)
         // 444444443333333333222222222211111111110000000000
         // 765432109876543210987654321098765432109876543210
         // 110000RRRRRRRRR0MS00000V00000NNNNMMMMMMMMMMMMMMM
-        cpu->r.B = INIT_ICW |
-                (((WORD48)cpu->r.M) << SHFT_MREG) |
-                (((WORD48)cpu->r.N) << SHFT_NREG) |
-                (((WORD48)cpu->r.R) << SHFT_RREG);
-        if (cpu->r.VARF)
-                cpu->r.B |= MASK_VARF;
-        if (cpu->r.SALF)
-                cpu->r.B |= MASK_SALF;
-        if (cpu->r.MSFF)
-                cpu->r.B |= MASK_MSFF;
-        ++cpu->r.S;
+        cpu->rB = INIT_ICW |
+                (((WORD48)cpu->rM) << SHFT_MREG) |
+                (((WORD48)cpu->rN) << SHFT_NREG) |
+                (((WORD48)cpu->rR/*TODO SHIFT*/) << SHFT_RREG);
+        if (cpu->bVARF)
+                cpu->rB |= MASK_VARF;
+        if (cpu->bSALF)
+                cpu->rB |= MASK_SALF;
+        if (cpu->bMSFF)
+                cpu->rB |= MASK_MSFF;
+        ++cpu->rS;
         DPRINTF("\tICW ");
         storeBviaS(cpu); // [S] = ICW
 
@@ -410,89 +412,89 @@ void storeForInterrupt(CPU *cpu, BIT forced, BIT forTest, const char *cause)
         // 444444443333333333222222222211111111110000000000
         // 765432109876543210987654321098765432109876543210
         // 11B0HHHVVVLLGGGKKKFFFFFFFFFFFFFFFCCCCCCCCCCCCCCC
-        cpu->r.B = INIT_RCW |
-                (((WORD48)cpu->r.C) << SHFT_CREG) |
-                (((WORD48)cpu->r.F) << SHFT_FREG) |
-                (((WORD48)cpu->r.K) << SHFT_KREG) |
-                (((WORD48)cpu->r.G) << SHFT_GREG) |
-                (((WORD48)cpu->r.L) << SHFT_LREG) |
-                (((WORD48)cpu->r.V) << SHFT_VREG) |
-                (((WORD48)cpu->r.H) << SHFT_HREG);
+        cpu->rB = INIT_RCW |
+                (((WORD48)cpu->rC) << SHFT_CREG) |
+                (((WORD48)cpu->rF) << SHFT_FREG) |
+                (((WORD48)cpu->rKV/*TODO K*/) << SHFT_KREG) |
+                (((WORD48)cpu->rGH/*TODO G*/) << SHFT_GREG) |
+                (((WORD48)cpu->rL) << SHFT_LREG) |
+                (((WORD48)cpu->rKV/*TODO V*/) << SHFT_VREG) |
+                (((WORD48)cpu->rGH/*TODO H*/) << SHFT_HREG);
         if (saveBROF)
-                cpu->r.B |= MASK_RCWBROF;
-        ++cpu->r.S;
+                cpu->rB |= MASK_RCWBROF;
+        ++cpu->rS;
         DPRINTF("\tIRCW");
         storeBviaS(cpu); // [S] = IRCW
 
 	// in order to store the Initiate Control Word at [R+8]
 	// and if we are in character mode
 	// we need to get the true R value from the last MSCW
-        if (cpu->r.CWMF) {
+        if (cpu->bCWMF) {
                 // exchange S with F
-                temp = cpu->r.F;
-                cpu->r.F = cpu->r.S;
-                cpu->r.S = temp;
+                temp = cpu->rF;
+                cpu->rF = cpu->rS;
+                cpu->rS = temp;
 
                 DPRINTF("\tlast RCW ");
                 loadBviaS(cpu); // B = [S]: get last RCW
-                cpu->r.S = (cpu->r.B & MASK_FREG) >> SHFT_FREG;
+                cpu->rS = (cpu->rB & MASK_FREG) >> SHFT_FREG;
 
                 DPRINTF("\tlast MSCW");
                 loadBviaS(cpu); // B = [S]: get last MSCW
-                cpu->r.R = (cpu->r.B & MASK_RREG) >> SHFT_RREG;
-                cpu->r.S = cpu->r.F;
+                cpu->rR/*TODO SHIFT*/ = (cpu->rB & MASK_RREG) >> SHFT_RREG;
+                cpu->rS = cpu->rF;
         }
 
         // build the Initiate Control Word (INCW)
         // 444444443333333333222222222211111111110000000000
         // 765432109876543210987654321098765432109876543210
         // 11000QQQQQQQQQYYYYYYZZZZZZ0TTTTTCSSSSSSSSSSSSSSS
-        cpu->r.B = INIT_INCW |
-                (((WORD48)cpu->r.S) << SHFT_INCWrS) |
-                ((((WORD48)cpu->r.TM) << SHFT_INCWrTM) & MASK_INCWrTM) |
-                (((WORD48)cpu->r.Z) << SHFT_INCWrZ) |
-                (((WORD48)cpu->r.Y) << SHFT_INCWrY);
-        if (cpu->r.CWMF)
-                cpu->r.B |= MASK_INCWMODE;
-        if (cpu->r.Q01F)
-                cpu->r.B |= MASK_INCWQ01F;
-        if (cpu->r.Q02F)
-                cpu->r.B |= MASK_INCWQ02F;
-        if (cpu->r.Q03F)
-                cpu->r.B |= MASK_INCWQ03F;
-        if (cpu->r.Q04F)
-                cpu->r.B |= MASK_INCWQ04F;
-        if (cpu->r.Q05F)
-                cpu->r.B |= MASK_INCWQ05F;
-        if (cpu->r.Q06F)
-                cpu->r.B |= MASK_INCWQ06F;
-        if (cpu->r.Q07F)
-                cpu->r.B |= MASK_INCWQ07F;
-        if (cpu->r.Q08F)
-                cpu->r.B |= MASK_INCWQ08F;
-        if (cpu->r.Q09F)
-                cpu->r.B |= MASK_INCWQ09F;
-        cpu->r.M = (cpu->r.R<<RSHIFT) + RR_INCW; // store initiate word at R+@10
+        cpu->rB = INIT_INCW |
+                (((WORD48)cpu->rS) << SHFT_INCWrS) |
+                ((((WORD48)cpu->rTM) << SHFT_INCWrTM) & MASK_INCWrTM) |
+                (((WORD48)cpu->rZ) << SHFT_INCWrZ) |
+                (((WORD48)cpu->rY) << SHFT_INCWrY);
+        if (cpu->bCWMF)
+                cpu->rB |= MASK_INCWMODE;
+        if (cpu->bQ01F)
+                cpu->rB |= MASK_INCWQ01F;
+        if (cpu->bQ02F)
+                cpu->rB |= MASK_INCWQ02F;
+        if (cpu->bQ03F)
+                cpu->rB |= MASK_INCWQ03F;
+        if (cpu->bQ04F)
+                cpu->rB |= MASK_INCWQ04F;
+        if (cpu->bQ05F)
+                cpu->rB |= MASK_INCWQ05F;
+        if (cpu->bQ06F)
+                cpu->rB |= MASK_INCWQ06F;
+        if (cpu->bQ07F)
+                cpu->rB |= MASK_INCWQ07F;
+        if (cpu->bQ08F)
+                cpu->rB |= MASK_INCWQ08F;
+        if (cpu->bQ09F)
+                cpu->rB |= MASK_INCWQ09F;
+        cpu->rM = (cpu->rR/*TODO SHIFT*/<<RSHIFT) + RR_INCW; // store initiate word at R+@10
         DPRINTF("\tINCW");
         storeBviaM(cpu); // [M] = INCW
 
 	// clean some registers
-        cpu->r.M = 0;
-        cpu->r.R = 0;
-        cpu->r.MSFF = false;
-        cpu->r.SALF = false;
-        cpu->r.BROF = false;
-        cpu->r.AROF = false;
+        cpu->rM = 0;
+        cpu->rR/*TODO SHIFT*/ = 0;
+        cpu->bMSFF = false;
+        cpu->bSALF = false;
+        cpu->bBROF = false;
+        cpu->bAROF = false;
         if (forTest) {
 		prepMessage(cpu); printf("storeForInterrupt(forTest=true)\n");
-                cpu->r.TM = 0;
-                cpu->r.MROF = false;
-                cpu->r.MWOF = false;
+                cpu->rTM = 0;
+                cpu->bMROF = false;
+                cpu->bMWOF = false;
         }
 
 	// if SECL detected IRQ or TEST, ensure word more
         if (forced || forTest) {
-                cpu->r.CWMF = false;
+                cpu->bCWMF = false;
         }
 
 	// are we P1?
@@ -501,15 +503,15 @@ void storeForInterrupt(CPU *cpu, BIT forced, BIT forTest, const char *cause)
                 if (forTest) {
                         DPRINTF("\tload DD");
                         loadBviaM(cpu); // B = [M]: load DD for test
-                        cpu->r.C = (cpu->r.B & MASK_CREG) >> SHFT_CREG;
-                        cpu->r.L = 0;
-                        cpu->r.PROF = false; // require fetch at SECL
-                        cpu->r.G = 0;
-                        cpu->r.H = 0;
-                        cpu->r.K = 0;
-                        cpu->r.V = 0;
+                        cpu->rC = (cpu->rB & MASK_CREG) >> SHFT_CREG;
+                        cpu->rL = 0;
+                        cpu->bPROF = false; // require fetch at SECL
+                        cpu->rGH/*TODO G*/ = 0;
+                        cpu->rGH/*TODO H*/ = 0;
+                        cpu->rKV/*TODO K*/ = 0;
+                        cpu->rKV/*TODO V*/ = 0;
                 } else {
-                        cpu->r.T = 0211; // inject 0211=ITI into P1's T register
+                        cpu->rT = 0211; // inject 0211=ITI into P1's T register
                 }
         } else {
                 // we are P2
@@ -533,53 +535,53 @@ void enterCharModeInline(CPU *cpu)
 	// if B is empty, load A fromstack and reset AROF
 	// a now holds the DI
 	adjustAEmpty(cpu);
-	if (cpu->r.BROF) {
-		cpu->r.A = cpu->r.B;
+	if (cpu->bBROF) {
+		cpu->rA = cpu->rB;
 		adjustBEmpty(cpu);
 	} else {
 		loadAviaS(cpu);
-		cpu->r.AROF = false;
+		cpu->bAROF = false;
 	}
 
 	// build a RCW(OPDC) and push it onto the stack
-	cpu->r.B = buildRCW(cpu, false);
-	cpu->r.BROF = true;
+	cpu->rB = buildRCW(cpu, false);
+	cpu->bBROF = true;
 	adjustBEmpty(cpu);
 
 	// reset and set flags to show we are in subroutine mode, RCW is last
-	cpu->r.MSFF = false;
-	cpu->r.SALF = true;
+	cpu->bMSFF = false;
+	cpu->bSALF = true;
 
 	// save S in F for character mode
-	cpu->r.F = cpu->r.S;
+	cpu->rF = cpu->rS;
 
 	// clear tally
-	cpu->r.R = 0;
+	cpu->rR/*TODO SHIFT*/ = 0;
 
 	// now in character mode
-	cpu->r.CWMF = true;
+	cpu->bCWMF = true;
 
 	// create first loop control word
 	// insert S into X.[18:15], but X is zero at this point	
-	cpu->r.X = ((WORD39)cpu->r.S) << SHFT_FREG;
+	cpu->rX = ((WORD39)cpu->rS) << SHFT_FREG;
 
 	// clear V
-	cpu->r.V = 0;
+	cpu->rKV/*TODO V*/ = 0;
 
 	// save DI in bw and also to B
-	cpu->r.B = bw = cpu->r.A;
+	cpu->rB = bw = cpu->rA;
 
 	// execute the portion of CM XX04=RDA operator starting at J=2
 	// S = DI
-	cpu->r.S = bw & MASKMEM;
+	cpu->rS = bw & MASKMEM;
 
 	// if DI is an operand
 	if (OPERAND(bw)) {
 		// it's an operand - set K from F field
-		cpu->r.K = (bw >> SHFT_FREG) & 7;
+		cpu->rKV/*TODO K*/ = (bw >> SHFT_FREG) & 7;
 	} else {
 		// otherwise, force K to zero and
-		cpu->r.K = 0;
+		cpu->rKV/*TODO K*/ = 0;
 		// just take the side effect of any p-bit interrupt
 		presenceTest(cpu, bw);
 	}
@@ -603,151 +605,151 @@ void initiate(CPU *cpu, BIT forTest)
 
 	// make sure A is empty and TOS is in B (and bw)
 	// after this AROF and BROF do not matter
-        if (cpu->r.AROF) {
-                cpu->r.B = bw = cpu->r.A;
-        } else if (cpu->r.BROF) {
-                bw = cpu->r.B;
+        if (cpu->bAROF) {
+                cpu->rB = bw = cpu->rA;
+        } else if (cpu->bBROF) {
+                bw = cpu->rB;
         } else {
                 adjustBFull(cpu);
-                bw = cpu->r.B;
+                bw = cpu->rB;
         }
 
         // restore the Initiate Control Word (INCW) in B (or bw) to the registers
         // 444444443333333333222222222211111111110000000000
         // 765432109876543210987654321098765432109876543210
         // 11000QQQQQQQQQYYYYYYZZZZZZ0TTTTTCSSSSSSSSSSSSSSS
-        cpu->r.S = (bw & MASK_INCWrS) >> SHFT_INCWrS;
-        cpu->r.CWMF = (bw & MASK_INCWMODE) ? true : false;
+        cpu->rS = (bw & MASK_INCWrS) >> SHFT_INCWrS;
+        cpu->bCWMF = (bw & MASK_INCWMODE) ? true : false;
 
         if (forTest) {
 		// TODO: what exactly is supposed to happen here?
 		prepMessage(cpu); printf("initiate(forTest=true)\n");
 		// TM holds MROF MWOF CCCF NCSF J J J J
-                cpu->r.TM = (bw & MASK_INCWrTM) >> SHFT_INCWrTM;
-                cpu->r.Z = (bw & MASK_INCWrZ) >> SHFT_INCWrZ;
-                cpu->r.Y = (bw & MASK_INCWrY) >> SHFT_INCWrY;
-                cpu->r.Q01F = (bw & MASK_INCWQ01F) ? true : false;
-                cpu->r.Q02F = (bw & MASK_INCWQ02F) ? true : false;
-                cpu->r.Q03F = (bw & MASK_INCWQ03F) ? true : false;
-                cpu->r.Q04F = (bw & MASK_INCWQ04F) ? true : false;
-                cpu->r.Q05F = (bw & MASK_INCWQ05F) ? true : false;
-                cpu->r.Q06F = (bw & MASK_INCWQ06F) ? true : false;
-                cpu->r.Q07F = (bw & MASK_INCWQ07F) ? true : false;
-                cpu->r.Q08F = (bw & MASK_INCWQ08F) ? true : false;
-                cpu->r.Q09F = (bw & MASK_INCWQ09F) ? true : false;
+                cpu->rTM = (bw & MASK_INCWrTM) >> SHFT_INCWrTM;
+                cpu->rZ = (bw & MASK_INCWrZ) >> SHFT_INCWrZ;
+                cpu->rY = (bw & MASK_INCWrY) >> SHFT_INCWrY;
+                cpu->bQ01F = (bw & MASK_INCWQ01F) ? true : false;
+                cpu->bQ02F = (bw & MASK_INCWQ02F) ? true : false;
+                cpu->bQ03F = (bw & MASK_INCWQ03F) ? true : false;
+                cpu->bQ04F = (bw & MASK_INCWQ04F) ? true : false;
+                cpu->bQ05F = (bw & MASK_INCWQ05F) ? true : false;
+                cpu->bQ06F = (bw & MASK_INCWQ06F) ? true : false;
+                cpu->bQ07F = (bw & MASK_INCWQ07F) ? true : false;
+                cpu->bQ08F = (bw & MASK_INCWQ08F) ? true : false;
+                cpu->bQ09F = (bw & MASK_INCWQ09F) ? true : false;
                 // Emulator doesn't support J register, so can't set that from TM
         }
 
         // get the Interrupt Return Control Word (IRCW) from stack to B (and bw)
         DPRINTF("\tIRCW");
         loadBviaS(cpu); // B = [S]
-        --cpu->r.S;
-        bw = cpu->r.B;
+        --cpu->rS;
+        bw = cpu->rB;
 
         // restore the Interrupt Return Control Word (IRCW) in B (or bw) to the registers
         // 444444443333333333222222222211111111110000000000
         // 765432109876543210987654321098765432109876543210
         // 11B0HHHVVVLLGGGKKKFFFFFFFFFFFFFFFCCCCCCCCCCCCCCC
-        cpu->r.C = (bw & MASK_CREG) >> SHFT_CREG;
-        cpu->r.F = (bw & MASK_FREG) >> SHFT_FREG;
-        cpu->r.K = (bw & MASK_KREG) >> SHFT_KREG;
-        cpu->r.G = (bw & MASK_GREG) >> SHFT_GREG;
-        cpu->r.L = (bw & MASK_LREG) >> SHFT_LREG;
-        cpu->r.V = (bw & MASK_VREG) >> SHFT_VREG;
-        cpu->r.H = (bw & MASK_HREG) >> SHFT_HREG;
+        cpu->rC = (bw & MASK_CREG) >> SHFT_CREG;
+        cpu->rF = (bw & MASK_FREG) >> SHFT_FREG;
+        cpu->rKV/*TODO K*/ = (bw & MASK_KREG) >> SHFT_KREG;
+        cpu->rGH/*TODO G*/ = (bw & MASK_GREG) >> SHFT_GREG;
+        cpu->rL = (bw & MASK_LREG) >> SHFT_LREG;
+        cpu->rKV/*TODO V*/ = (bw & MASK_VREG) >> SHFT_VREG;
+        cpu->rGH/*TODO H*/ = (bw & MASK_HREG) >> SHFT_HREG;
 
 	// load now addressed program word to P
         DPRINTF("\tloadP");
         loadPviaC(cpu); // load program word to P
 
 	// restore BROF if character mode or test
-        if (cpu->r.CWMF || forTest) {
+        if (cpu->bCWMF || forTest) {
                 saveBROF = (bw & MASK_RCWBROF) ? true : false;
         }
 
         // get the Interrupt Control Word (ICW) from stack to B (and bw)
         DPRINTF("\tICW ");
         loadBviaS(cpu); // B = [S]
-        --cpu->r.S;
-        bw = cpu->r.B;
+        --cpu->rS;
+        bw = cpu->rB;
 
         // restore the Interrupt Control Word (ICW) in B (or bw) to the registers
         // 444444443333333333222222222211111111110000000000
         // 765432109876543210987654321098765432109876543210
         // 110000RRRRRRRRR0MS00000V00000NNNNMMMMMMMMMMMMMMM
-        cpu->r.VARF = (bw & MASK_VARF) ? true : false;
-        cpu->r.SALF = (bw & MASK_SALF) ? true : false;
-        cpu->r.MSFF = (bw & MASK_MSFF) ? true : false;
-        cpu->r.R = (bw & MASK_RREG) >> SHFT_RREG;
+        cpu->bVARF = (bw & MASK_VARF) ? true : false;
+        cpu->bSALF = (bw & MASK_SALF) ? true : false;
+        cpu->bMSFF = (bw & MASK_MSFF) ? true : false;
+        cpu->rR/*TODO SHIFT*/ = (bw & MASK_RREG) >> SHFT_RREG;
 
 	// restore M, N, LOOP, B and A if character mode or test
-        if (cpu->r.CWMF || forTest) {
-                cpu->r.M = (bw & MASK_MREG) >> SHFT_MREG;
-                cpu->r.N = (bw & MASK_NREG) >> SHFT_NREG;
+        if (cpu->bCWMF || forTest) {
+                cpu->rM = (bw & MASK_MREG) >> SHFT_MREG;
+                cpu->rN = (bw & MASK_NREG) >> SHFT_NREG;
 
 	        // get the Interrupt Loop Control Word (ILCW) from stack to B (and bw)
                 DPRINTF("\tILCW");
                 loadBviaS(cpu); // B = [S]
-                --cpu->r.S;
-                bw = cpu->r.B;
+                --cpu->rS;
+                bw = cpu->rB;
 
                 // restore the Interrupt Loop Control Word (ILCW) in B (or bw) to the registers
                 // 444444443333333333222222222211111111110000000000
                 // 765432109876543210987654321098765432109876543210
                 // 11A000000XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-                cpu->r.X = bw & MASK_MANTISSA;
+                cpu->rX = bw & MASK_MANTISSA;
                 saveAROF = (bw & MASK_ILCWAROF) ? true : false;
 
                 // restore the B register if it was occupied or test
                 if (saveBROF || forTest) {
                         DPRINTF("\tload B");
                         loadBviaS(cpu); // B = [S]
-                        --cpu->r.S;
+                        --cpu->rS;
                 }
 
                 // restore the A register if it was occupied or test
                 if (saveAROF || forTest) {
                         DPRINTF("\tload A");
                         loadAviaS(cpu); // A = [S]
-                        --cpu->r.S;
+                        --cpu->rS;
                 }
 
 		// save AROF and BROF to the real flip-flops
-                cpu->r.AROF = saveAROF;
-                cpu->r.BROF = saveBROF;
+                cpu->bAROF = saveAROF;
+                cpu->bBROF = saveBROF;
 
 		// in charcater mode exchange S with the F(!) field in X
-                if (cpu->r.CWMF) {
-                        ADDR15 temp = cpu->r.S;
-                        cpu->r.S = (cpu->r.X & MASK_FREG) >> SHFT_FREG;
-                        cpu->r.X = (cpu->r.X & ~MASK_FREG) || (temp << SHFT_FREG);
+                if (cpu->bCWMF) {
+                        ADDR15 temp = cpu->rS;
+                        cpu->rS = (cpu->rX & MASK_FREG) >> SHFT_FREG;
+                        cpu->rX = (cpu->rX & ~MASK_FREG) || (temp << SHFT_FREG);
                 }
         } else {
 		// in word mode and not test, do not restore A and B
 		// they will pop up as necessary
-                cpu->r.AROF = 0;
-                cpu->r.BROF = 0;
+                cpu->bAROF = 0;
+                cpu->bBROF = 0;
         }
 
 	// load the first instruction into T
-        cpu->r.T = fieldIsolate(cpu->r.P, cpu->r.L*12, 12);
-        cpu->r.TROF = 1;
+        cpu->rT = fieldIsolate(cpu->rP, cpu->rL*12, 12);
+        cpu->bTROF = 1;
 
 	// in test, set some flags from the INCW (saved earlier in TM)
         if (forTest) {
-                cpu->r.NCSF = (cpu->r.TM >> 4) & 1;
-                cpu->r.CCCF = (cpu->r.TM >> 5) & 1;
-                cpu->r.MWOF = (cpu->r.TM >> 6) & 1;
-                cpu->r.MROF = (cpu->r.TM >> 7) & 1;
+                cpu->bNCSF = (cpu->rTM >> 4) & 1;
+                cpu->bCCCF = (cpu->rTM >> 5) & 1;
+                cpu->bMWOF = (cpu->rTM >> 6) & 1;
+                cpu->bMROF = (cpu->rTM >> 7) & 1;
 		// decrement stack? TODO: why?
-                --cpu->r.S;
+                --cpu->rS;
 		// TODO: and what does this?
-                if (!cpu->r.CCCF) {
-                        cpu->r.TM |= 0x80;
+                if (!cpu->bCCCF) {
+                        cpu->rTM |= 0x80;
                 }
         } else {
 		// otherwise make sure we are in normal state
-                cpu->r.NCSF = 1;
+                cpu->bNCSF = 1;
         }
 
         dotrcmem = save_dotrcmem;
@@ -770,9 +772,9 @@ void start(CPU *cpu)
 void stop(CPU *cpu)
 {
 	prepMessage(cpu); printf("stop\n");
-	cpu->r.T = 0;
-	cpu->r.TROF = 0;	// idle the processor
-	cpu->r.PROF = 0;
+	cpu->rT = 0;
+	cpu->bTROF = 0;	// idle the processor
+	cpu->bPROF = 0;
 	cpu->busy = 0;
 	cpu->cycleLimit = 0;	// exit the loop
 }
@@ -785,12 +787,12 @@ void stop(CPU *cpu)
 void initiateAsP2(CPU *cpu)
 {
 	prepMessage(cpu); printf("initiateAsP2\n");
-	cpu->r.NCSF = false;	// make P2 is in Control State to execute the IP1 & access low mem
-	cpu->r.M = AA_IODESC;	// address of the INCW
+	cpu->bNCSF = false;	// make P2 is in Control State to execute the IP1 & access low mem
+	cpu->rM = AA_IODESC;	// address of the INCW
 	loadBviaM(cpu);		// B = [M]
-	cpu->r.AROF = 0;	// make sure A is invalid
-	cpu->r.T = 04111;	// inject 4111=IP1 into P2's T register
-	cpu->r.TROF = 1;
+	cpu->bAROF = 0;	// make sure A is invalid
+	cpu->rT = 04111;	// inject 4111=IP1 into P2's T register
+	cpu->bTROF = 1;
 	start(cpu);
 }
 
@@ -801,13 +803,13 @@ void initiateAsP2(CPU *cpu)
 void preset(CPU *cpu, ADDR15 runAddr)
 {
 	prepMessage(cpu); printf("preset to %05o\n", runAddr);
-        cpu->r.C = runAddr;     // starting execution address
-        cpu->r.L = 1;           // preset L to point to the second syllable
+        cpu->rC = runAddr;     // starting execution address
+        cpu->rL = 1;           // preset L to point to the second syllable
         loadPviaC(cpu);         // load the program word to P
-        cpu->r.T = (cpu->r.P >> 36) & 07777;	// get leftmost syllable
-        cpu->r.TROF = 1;
-        cpu->r.R = 0;
-        cpu->r.S = 0;
+        cpu->rT = (cpu->rP >> 36) & 07777;	// get leftmost syllable
+        cpu->bTROF = 1;
+        cpu->rR/*TODO SHIFT*/ = 0;
+        cpu->rS = 0;
 }
 
 /*
@@ -817,11 +819,11 @@ void preset(CPU *cpu, ADDR15 runAddr)
  * set up -- in particular there must be a syllable in T with TROF set, the
  * current program word must be in P with PROF set, and the C & L registers
  * must point to the next syllable to be executed.
- * This routine will continue to run while cpu->r.runCycles < cpu->r.cycleLimit
+ * This routine will continue to run while cpu->runCycles < cpu->cycleLimit
  */
 void run(CPU *cpu)
 {
-	if (!cpu->r.TROF) {
+	if (!cpu->bTROF) {
 		prepMessage(cpu); printf("run, TROF not set!\n");
 		while (1) ;
 	}
@@ -829,7 +831,7 @@ void run(CPU *cpu)
         do {
                 cpu->cycleCount = 1;    // general syllable execution overhead
 
-                if (cpu->r.CWMF) {
+                if (cpu->bCWMF) {
                         b5500_execute_cm(cpu);
                 } else {
                         b5500_execute_wm(cpu);
@@ -839,7 +841,7 @@ void run(CPU *cpu)
 *   SECL: Syllable Execution Complete Level                    *
 ***************************************************************/
 		// check for any registers gone wild
-#define CHECK(R,M,T) if((cpu->r.R) & ~(M))printf("*\tCHECK "T" = %llo\n", (WORD48)(cpu->r.R))
+#define CHECK(R,M,T) if((cpu->rR/*TODO SHIFT*/) & ~(M))printf("*\tCHECK "T" = %llo\n", (WORD48)(cpu->rR/*TODO SHIFT*/))
 		CHECK(A, MASK_WORD48, "A");
 		CHECK(B, MASK_WORD48, "B");
 		CHECK(C, MASK_ADDR15, "C");
@@ -849,46 +851,46 @@ void run(CPU *cpu)
 		CHECK(R, MASK_ADDR9,  "R");
 		CHECK(S, MASK_ADDR15, "S");
                 // is there an interrupt
-                if (cpu->r.NCSF && (cpu->isP1 ?
+                if (cpu->bNCSF && (cpu->isP1 ?
                         CC->IAR :
-                        (cpu->r.I || CC->HP2F))) {
+                        (cpu->rI || CC->HP2F))) {
                         // there's an interrupt and we're in Normal State
                         // reset Q09F (R-relative adder mode) and
                         // set Q07F (hardware-induced SFI) (for display only)
-                        cpu->r.Q09F = false;
-                        cpu->r.Q07F = true;
+                        cpu->bQ09F = false;
+                        cpu->bQ07F = true;
                         // the following is for display only, since we ...
-                        cpu->r.T = 03011; // inject 3011=SFI into T
+                        cpu->rT = 03011; // inject 3011=SFI into T
                         // ... call directly to avoid resetting registers at top
                         // of loop. And SFI will inject a 0211 (ITI)
                         storeForInterrupt(cpu, true, false, "atSECL");
                 } else {
                         // otherwise, fetch the next instruction
-                        if (!cpu->r.PROF) {
+                        if (!cpu->bPROF) {
                                 loadPviaC(cpu);
                         }
-                        switch (cpu->r.L) {
+                        switch (cpu->rL) {
                         case 0:
-                                cpu->r.T = (cpu->r.P >> 36) & 0xfff;
-                                cpu->r.L = 1;
+                                cpu->rT = (cpu->rP >> 36) & 0xfff;
+                                cpu->rL = 1;
                                 break;
                         case 1:
-                                cpu->r.T = (cpu->r.P >> 24) & 0xfff;
-                                cpu->r.L = 2;
+                                cpu->rT = (cpu->rP >> 24) & 0xfff;
+                                cpu->rL = 2;
                                 break;
                         case 2:
-                                cpu->r.T = (cpu->r.P >> 12) & 0xfff;
-                                cpu->r.L = 3;
+                                cpu->rT = (cpu->rP >> 12) & 0xfff;
+                                cpu->rL = 3;
                                 break;
                         case 3:
-                                cpu->r.T = cpu->r.P & 0xfff;
-                                cpu->r.L = 0;
+                                cpu->rT = cpu->rP & 0xfff;
+                                cpu->rL = 0;
                                 // invalidate current program word
-                                cpu->r.PROF = 0;
+                                cpu->bPROF = 0;
                                 // assume no Inhibit Fetch for now and bump C
-                                if (++cpu->r.C > 077777) {
+                                if (++cpu->rC > 077777) {
                                         DPRINTF("C reached end of memory\n");
-                                        cpu->r.C = 0;
+                                        cpu->rC = 0;
                                         stop(cpu);
                                 }
                                 break;
@@ -898,7 +900,7 @@ void run(CPU *cpu)
         // Accumulate Normal and Control State cycles for use by Console in
         // making the pretty lights blink. If the processor is no longer busy,
         // accumulate the cycles as Normal State, as we probably just did SFI.
-                if (cpu->r.NCSF || !cpu->busy) {
+                if (cpu->bNCSF || !cpu->busy) {
                         cpu->normalCycles += cpu->cycleCount;
                 } else {
                         cpu->controlCycles += cpu->cycleCount;

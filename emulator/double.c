@@ -15,6 +15,8 @@
 *   changed "this" to "cpu" to avoid errors when using g++
 * 2017-09-30  R.Meyer
 *   overhaul of file names
+* 2017-10-28  R.Meyer
+*   adaption to new CPU structure
 ***********************************************************************/
 
 #include <stdio.h>
@@ -28,13 +30,13 @@ void doublePrecisionAdd(CPU *cpu, BIT add)
         printf("*\tfaking DADD\n");
         // Fake it by rearranging the stack and calling the single precision variant
         adjustABFull(cpu);      // get double precision Aa
-        cpu->r.BROF = false;    // eliminate a
+        cpu->bBROF = false;    // eliminate a
         adjustBFull(cpu);       // get B
-        cpu->r.S--;             // eliminate b
+        cpu->rS--;             // eliminate b
         singlePrecisionAdd(cpu, add); // single precision add leaves result in B
-        cpu->r.A = cpu->r.B;    // high part of result to A
-        cpu->r.B = 0ll;         // clear lower part of result
-        cpu->r.AROF = true;     // both AROF and BROF are now set
+        cpu->rA = cpu->rB;    // high part of result to A
+        cpu->rB = 0ll;         // clear lower part of result
+        cpu->bAROF = true;     // both AROF and BROF are now set
 }
 
 /*
@@ -45,13 +47,13 @@ void doublePrecisionMultiply(CPU *cpu)
         printf("*\tfaking DMUL\n");
         // Fake it by rearranging the stack and calling the single precision variant
         adjustABFull(cpu);      // get double precision Aa
-        cpu->r.BROF = false;    // eliminate a
+        cpu->bBROF = false;    // eliminate a
         adjustBFull(cpu);       // get B
-        cpu->r.S--;             // eliminate b
+        cpu->rS--;             // eliminate b
         singlePrecisionMultiply(cpu); // single precision mul leaves result in B
-        cpu->r.A = cpu->r.B;    // high part of result to A
-        cpu->r.B = 0ll;         // clear lower part of result
-        cpu->r.AROF = true;     // both AROF and BROF are now set
+        cpu->rA = cpu->rB;    // high part of result to A
+        cpu->rB = 0ll;         // clear lower part of result
+        cpu->bAROF = true;     // both AROF and BROF are now set
 }
 
 /*
@@ -62,12 +64,12 @@ void doublePrecisionDivide(CPU *cpu)
         printf("*\tfaking DDIV\n");
         // Fake it by rearranging the stack and calling the single precision variant
         adjustABFull(cpu);      // get double precision Aa
-        cpu->r.BROF = false;    // eliminate a
+        cpu->bBROF = false;    // eliminate a
         adjustBFull(cpu);       // get B
-        cpu->r.S--;             // eliminate b
+        cpu->rS--;             // eliminate b
         singlePrecisionDivide(cpu); // single precision div leaves result in B
-        cpu->r.A = cpu->r.B;    // high part of result to A
-        cpu->r.B = 0ll;         // clear lower part of result
-        cpu->r.AROF = true;     // both AROF and BROF are now set
+        cpu->rA = cpu->rB;    // high part of result to A
+        cpu->rB = 0ll;         // clear lower part of result
+        cpu->bAROF = true;     // both AROF and BROF are now set
 }
 

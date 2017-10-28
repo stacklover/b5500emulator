@@ -369,9 +369,10 @@ DEVICE              cpu_dev = {
 #define B       cpu->rB
 #define C       cpu->rC
 #define L       cpu->rL
+//#define E       cpu->rE
 #define X       cpu->rX
 #define Y       cpu->rY
-//#define Q       cpu->rI
+//#define Q       cpu->rQ
 #define GH      cpu->rGH
 #define KV      cpu->rKV
 #define Ma      cpu->rM
@@ -471,7 +472,9 @@ DEVICE              cpu_dev = {
 int memory_cycle(uint8 E) {
         uint16 addr = 0;
 
-#ifndef NOSIMH
+#ifdef NOSIMH
+	cpu->rE = E;
+#else
         sim_interval--;
 #endif
         if (E & 2)
@@ -1654,20 +1657,20 @@ void divide(int op) {
 
 
 /* Double precision addition.
-   A & Y (not in real B5500) have operand 1.
+   A & tY (not in real B5500) have operand 1.
    B & X have operand 2 */
 void double_add(int opcode) {
     int         exp_a, exp_b;
     int         sa, sb;
     int         ld;
-    t_uint64    temp;
+    t_uint64    temp, tY;
 
     AB_valid();
-    X = A;              /* Save registers. X = H, Y=L*/
-    Y = B;
+    X = A;              /* Save registers. X = H, tY=L*/
+    tY = B;
     AROF = BROF = 0;
     AB_valid(); /* Grab other operand */
-    temp = A;   /* Oprands A,Y and B,X */
+    temp = A;   /* Oprands A,tY and B,X */
     A = X;
     X = B;
     B = temp;
@@ -1687,8 +1690,8 @@ void double_add(int opcode) {
         temp = A;
         A = B;
         B = temp;
-        temp = Y;
-        Y = X;
+        temp = tY;
+        tY = X;
         X = temp;
         sa = exp_a;
         exp_a = exp_b;
@@ -1697,7 +1700,7 @@ void double_add(int opcode) {
     /* Extract signs, clear upper bits */
     sa = (A & MSIGN) != 0;
     A &= MANT;
-    Y &= MANT;
+    tY &= MANT;
     sb = (B & MSIGN) != 0;
     B &= MANT;
     X &= MANT;
@@ -1706,9 +1709,9 @@ void double_add(int opcode) {
     while(exp_a != exp_b) {
         if ((A & NORM) == 0) {
             A <<= 3;
-            Y <<= 3;
-            A |= (Y >> EXPO_V) & 07;
-            Y &= MANT;
+            tY <<= 3;
+            A |= (tY >> EXPO_V) & 07;
+            tY &= MANT;
             exp_a--;
          } else {
             X |= (B & 07) << EXPO_V;
@@ -1726,11 +1729,11 @@ void double_add(int opcode) {
         X = 0;
     }
     if (sa) {   /* A is negative. */
-       Y ^= MANT;
+       tY ^= MANT;
        A ^= FWORD;
-       Y++;
-       if (Y & EXPO) {
-            Y &= MANT;
+       tY++;
+       if (tY & EXPO) {
+            tY &= MANT;
         A++;
        }
     }
@@ -1743,7 +1746,7 @@ void double_add(int opcode) {
         B++;
        }
     }
-    X = Y + X;
+    X = tY + X;
     B = A + B;  /* Do final math. */
     if (X & EXPO) {
        B += X >> (EXPO_V);
@@ -1812,20 +1815,20 @@ void double_add(int opcode) {
 }
 
 /* Double precision multiply.
-   A & Y (not in real B5500) have operand 1.
+   A & tY (not in real B5500) have operand 1.
    B & X have operand 2 */
 void double_mult() {
     int         exp_a, exp_b;
     int         f;
     int         ld;
-    t_uint64    m7, m6;
+    t_uint64    m7, m6, tY;
 
     AB_valid();
-    X = A;              /* Save registers. X = H, Y=L*/
-    Y = B;
+    X = A;              /* Save registers. X = H, tY=L*/
+    tY = B;
     AROF = BROF = 0;
     AB_valid(); /* Grab other operand */
-    m7 = A;     /* Oprands A,Y and B,X */
+    m7 = A;     /* Oprands A,tY and B,X */
     A = X;
     X = B;
     B = m7;
@@ -1840,7 +1843,7 @@ void double_mult() {
     /* Extract signs, clear upper bits */
     f = (A & MSIGN) != 0;
     A &= MANT;
-    Y &= MANT;
+    tY &= MANT;
     f ^= ((B & MSIGN) != 0);
     B &= MANT;
     X &= MANT;
@@ -1856,28 +1859,28 @@ void double_mult() {
 
     for(ld = 0; (A & NORM) == 0 && ld < 13 ; ld++) {
         A <<= 3;
-        A |= (Y >> 36) & 07;
-        Y <<= 3;
-        Y &= MANT;
+        A |= (tY >> 36) & 07;
+        tY <<= 3;
+        tY &= MANT;
         exp_a--;
     }
 
-    if ((X == 0 && B == 0) || (Y == 0 && A == 0)) {
+    if ((X == 0 && B == 0) || (tY == 0 && A == 0)) {
         A = B = 0;
         return;
     }
     exp_b += exp_a + 13;
-    /* A = M3, Y = m3 */
+    /* A = M3, tY = m3 */
     /* B = M4, X = m4 */
-    /* B * Y => M6(Y),m6(m6) */
+    /* B * tY => M6(tY),m6(m6) */
     /* A * X => M7(X) m7(m7) */
     /* Add m6(m7) + m7(m6) save High order digit of m7 */
-    /* X = M7(X) + M6(Y) */
+    /* X = M7(X) + M6(tY) */
     /* A * B => Mx(B),mx(m6) */
     /* Add M7 to mx => M8 + m8 */
     /* Add M6 to m8 => M9(M8) + m9 */
     /*    M6 m6 = M4 * m3 */
-    mult_step(B, &Y, &m6);      /* Y = M6, m6 = m6 */
+    mult_step(B, &tY, &m6);      /* tY = M6, m6 = m6 */
     /*    M7 m7 = (M3 * m4) */
     mult_step(A, &X, &m7);      /* X = M7, m7 = m7 */
     m6 += m7;
@@ -1885,7 +1888,7 @@ void double_mult() {
     /* M8 m8 = (M4 * M3) */
     mult_step(A, &B, &m6);      /* B = M8, m6 = m8 */
     /* M8 m8 = (M4 * M3) + M7 + M6 */
-    m6 += X + Y;
+    m6 += X + tY;
     /* M9 m9 = M8 + (m8 + M6) */
     /* M10m10= M9 + m9 + (high order digit of m7) */
     A = B + (m6 >> EXPO_V);
@@ -1937,21 +1940,21 @@ void double_mult() {
 }
 
 /* Double precision divide.
-   A & Y (not in real B5500) have operand 1.
+   A & tY (not in real B5500) have operand 1.
    B & X have operand 2 */
 void double_divide() {
     int exp_a, exp_b;
     int f;
     int         n;
     int         q;
-    t_uint64    Q1, q1;
+    t_uint64    Q1, q1, tY;
 
     AB_valid();
-    X = A;              /* Save registers. X = H, Y=L*/
-    Y = B;
+    X = A;              /* Save registers. X = H, tY=L*/
+    tY = B;
     AROF = BROF = 0;
     AB_valid(); /* Grab other operand */
-    Q1 = A;     /* Oprands A,Y and B,X */
+    Q1 = A;     /* Oprands A,tY and B,X */
     A = X;
     X = B;
     B = Q1;
@@ -1963,13 +1966,13 @@ void double_divide() {
     /* Extract signs, clear upper bits */
     f = (A & MSIGN) != 0;
     A &= MANT;
-    Y &= MANT;
+    tY &= MANT;
     /* Normalize A */
     for(n = 0; (A & NORM) == 0 && n < 13 ; n++) {
         A <<= 3;
-        A |= (Y >> 36) & 07;
-        Y <<= 3;
-        Y &= MANT;
+        A |= (tY >> 36) & 07;
+        tY <<= 3;
+        tY &= MANT;
         exp_a--;
     }
 
@@ -1995,7 +1998,7 @@ void double_divide() {
     }
 
     /* Check for divide by 0 */
-    if ((A == 0) && (Y == 0)) {
+    if ((A == 0) && (tY == 0)) {
         if (NCSF)
 #ifdef NOSIMH
 	    causeSyllableIrq(cpu, IRQ_DIVZ, "dpdiv");
@@ -2008,7 +2011,7 @@ void double_divide() {
     }
 
     exp_b = exp_b - exp_a + 1;
-    /* B,X = M4,m4   A,Y = M3,m3 */
+    /* B,X = M4,m4   A,tY = M3,m3 */
 
     /* Divide M4,m4 by M3 resulting in Q1, R1 */
     do {
@@ -2062,8 +2065,8 @@ void double_divide() {
     }
 
     q1 = X;
-    B = Y;
-    Y = X;
+    B = tY;
+    tY = X;
     X = 0;
     /* Now divide m3 by M3 resulting in q2, R3 */
     /* q2 in X, R3 in B */
@@ -2085,7 +2088,7 @@ void double_divide() {
     } else {
         /* Load in Q1,q1 into B */
         A = 01157777777777777LL; // TODO: inform Richard
-        Y = MANT ^ X;   /* Load q2 into A */
+        tY = MANT ^ X;   /* Load q2 into A */
         B = Q1;
         X = q1;
         double_mult();

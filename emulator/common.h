@@ -71,6 +71,7 @@ typedef unsigned long long WORD48;      // 48 bits machine word
 
 /*
  * define all the registers of the Central Control instance
+ * NOTE: this will be in shared memory and MUST NOT contain any pointers!
  */
 typedef struct central_control {
         ADDR15          IAR;    // IRQ "vector"
@@ -122,9 +123,10 @@ typedef struct accessor {
 } ACCESSOR;
 
 /*
- * all the data defining one processor (version 2)
+ * all the data defining one processor
+ * NOTE: this will be in shared memory and MUST NOT contain any pointers!
  */
-typedef struct cpu2 {
+typedef struct cpu {
         WORD48          rA;      // A register
         WORD48          rB;      // B register
         ADDR15          rC;      // C register (program address)
@@ -144,7 +146,7 @@ typedef struct cpu2 {
         ADDR15          rS;      // S register (stack pointer)
         WORD12          rT;      // Current program syllable register
         WORD39          rX;      // Mantissa extension for B (loop control in CM)
-        WORD48          rY;      // Serial character register for A (TODO: Richard uses this as 2nd X register in double precision)
+        WORD6           rY;      // Serial character register for A
         WORD6           rZ;      // Serial character register for B
         WORD8           rTM;     // Temporary maintenance storage register
 // Q register as BITs (not all are used in accordance with the real B5500)
@@ -181,7 +183,7 @@ typedef struct cpu2 {
         BIT             bzzzF;   // one lamp in display right of Q1 has no label
 
         ACCESSOR        acc;            // memory access
-        const char      *id;            // pointer to name of CPU (for display/debug only)
+        char            id[4];          // name of CPU (for display/debug only)
         unsigned        cycleCount;     // approx of CPU cycles needed
         unsigned        cycleLimit;     // Cycle limit for this.run()
         unsigned        normalCycles;   // Current normal-state cycle count (for UI display)

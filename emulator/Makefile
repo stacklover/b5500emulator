@@ -17,8 +17,8 @@
 #   overhaul of file names
 #**********************************************************************/
 
-ALL =		$(ODIR)/emulator2.exe
-		#$(ODIR)/processor_panel.exe \
+ALL =		$(ODIR)/emulator2.exe \
+		$(ODIR)/processor_panel.exe \
 		#$(ODIR)/emulator.exe \
 		#$(ODIR)/asm-n-run.exe \
 		#$(ODIR)/sptest.exe \
@@ -35,13 +35,12 @@ OBJTEST	=	$(ODIR)/test.o \
 
 OBJPANEL =	$(ODIR)/processor_panel.o $(ODIR)/pdp_text.o $(ODIR)/init_shares.o
 
-OBJEMULATOR =	$(ODIR)/emulator.o $(ODIR)/init_shares.o \
+OBJEMULATOR =	$(ODIR)/emulator2.o $(ODIR)/init_shares.o \
 		$(ODIR)/execute_cm.o $(ODIR)/execute_wm.o \
 		$(ODIR)/stack.o $(ODIR)/memory.o $(ODIR)/jump_call.o \
 		$(ODIR)/single.o $(ODIR)/double.o \
 		$(ODIR)/misc_cpu.o $(ODIR)/bitfield.o $(ODIR)/stream.o \
-		$(ODIR)/cc_irq.o \
-		$(ODIR)/cc_io.o \
+		$(ODIR)/cc2.o \
 		$(ODIR)/dev_spo.o \
 		$(ODIR)/dev_cr.o \
 		$(ODIR)/dev_mt.o \

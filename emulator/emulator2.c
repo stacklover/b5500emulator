@@ -554,7 +554,7 @@ int main(int argc, char *argv[])
         memset(MAIN, 0, MAXMEM*sizeof(WORD48));
         cpu = P[0];
         memset(cpu, 0, sizeof(CPU));
-        cpu->id = "P1";
+        strcpy(cpu->id, "P1");
         cpu->acc.id = cpu->id;
         cpu->isP1 = true;
 

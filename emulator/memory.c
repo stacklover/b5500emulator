@@ -17,6 +17,8 @@
 *   overhaul of file names
 * 2017-10-10  R.Meyer
 *   some refactoring in the functions, added documentation
+* 2017-10-28  R.Meyer
+*   adaption to new CPU structure
 ***********************************************************************/
 
 #include <stdio.h>
@@ -130,13 +132,13 @@ void accessError(CPU *cpu)
         printf("*\t%s accessError addr=%05o\n", cpu->id, cpu->acc.addr);
         if (cpu->acc.MAED) {
                 // set I02F: memory address/inhibit error
-                cpu->r.I |= 0x02;
+                cpu->rI |= 0x02;
                 signalInterrupt(cpu->id, "MAE");
         } else if (cpu->acc.MPED) {
                 // set I01F: memory parity error
-                cpu->r.I |= 0x01;
+                cpu->rI |= 0x01;
                 signalInterrupt(cpu->id, "MPE");
-                if (cpu->isP1 && !cpu->r.NCSF) {
+                if (cpu->isP1 && !cpu->bNCSF) {
                         // P1 memory parity in Control State stops the processor
                         stop(cpu);
                 }
@@ -155,20 +157,20 @@ BIT indexDescriptor(CPU *cpu)
 	BIT	sign;
 
 	// Data descriptor: see if it must be indexed
-	wcnt = (cpu->r.A & MASK_WCNT) << SHFT_WCNT; // A.[8:10]
+	wcnt = (cpu->rA & MASK_WCNT) << SHFT_WCNT; // A.[8:10]
 	if (wcnt) {
 		adjustABFull(cpu);
 		// Normalize the index
-		if (integerize(&cpu->r.B)) {
+		if (integerize(&cpu->rB)) {
 			// oops... integer overflow normalizing the index
-			if (cpu->r.NCSF) {
+			if (cpu->bNCSF) {
 				causeSyllableIrq(cpu, IRQ_INTO, "INX Overflow");
 				return true;
 			}
 		}
 		// check index to be in range of 0..(wcnt-1)
-	        index = cpu->r.B & MASK_MANTISSA;
-		sign = (cpu->r.B & MASK_SIGNMANT) ? true : false;
+	        index = cpu->rB & MASK_MANTISSA;
+		sign = (cpu->rB & MASK_SIGNMANT) ? true : false;
 		if (sign && index) {
 			// negative
 			causeSyllableIrq(cpu, IRQ_INDEX, "INX<0");
@@ -179,13 +181,13 @@ BIT indexDescriptor(CPU *cpu)
 			causeSyllableIrq(cpu, IRQ_INDEX, "INX>WC");
 			return true;
 		}
-		cpu->r.M = (cpu->r.A + (index & 01777)) & MASK_ADDR;
-		cpu->r.A &= ~(MASK_WCNT | MASK_ADDR);
-		cpu->r.A |= cpu->r.M;
-		cpu->r.BROF = false;
+		cpu->rM = (cpu->rA + (index & 01777)) & MASK_ADDR;
+		cpu->rA &= ~(MASK_WCNT | MASK_ADDR);
+		cpu->rA |= cpu->rM;
+		cpu->bBROF = false;
 		return false;
 	}
-	cpu->r.M = cpu->r.A & MASK_ADDR;
+	cpu->rM = cpu->rA & MASK_ADDR;
 	return false;
 }
 
@@ -196,16 +198,16 @@ void loadAviaS(CPU *cpu)
 {
         if (dotrcmem)
                 printf("\t[S]->A ");
-        cpu->r.E = 2;           // Just to show the world what's happening
-        cpu->acc.addr = cpu->r.S;
-        cpu->acc.MAIL = (cpu->r.S < AA_USERMEM) && cpu->r.NCSF;
+        cpu->rE = 2;           // Just to show the world what's happening
+        cpu->acc.addr = cpu->rS;
+        cpu->acc.MAIL = (cpu->rS < AA_USERMEM) && cpu->bNCSF;
         fetch(&cpu->acc);
         //cpu->cycleCount += B5500CentralControl.memReadCycles;
         if (cpu->acc.MAED || cpu->acc.MPED) {
                 accessError(cpu);
         } else {
-                cpu->r.A = cpu->acc.word;
-                cpu->r.AROF = true;
+                cpu->rA = cpu->acc.word;
+                cpu->bAROF = true;
         }
 }
 
@@ -213,16 +215,16 @@ void loadBviaS(CPU *cpu)
 {
         if (dotrcmem)
                 printf("\t[S]->B ");
-        cpu->r.E = 3;           // Just to show the world what's happening
-        cpu->acc.addr = cpu->r.S;
-        cpu->acc.MAIL = (cpu->r.S < AA_USERMEM) && cpu->r.NCSF;
+        cpu->rE = 3;           // Just to show the world what's happening
+        cpu->acc.addr = cpu->rS;
+        cpu->acc.MAIL = (cpu->rS < AA_USERMEM) && cpu->bNCSF;
         fetch(&cpu->acc);
         //cpu->cycleCount += B5500CentralControl.memReadCycles;
         if (cpu->acc.MAED || cpu->acc.MPED) {
                 accessError(cpu);
         } else {
-                cpu->r.B = cpu->acc.word;
-                cpu->r.BROF = true;
+                cpu->rB = cpu->acc.word;
+                cpu->bBROF = true;
         }
 }
 
@@ -230,16 +232,16 @@ void loadAviaM(CPU *cpu)
 {
         if (dotrcmem)
                 printf("\t[M]->A ");
-        cpu->r.E = 4;           // Just to show the world what's happening
-        cpu->acc.addr = cpu->r.M;
-        cpu->acc.MAIL = (cpu->r.M < AA_USERMEM) && cpu->r.NCSF;
+        cpu->rE = 4;           // Just to show the world what's happening
+        cpu->acc.addr = cpu->rM;
+        cpu->acc.MAIL = (cpu->rM < AA_USERMEM) && cpu->bNCSF;
         fetch(&cpu->acc);
         //cpu->cycleCount += B5500CentralControl.memReadCycles;
         if (cpu->acc.MAED || cpu->acc.MPED) {
                 accessError(cpu);
         } else {
-                cpu->r.A = cpu->acc.word;
-                cpu->r.AROF = true;
+                cpu->rA = cpu->acc.word;
+                cpu->bAROF = true;
         }
 }
 
@@ -247,16 +249,16 @@ void loadBviaM(CPU *cpu)
 {
         if (dotrcmem)
                 printf("\t[M]->B ");
-        cpu->r.E = 5;           // Just to show the world what's happening
-        cpu->acc.addr = cpu->r.M;
-        cpu->acc.MAIL = (cpu->r.M < AA_USERMEM) && cpu->r.NCSF;
+        cpu->rE = 5;           // Just to show the world what's happening
+        cpu->acc.addr = cpu->rM;
+        cpu->acc.MAIL = (cpu->rM < AA_USERMEM) && cpu->bNCSF;
         fetch(&cpu->acc);
         //cpu->cycleCount += B5500CentralControl.memReadCycles;
         if (cpu->acc.MAED || cpu->acc.MPED) {
                 accessError(cpu);
         } else {
-                cpu->r.B = cpu->acc.word;
-                cpu->r.BROF = true;
+                cpu->rB = cpu->acc.word;
+                cpu->bBROF = true;
         }
 }
 
@@ -267,16 +269,16 @@ void loadMviaM(CPU *cpu)
 	// side effect: sets B
         if (dotrcmem)
                 printf("\t[M]~>M ");
-        cpu->r.E = 6;           // Just to show the world what's happening
-        cpu->acc.addr = cpu->r.M;
-        cpu->acc.MAIL = (cpu->r.M < AA_USERMEM) && cpu->r.NCSF;
+        cpu->rE = 6;           // Just to show the world what's happening
+        cpu->acc.addr = cpu->rM;
+        cpu->acc.MAIL = (cpu->rM < AA_USERMEM) && cpu->bNCSF;
         fetch(&cpu->acc);
         //cpu->cycleCount += B5500CentralControl.memReadCycles;
         if (cpu->acc.MAED || cpu->acc.MPED) {
                 accessError(cpu);
         } else {
-		cpu->r.B = cpu->acc.word;
-                cpu->r.M = (cpu->r.B & MASK_FREG) >> SHFT_FREG;
+		cpu->rB = cpu->acc.word;
+                cpu->rM = (cpu->rB & MASK_FREG) >> SHFT_FREG;
         }
 }
 
@@ -284,17 +286,17 @@ void loadPviaC(CPU *cpu)
 {
         if (dotrcmem)
                 printf("\t[C]->P ");
-        cpu->r.E = 48;          // Just to show the world what's happening
-        cpu->acc.addr = cpu->r.C;
-        cpu->acc.MAIL = (cpu->r.C < AA_USERMEM) && cpu->r.NCSF;
+        cpu->rE = 48;          // Just to show the world what's happening
+        cpu->acc.addr = cpu->rC;
+        cpu->acc.MAIL = (cpu->rC < AA_USERMEM) && cpu->bNCSF;
         fetch(&cpu->acc);
         // TODO: should cpu not be in the else part?
-        cpu->r.PROF = true;
+        cpu->bPROF = true;
         //cpu->cycleCount += B5500CentralControl.memReadCycles;
         if (cpu->acc.MAED || cpu->acc.MPED) {
                 accessError(cpu);
         } else {
-                cpu->r.P = cpu->acc.word;
+                cpu->rP = cpu->acc.word;
         }
 }
 
@@ -305,10 +307,10 @@ void storeAviaS(CPU *cpu)
 {
         if (dotrcmem)
                 printf("\t[S]<-A ");
-        cpu->r.E = 10;          // Just to show the world what's happening
-        cpu->acc.addr = cpu->r.S;
-        cpu->acc.MAIL = (cpu->r.S < AA_USERMEM) && cpu->r.NCSF;
-        cpu->acc.word = cpu->r.A;
+        cpu->rE = 10;          // Just to show the world what's happening
+        cpu->acc.addr = cpu->rS;
+        cpu->acc.MAIL = (cpu->rS < AA_USERMEM) && cpu->bNCSF;
+        cpu->acc.word = cpu->rA;
         store(&cpu->acc);
         //cpu->cycleCount += B5500CentralControl.memReadCycles;
         if (cpu->acc.MAED || cpu->acc.MPED) {
@@ -320,10 +322,10 @@ void storeBviaS(CPU *cpu)
 {
         if (dotrcmem)
                 printf("\t[S]<-B ");
-        cpu->r.E = 11;          // Just to show the world what's happening
-        cpu->acc.addr = cpu->r.S;
-        cpu->acc.MAIL = (cpu->r.S < AA_USERMEM) && cpu->r.NCSF;
-        cpu->acc.word = cpu->r.B;
+        cpu->rE = 11;          // Just to show the world what's happening
+        cpu->acc.addr = cpu->rS;
+        cpu->acc.MAIL = (cpu->rS < AA_USERMEM) && cpu->bNCSF;
+        cpu->acc.word = cpu->rB;
         store(&cpu->acc);
         //cpu->cycleCount += B5500CentralControl.memReadCycles;
         if (cpu->acc.MAED || cpu->acc.MPED) {
@@ -335,10 +337,10 @@ void storeAviaM(CPU *cpu)
 {
         if (dotrcmem)
                 printf("\t[M]<-A ");
-        cpu->r.E = 12;          // Just to show the world what's happening
-        cpu->acc.addr = cpu->r.M;
-        cpu->acc.MAIL = (cpu->r.M < AA_USERMEM) && cpu->r.NCSF;
-        cpu->acc.word = cpu->r.A;
+        cpu->rE = 12;          // Just to show the world what's happening
+        cpu->acc.addr = cpu->rM;
+        cpu->acc.MAIL = (cpu->rM < AA_USERMEM) && cpu->bNCSF;
+        cpu->acc.word = cpu->rA;
         store(&cpu->acc);
         //cpu->cycleCount += B5500CentralControl.memReadCycles;
         if (cpu->acc.MAED || cpu->acc.MPED) {
@@ -350,10 +352,10 @@ void storeBviaM(CPU *cpu)
 {
         if (dotrcmem)
                 printf("\t[M]<-B ");
-        cpu->r.E = 12;          // Just to show the world what's happening
-        cpu->acc.addr = cpu->r.M;
-        cpu->acc.MAIL = (cpu->r.M < AA_USERMEM) && cpu->r.NCSF;
-        cpu->acc.word = cpu->r.B;
+        cpu->rE = 12;          // Just to show the world what's happening
+        cpu->acc.addr = cpu->rM;
+        cpu->acc.MAIL = (cpu->rM < AA_USERMEM) && cpu->bNCSF;
+        cpu->acc.word = cpu->rB;
         store(&cpu->acc);
         //cpu->cycleCount += B5500CentralControl.memReadCycles;
         if (cpu->acc.MAED || cpu->acc.MPED) {
@@ -375,14 +377,14 @@ void integerStore(CPU *cpu, BIT conditional, BIT destructive)
         BIT             normalize = true;       // okay to integerize
 
         adjustABFull(cpu);
-        aw = cpu->r.A;
+        aw = cpu->rA;
         if (OPERAND(aw)) {
                 // it's an operand
                 computeRelativeAddr(cpu, aw, false);
         } else {
                 // it's a descriptor
                 if (presenceTest(cpu, aw)) {
-                        cpu->r.M = aw & MASKMEM;
+                        cpu->rM = aw & MASKMEM;
                         if (conditional) {
                                 if (!(aw & MASK_INTG)) { // [19:1] is the integer bit
                                         normalize = false;
@@ -395,13 +397,13 @@ void integerStore(CPU *cpu, BIT conditional, BIT destructive)
 
         if (normalize) {
 
-		if (integerize(&cpu->r.B)) {
+		if (integerize(&cpu->rB)) {
                         // oops... integer overflow normalizing the mantisa
                         doStore = false;
-			if (cpu->r.NCSF) {
+			if (cpu->bNCSF) {
 				//causeSyllableIrq(cpu, IRQ_INTO, "ISD/ISN Overflow");
                                 // set I07/8: integer overflow
-                                cpu->r.I = (cpu->r.I & IRQ_MASKL) | IRQ_INTO;
+                                cpu->rI = (cpu->rI & IRQ_MASKL) | IRQ_INTO;
                                 signalInterrupt(cpu->id, "ISD/ISN Overflow");
 				return;
 			}
@@ -410,9 +412,9 @@ void integerStore(CPU *cpu, BIT conditional, BIT destructive)
 
         if (doStore) {
                 storeBviaM(cpu);
-                cpu->r.AROF = false;
+                cpu->bAROF = false;
                 if (destructive) {
-                        cpu->r.BROF = false;
+                        cpu->bBROF = false;
                 }
         }
 }

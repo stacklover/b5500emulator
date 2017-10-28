@@ -17,6 +17,8 @@
 *   overhaul of file names
 * 2017-10-10  R.Meyer
 *   some refactoring in the functions, added documentation
+* 2017-10-28  R.Meyer
+*   adaption to new CPU structure
 ***********************************************************************/
 
 #include <stdio.h>
@@ -26,24 +28,24 @@
 #define DEBUG_FCE false
 #define DEBUG_FCL false
 
-#define	CONTROL_STATE_ONLY if (cpu->r.NCSF) return
-#define	NORMAL_STATE_ONLY if (!cpu->r.NCSF) return
+#define	CONTROL_STATE_ONLY if (cpu->bNCSF) return
+#define	NORMAL_STATE_ONLY if (!cpu->bNCSF) return
 
 /***********************************************************************
 * execute one word mode instruction
 ***********************************************************************/
 void b5500_execute_wm(CPU *cpu)
 {
-        WORD12 opcode = cpu->r.T;
+        WORD12 opcode = cpu->rT;
         WORD12 variant;
         WORD48 t1, t2;
 
         // clear all Q flags, Y, Z, M, N, X registers for each word mode instruction
-        cpu->r.Q01F = false; cpu->r.Q02F = false; cpu->r.Q03F = false;
-        cpu->r.Q04F = false; cpu->r.Q05F = false; cpu->r.Q06F = false;
-        cpu->r.Q07F = false; cpu->r.Q08F = false; cpu->r.Q09F = false;
-        cpu->r.Y = 0; cpu->r.Z = 0; cpu->r.M = 0; cpu->r.N = 0;
-        cpu->r.X = 0;
+        cpu->bQ01F = false; cpu->bQ02F = false; cpu->bQ03F = false;
+        cpu->bQ04F = false; cpu->bQ05F = false; cpu->bQ06F = false;
+        cpu->bQ07F = false; cpu->bQ08F = false; cpu->bQ09F = false;
+        cpu->rY = 0; cpu->rZ = 0; cpu->rM = 0; cpu->rN = 0;
+        cpu->rX = 0;
 
 /***********************************************************************
 * Word Mode Opcode Analysis
@@ -57,8 +59,8 @@ void b5500_execute_wm(CPU *cpu)
 ***********************************************************************/
 	if (variant == 0) {
                 adjustAEmpty(cpu);
-                cpu->r.A = opcode >> 2;
-                cpu->r.AROF = true;
+                cpu->rA = opcode >> 2;
+                cpu->bAROF = true;
                 return;
 	}
 
@@ -71,17 +73,17 @@ void b5500_execute_wm(CPU *cpu)
 		adjustAEmpty(cpu);
 		computeRelativeAddr(cpu, opcode >> 2, true);
 		loadAviaM(cpu);
-		cpu->r.SALF |= cpu->r.VARF;
-		cpu->r.VARF = false;
+		cpu->bSALF |= cpu->bVARF;
+		cpu->bVARF = false;
 operandcall:	// entry fŕom COC
-		if (DESCRIPTOR(cpu->r.A)) {
-			if ((cpu->r.A & MASK_CODE) != 0 && (cpu->r.A & MASK_XBIT) == 0) {
+		if (DESCRIPTOR(cpu->rA)) {
+			if ((cpu->rA & MASK_CODE) != 0 && (cpu->rA & MASK_XBIT) == 0) {
 				// control word, just leave it on stack
 				return;
 			}
-			if (presenceTest(cpu, cpu->r.A)) {
+			if (presenceTest(cpu, cpu->rA)) {
 				// present descriptor
-				if ((cpu->r.A & MASK_CODE) != 0 && (cpu->r.A & MASK_XBIT) != 0) {
+				if ((cpu->rA & MASK_CODE) != 0 && (cpu->rA & MASK_XBIT) != 0) {
 					// program descriptor
 					enterSubroutine(cpu, false);
 					return;
@@ -93,7 +95,7 @@ operandcall:	// entry fŕom COC
 				}
 				// get value
 				loadAviaM(cpu); // A = [M]
-				if (DESCRIPTOR(cpu->r.A) && cpu->r.NCSF) {
+				if (DESCRIPTOR(cpu->rA) && cpu->bNCSF) {
 					// Flag bit is set and NORMAL state
 				        causeSyllableIrq(cpu, IRQ_FLAG, "OPDC FLAG SET");
 				}
@@ -115,18 +117,18 @@ operandcall:	// entry fŕom COC
 		adjustAEmpty(cpu);
 		computeRelativeAddr(cpu, opcode >> 2, true);
 		loadAviaM(cpu);
-		cpu->r.SALF |= cpu->r.VARF;
-		cpu->r.VARF = false;
+		cpu->bSALF |= cpu->bVARF;
+		cpu->bVARF = false;
 descriptorcall:	// entry fŕom CDC
-		if (DESCRIPTOR(cpu->r.A)) {
-			if ((cpu->r.A & MASK_CODE) != 0 && (cpu->r.A & MASK_XBIT) == 0) {
+		if (DESCRIPTOR(cpu->rA)) {
+			if ((cpu->rA & MASK_CODE) != 0 && (cpu->rA & MASK_XBIT) == 0) {
 				// control word, just leave its address present on stack
-				cpu->r.A = MASK_FLAG | MASK_PBIT | cpu->r.M;
+				cpu->rA = MASK_FLAG | MASK_PBIT | cpu->rM;
 				return;
 			}
-			if (presenceTest(cpu, cpu->r.A)) {
+			if (presenceTest(cpu, cpu->rA)) {
 				// present descriptor
-				if ((cpu->r.A & MASK_CODE) != 0 && (cpu->r.A & MASK_XBIT) != 0) {
+				if ((cpu->rA & MASK_CODE) != 0 && (cpu->rA & MASK_XBIT) != 0) {
 					// program descriptor
 					enterSubroutine(cpu, true);
 					return;
@@ -134,11 +136,11 @@ descriptorcall:	// entry fŕom CDC
 				// Data descriptor
 				if (indexDescriptor(cpu))
 					return;
-				cpu->r.A |= MASK_FLAG | MASK_PBIT;
+				cpu->rA |= MASK_FLAG | MASK_PBIT;
 			}
 			return;
 		}
-		cpu->r.A = MASK_FLAG | MASK_PBIT | cpu->r.M;
+		cpu->rA = MASK_FLAG | MASK_PBIT | cpu->rM;
 		return;
         }
 
@@ -212,12 +214,12 @@ descriptorcall:	// entry fŕom CDC
 ***********************************************************************/
                 case 001:
                         adjustAFull(cpu);
-                        if (OPERAND(cpu->r.A)) {
+                        if (OPERAND(cpu->rA)) {
                                 // operand
-                                computeRelativeAddr(cpu, cpu->r.A, false);
-                        } else if (presenceTest(cpu, cpu->r.A)) {
+                                computeRelativeAddr(cpu, cpu->rA, false);
+                        } else if (presenceTest(cpu, cpu->rA)) {
                                 // present descriptor
-                                cpu->r.M = cpu->r.A & MASKMEM;
+                                cpu->rM = cpu->rA & MASKMEM;
                         } else {
 				// not present
 				// leave address on stack and exit
@@ -225,26 +227,26 @@ descriptorcall:	// entry fŕom CDC
                         }
 			// fetch the value
 			loadAviaM(cpu);
-			if (cpu->r.NCSF) {
+			if (cpu->bNCSF) {
 				// normal state
 				// test continuity bit, [20:1]
-				if (cpu->r.A & MASK_CONT) {
+				if (cpu->rA & MASK_CONT) {
 					causeSyllableIrq(cpu, IRQ_CONT, "PRL-CONT");
 				} else {
 					causeSyllableIrq(cpu, IRQ_PREL, "PRL-PRL");
 				}
 				// store IOD address in PRT[9]
-				cpu->r.A = cpu->r.M;
-				cpu->r.M = (cpu->r.R<<RSHIFT) + RR_COM;
+				cpu->rA = cpu->rM;
+				cpu->rM = (cpu->rR/*TODO SHIFT*/<<RSHIFT) + RR_COM;
 				storeAviaM(cpu);
 			} else {
 				// control state
 				// just clear presence bit and store back
-				cpu->r.A &= ~MASK_PBIT;
+				cpu->rA &= ~MASK_PBIT;
 				storeAviaM(cpu);
 			}
 			// remove address
-			cpu->r.AROF = false;
+			cpu->bAROF = false;
                         return;
 
 /***********************************************************************
@@ -256,13 +258,13 @@ descriptorcall:	// entry fŕom CDC
                 case 002:
 			CONTROL_STATE_ONLY;
 			// use M as temporary
-			cpu->r.M = CC->IAR;
-			if (cpu->r.M) {
-				cpu->r.PROF = false; // require fetch at SECL
-				cpu->r.C = cpu->r.M;
-				cpu->r.L = 0;
-				cpu->r.S = AA_IRQSTACK; // stack address @100
-				clearInterrupt(cpu->r.M); // clear IRQ
+			cpu->rM = CC->IAR;
+			if (cpu->rM) {
+				cpu->bPROF = false; // require fetch at SECL
+				cpu->rC = cpu->rM;
+				cpu->rL = 0;
+				cpu->rS = AA_IRQSTACK; // stack address @100
+				clearInterrupt(cpu->rM); // clear IRQ
 			}
                         return;
 
@@ -274,8 +276,8 @@ descriptorcall:	// entry fŕom CDC
                 case 004:
                         CONTROL_STATE_ONLY;
                         adjustAEmpty(cpu);
-                        cpu->r.A = readTimer(cpu);
-                        cpu->r.AROF = true;
+                        cpu->rA = readTimer(cpu);
+                        cpu->bAROF = true;
                         return;
 
 /***********************************************************************
@@ -287,17 +289,17 @@ descriptorcall:	// entry fŕom CDC
 ***********************************************************************/
                 case 010:
                         NORMAL_STATE_ONLY;
-                        cpu->r.M = (cpu->r.R<<RSHIFT) + RR_COM;
-                        if (cpu->r.AROF) { // TOS in A
+                        cpu->rM = (cpu->rR/*TODO SHIFT*/<<RSHIFT) + RR_COM;
+                        if (cpu->bAROF) { // TOS in A
                                 storeAviaM(cpu);
-                                cpu->r.AROF = false;
-                        } else if (cpu->r.BROF) { // TOS in B
+                                cpu->bAROF = false;
+                        } else if (cpu->bBROF) { // TOS in B
                                 storeBviaM(cpu);
-                                cpu->r.BROF = false;
+                                cpu->bBROF = false;
                         } else { // load TOS to B
                                 adjustBFull(cpu);
                                 storeBviaM(cpu);
-                                cpu->r.BROF = false;
+                                cpu->bBROF = false;
                         }
 			causeSyllableIrq(cpu, IRQ_COM, "COM");
                         return;
@@ -318,11 +320,11 @@ descriptorcall:	// entry fŕom CDC
                 case 021:
                         CONTROL_STATE_ONLY;
 			adjustAFull(cpu);
-			if (OPERAND(cpu->r.A)) {
+			if (OPERAND(cpu->rA)) {
 				// it's an operand
-				computeRelativeAddr(cpu, cpu->r.A, 0);
-			} else if (PRESENT(cpu->r.A)) {
-				cpu->r.M = cpu->r.A & MASKMEM;
+				computeRelativeAddr(cpu, cpu->rA, 0);
+			} else if (PRESENT(cpu->rA)) {
+				cpu->rM = cpu->rA & MASKMEM;
 				// present descriptor
 			} else {
 				// leave address on stack and exit
@@ -330,10 +332,10 @@ descriptorcall:	// entry fŕom CDC
 			}
 			// set the presence bit of the word at the designed address
 			loadAviaM(cpu);
-			cpu->r.A |= MASK_PBIT;
+			cpu->rA |= MASK_PBIT;
 			storeAviaM(cpu);
 			// remove address
-			cpu->r.AROF = false;
+			cpu->bAROF = false;
                         return;
 
 /***********************************************************************
@@ -351,7 +353,7 @@ descriptorcall:	// entry fŕom CDC
 * if operator switch is on, halt the processor
 ***********************************************************************/
 		case 024:
-			if (cpu->r.US14X)
+			if (cpu->bUS14X)
 				stop(cpu);
 			return;
 
@@ -383,17 +385,17 @@ descriptorcall:	// entry fŕom CDC
 ***********************************************************************/
                 case 042:
                         CONTROL_STATE_ONLY;
-			cpu->r.M = AA_IODESC;
-			if (cpu->r.AROF) {
+			cpu->rM = AA_IODESC;
+			if (cpu->bAROF) {
 				storeAviaM(cpu);
-				cpu->r.AROF = false;
-			} else if (cpu->r.BROF) {
+				cpu->bAROF = false;
+			} else if (cpu->bBROF) {
 				storeBviaM(cpu);
-				cpu->r.BROF = false;
+				cpu->bBROF = false;
 			} else {
 				adjustAFull(cpu);
 				storeAviaM(cpu);
-				cpu->r.AROF = false;
+				cpu->bAROF = false;
 			}
 			// send signal to central control
 			initiateP2(cpu);
@@ -405,18 +407,18 @@ descriptorcall:	// entry fŕom CDC
                 case 044:
                         CONTROL_STATE_ONLY;
                         // address of IOD is stored in @10
-                        cpu->r.M = AA_IODESC;
-                        if (cpu->r.AROF) {
+                        cpu->rM = AA_IODESC;
+                        if (cpu->bAROF) {
                                 storeAviaM(cpu);
-                                cpu->r.AROF = false;
-                        } else if (cpu->r.BROF) {
+                                cpu->bAROF = false;
+                        } else if (cpu->bBROF) {
                                 storeBviaM(cpu);
-                                cpu->r.BROF = false;
+                                cpu->bBROF = false;
                         } else {
                                 adjustAFull(cpu);
                                 storeAviaM(cpu);
                                 // [M] = A
-                                cpu->r.AROF = false;
+                                cpu->bAROF = false;
                         }
                         // let CentralControl choose the I/O Unit
                         initiateIO(cpu);
@@ -454,20 +456,20 @@ descriptorcall:	// entry fŕom CDC
         case 015:
                 switch (variant) {
                 case 001: adjustAFull(cpu);
-			cpu->r.A ^= MASK_NUMBER; return;
+			cpu->rA ^= MASK_NUMBER; return;
                 case 002: adjustABFull(cpu);
-			cpu->r.A = (cpu->r.A & MASK_NUMBER) | cpu->r.B;
-			cpu->r.BROF = false; return;
+			cpu->rA = (cpu->rA & MASK_NUMBER) | cpu->rB;
+			cpu->bBROF = false; return;
                 case 004: adjustABFull(cpu);
-			cpu->r.A = (cpu->r.A | MASK_FLAG) & cpu->r.B;
-			cpu->r.BROF = false; return;
+			cpu->rA = (cpu->rA | MASK_FLAG) & cpu->rB;
+			cpu->bBROF = false; return;
                 case 010: adjustABFull(cpu);
-                        cpu->r.B ^= (~cpu->r.A) & MASK_NUMBER;
-                        cpu->r.AROF = false; return;
+                        cpu->rB ^= (~cpu->rA) & MASK_NUMBER;
+                        cpu->bAROF = false; return;
                 case 020: adjustAFull(cpu);
-                        cpu->r.A &= MASK_NUMBER; return;
+                        cpu->rA &= MASK_NUMBER; return;
                 case 040: adjustAFull(cpu);
-                        cpu->r.A |= MASK_FLAG; return;
+                        cpu->rA |= MASK_FLAG; return;
 		default: goto unused;
                 }
                 return;
@@ -503,12 +505,12 @@ descriptorcall:	// entry fŕom CDC
 		case 004:
 		case 010:
                         adjustABFull(cpu);
-                        if (OPERAND(cpu->r.A)) {
+                        if (OPERAND(cpu->rA)) {
                                 // operand
-                                computeRelativeAddr(cpu, cpu->r.A, false);
-                        } else if (presenceTest(cpu, cpu->r.A)) {
+                                computeRelativeAddr(cpu, cpu->rA, false);
+                        } else if (presenceTest(cpu, cpu->rA)) {
 				// present descriptor
-				cpu->r.M = cpu->r.A & MASKMEM;
+				cpu->rM = cpu->rA & MASKMEM;
 			} else {
 				// not present
 				// leave address and value on stack and exit
@@ -517,10 +519,10 @@ descriptorcall:	// entry fŕom CDC
 			// now store
                         storeBviaM(cpu);
 			// remove address
-                        cpu->r.AROF = false;
+                        cpu->bAROF = false;
 			// if destructive, remove value
 			if (variant == 004)
-				cpu->r.BROF = false;
+				cpu->bBROF = false;
                         return;
 
 /***********************************************************************
@@ -530,12 +532,12 @@ descriptorcall:	// entry fŕom CDC
 ***********************************************************************/
                 case 020:
                         adjustAFull(cpu);
-                        if (OPERAND(cpu->r.A)) {
+                        if (OPERAND(cpu->rA)) {
                                 // operand
-                                computeRelativeAddr(cpu, cpu->r.A, true);
-                        } else if (presenceTest(cpu, cpu->r.A)) {
+                                computeRelativeAddr(cpu, cpu->rA, true);
+                        } else if (presenceTest(cpu, cpu->rA)) {
                                 // present descriptor
-                                cpu->r.M = cpu->r.A & MASKMEM;
+                                cpu->rM = cpu->rA & MASKMEM;
                         } else {
 				// not present
 				// leave address on stack and exit
@@ -563,12 +565,12 @@ descriptorcall:	// entry fŕom CDC
 * 4225: LSS=compare B less to A
 * 4425: EQL=compare B equal to A
 ***********************************************************************/
-		case 001: cpu->r.B = (singlePrecisionCompare(cpu) >= 0) ? true : false; return;
-		case 002: cpu->r.B = (singlePrecisionCompare(cpu) > 0) ? true : false; return;
-		case 004: cpu->r.B = (singlePrecisionCompare(cpu) != 0) ? true : false; return;
-		case 041: cpu->r.B = (singlePrecisionCompare(cpu) <= 0) ? true : false; return;
-		case 042: cpu->r.B = (singlePrecisionCompare(cpu) < 0) ? true : false; return;
-		case 044: cpu->r.B = (singlePrecisionCompare(cpu) == 0) ? true : false; return;
+		case 001: cpu->rB = (singlePrecisionCompare(cpu) >= 0) ? true : false; return;
+		case 002: cpu->rB = (singlePrecisionCompare(cpu) > 0) ? true : false; return;
+		case 004: cpu->rB = (singlePrecisionCompare(cpu) != 0) ? true : false; return;
+		case 041: cpu->rB = (singlePrecisionCompare(cpu) <= 0) ? true : false; return;
+		case 042: cpu->rB = (singlePrecisionCompare(cpu) < 0) ? true : false; return;
+		case 044: cpu->rB = (singlePrecisionCompare(cpu) == 0) ? true : false; return;
 
 /***********************************************************************
 * 1025: XCH=exchange TOS words
@@ -581,14 +583,14 @@ descriptorcall:	// entry fŕom CDC
 * if A is empty, make B full and copy to A
 ***********************************************************************/
                 case 020:
-			if (cpu->r.AROF) {
+			if (cpu->bAROF) {
 				adjustBEmpty(cpu);
-				cpu->r.B = cpu->r.A;
-				cpu->r.BROF = true;
+				cpu->rB = cpu->rA;
+				cpu->bBROF = true;
 			} else {
 				adjustBFull(cpu);
-				cpu->r.A = cpu->r.B;
-				cpu->r.AROF = true;
+				cpu->rA = cpu->rB;
+				cpu->bAROF = true;
 			}
 			return;
 
@@ -607,17 +609,17 @@ descriptorcall:	// entry fŕom CDC
 #error SHFT_CREG > SHFT_FREG
 #endif
 		case 014: adjustABFull(cpu);
-			cpu->r.B = (cpu->r.B & ~MASK_CREG) | ((cpu->r.A & MASK_FREG) >> (SHFT_FREG - SHFT_CREG));
-			cpu->r.AROF = false; return;
+			cpu->rB = (cpu->rB & ~MASK_CREG) | ((cpu->rA & MASK_FREG) >> (SHFT_FREG - SHFT_CREG));
+			cpu->bAROF = false; return;
 		case 034: adjustABFull(cpu);
-			cpu->r.B = (cpu->r.B & ~MASK_FREG) | (cpu->r.A & MASK_FREG);
-			cpu->r.AROF = false; return;
+			cpu->rB = (cpu->rB & ~MASK_FREG) | (cpu->rA & MASK_FREG);
+			cpu->bAROF = false; return;
 		case 054: adjustABFull(cpu);
-			cpu->r.B = (cpu->r.B & ~MASK_CREG) | (cpu->r.A & MASK_CREG);
-			cpu->r.AROF = false; return;
+			cpu->rB = (cpu->rB & ~MASK_CREG) | (cpu->rA & MASK_CREG);
+			cpu->bAROF = false; return;
 		case 074: adjustABFull(cpu);
-			cpu->r.B = (cpu->r.B & ~MASK_FREG) | ((cpu->r.A & MASK_CREG) << (SHFT_FREG - SHFT_CREG));
-			cpu->r.AROF = false; return;
+			cpu->rB = (cpu->rB & ~MASK_FREG) | ((cpu->rA & MASK_CREG) << (SHFT_FREG - SHFT_CREG));
+			cpu->bAROF = false; return;
 
 		default: goto unused;
 		}
@@ -640,10 +642,10 @@ descriptorcall:	// entry fŕom CDC
                 case 021:
                 case 022:
                         adjustABFull(cpu);	// condition in B, destination in A
-                        cpu->r.BROF = false;	// condition used
-                        if (cpu->r.B & 1) {
+                        cpu->bBROF = false;	// condition used
+                        if (cpu->rB & 1) {
                                 // true => no branch
-                                cpu->r.AROF = false;
+                                cpu->bAROF = false;
                                 return;
                         }
 			goto common_branch;
@@ -660,99 +662,99 @@ descriptorcall:	// entry fŕom CDC
                 case 062:
                         adjustAFull(cpu);
 		common_branch:
-			if (DESCRIPTOR(cpu->r.A)) {
+			if (DESCRIPTOR(cpu->rA)) {
 				// descriptor
-                                if (presenceTest(cpu, cpu->r.A)) {
+                                if (presenceTest(cpu, cpu->rA)) {
 					// present descriptor contains absolute address!
-                                        cpu->r.C = cpu->r.A & MASKMEM;
-                                        cpu->r.L = 0;
+                                        cpu->rC = cpu->rA & MASKMEM;
+                                        cpu->rL = 0;
                                         // require fetch at SECL
-                                        cpu->r.PROF = false;
-                                        cpu->r.AROF = false;
+                                        cpu->bPROF = false;
+                                        cpu->bAROF = false;
 					return;
 				}
 				// absent descriptor. IRQ caused by presenceTest
 				// backup to branch word. syllable not changed. TODO: why??
-                                if (cpu->r.L == 0)
-                                        --cpu->r.C;
+                                if (cpu->rL == 0)
+                                        --cpu->rC;
 				// set BROF for word branches. TODO: why?
 				// more logical is to set it for conditional branches!
                                 if ((variant & 040) == 0)
-					cpu->r.BROF = true;
+					cpu->bBROF = true;
 				return;
                         }
 			// operand
 			// back up to branch op
-			if (cpu->r.L == 0) {
-				cpu->r.L = 3;
-				--cpu->r.C;
-				cpu->r.PROF = false;
+			if (cpu->rL == 0) {
+				cpu->rL = 3;
+				--cpu->rC;
+				cpu->bPROF = false;
 			} else {
-				--cpu->r.L;
+				--cpu->rL;
 			}
 			// Follow logic based on real hardware
 			if ((variant & 020) == 0) {
 				// Syllable branch
 				if (variant & 002) {
 					// Forward
-					if (cpu->r.A & 1) {
+					if (cpu->rA & 1) {
 						// N = 0
-						cpu->r.L++;
-						cpu->r.C += (cpu->r.L >> 2);
-						cpu->r.L &= 3;
+						cpu->rL++;
+						cpu->rC += (cpu->rL >> 2);
+						cpu->rL &= 3;
 					}
-					cpu->r.A >>= 1;
-					if (cpu->r.A & 1) {
-						cpu->r.L+=2;
-						cpu->r.C += (cpu->r.L >> 2);
-						cpu->r.L &= 3;
+					cpu->rA >>= 1;
+					if (cpu->rA & 1) {
+						cpu->rL+=2;
+						cpu->rC += (cpu->rL >> 2);
+						cpu->rL &= 3;
 					}
-					cpu->r.A >>= 1;
+					cpu->rA >>= 1;
 				} else {
 					// Backward
-					if (cpu->r.A & 1) {
+					if (cpu->rA & 1) {
 						// N = 0
-						if (cpu->r.L == 0) {
-							cpu->r.C--;
-							cpu->r.L = 3;
+						if (cpu->rL == 0) {
+							cpu->rC--;
+							cpu->rL = 3;
 						} else {
-							cpu->r.L--;
+							cpu->rL--;
 						}
 					}
-					cpu->r.A >>= 1;
-					if (cpu->r.A & 1) {
+					cpu->rA >>= 1;
+					if (cpu->rA & 1) {
 						// N = 1
-						if (cpu->r.L < 2) {
-							cpu->r.C--;
-							cpu->r.L += 2;
+						if (cpu->rL < 2) {
+							cpu->rC--;
+							cpu->rL += 2;
 						} else {
-							cpu->r.L -= 2;
+							cpu->rL -= 2;
 						}
 					}
-					cpu->r.A >>= 1;
+					cpu->rA >>= 1;
 				}
 				// Fix up for backward step
-				if (cpu->r.L == 3) {
+				if (cpu->rL == 3) {
 					// N = 3
-					cpu->r.C++;
-					cpu->r.L = 0;
+					cpu->rC++;
+					cpu->rL = 0;
 				} else {
-					cpu->r.L++;
+					cpu->rL++;
 				}
 			} else {
-				cpu->r.L = 0;
+				cpu->rL = 0;
 			}
 			if (variant & 02) {
 				// Forward
-				cpu->r.C += cpu->r.A & 01777;
+				cpu->rC += cpu->rA & 01777;
 			} else {
 				// Backward
-				cpu->r.C -= cpu->r.A & 01777;
+				cpu->rC -= cpu->rA & 01777;
 			}
 			// now transfer
-			cpu->r.C &= MASK_ADDR15;
-			cpu->r.AROF = 0;
-			cpu->r.PROF = 0;
+			cpu->rC &= MASK_ADDR15;
+			cpu->bAROF = 0;
+			cpu->bPROF = 0;
 			return;
 
 /***********************************************************************
@@ -760,44 +762,44 @@ descriptorcall:	// entry fŕom CDC
 * 1031: CHS=change sign bit
 * 4431: SSP=reset sign bit (set positive)
 ***********************************************************************/
-                case 004: adjustAFull(cpu); cpu->r.A |= MASK_SIGNMANT; return;
-                case 010: adjustAFull(cpu); cpu->r.A ^= MASK_SIGNMANT; return;
-                case 044: adjustAFull(cpu); cpu->r.A &= ~MASK_SIGNMANT; return;
+                case 004: adjustAFull(cpu); cpu->rA |= MASK_SIGNMANT; return;
+                case 010: adjustAFull(cpu); cpu->rA ^= MASK_SIGNMANT; return;
+                case 044: adjustAFull(cpu); cpu->rA &= ~MASK_SIGNMANT; return;
 
 /***********************************************************************
 * 2031: TOP=test flag bit (test for operand)
 * test flag bit of TOS and add result to stack!
 ***********************************************************************/
                 case 020: adjustAEmpty(cpu); adjustBFull(cpu);
-                        cpu->r.A = OPERAND(cpu->r.B) ? true : false;
-                        cpu->r.AROF = true; return;
+                        cpu->rA = OPERAND(cpu->rB) ? true : false;
+                        cpu->bAROF = true; return;
 
 /***********************************************************************
 * 2431: TUS=interrogate peripheral status
 ***********************************************************************/
                 case 024: adjustAEmpty(cpu);
-                        cpu->r.A = interrogateUnitStatus(cpu);
-                        cpu->r.AROF = true; return;
+                        cpu->rA = interrogateUnitStatus(cpu);
+                        cpu->bAROF = true; return;
 
 /***********************************************************************
 * 6431: TIO=interrogate I/O channel
 ***********************************************************************/
                 case 064: adjustAEmpty(cpu);
-                        cpu->r.A = interrogateIOChannel(cpu);
-                        cpu->r.AROF = true; return;
+                        cpu->rA = interrogateIOChannel(cpu);
+                        cpu->bAROF = true; return;
 
 /***********************************************************************
 * 7031: FBS=stack search for flag
 ***********************************************************************/
                 case 070: adjustAFull(cpu);
-                        cpu->r.M = cpu->r.A & MASKMEM;
+                        cpu->rM = cpu->rA & MASKMEM;
                         loadAviaM(cpu);
-                        while (OPERAND(cpu->r.A)) {
-                                cpu->r.M = (cpu->r.M+1) & MASKMEM;
+                        while (OPERAND(cpu->rA)) {
+                                cpu->rM = (cpu->rM+1) & MASKMEM;
                                 loadAviaM(cpu);
                         }
                         // flag bit found: stop the search
-                        cpu->r.A = INIT_DD | MASK_PBIT | cpu->r.M;
+                        cpu->rA = INIT_DD | MASK_PBIT | cpu->rM;
                         return;
 
 		default: goto unused;
@@ -816,22 +818,22 @@ descriptorcall:	// entry fŕom CDC
 ***********************************************************************/
                 case 001:
                         adjustAEmpty(cpu);
-                        if (!cpu->r.BROF) {
-                                cpu->r.Q03F = true;
+                        if (!cpu->bBROF) {
+                                cpu->bQ03F = true;
                                 // Q03F: not used, except for display purposes
                                 adjustBFull(cpu);
                         }
-                        if (presenceTest(cpu, cpu->r.B)) {
-                                cpu->r.S = (cpu->r.B >> SHFT_FREG) & MASKMEM;
-                                cpu->r.C = cpu->r.B & MASKMEM;
-                                cpu->r.L = 0;
+                        if (presenceTest(cpu, cpu->rB)) {
+                                cpu->rS = (cpu->rB >> SHFT_FREG) & MASKMEM;
+                                cpu->rC = cpu->rB & MASKMEM;
+                                cpu->rL = 0;
                                 // require fetch at SECL
-                                cpu->r.PROF = false;
+                                cpu->bPROF = false;
                                 loadBviaS(cpu);
                                 // B = [S], fetch MSCW
-                                --cpu->r.S;
-                                applyMSCW(cpu, cpu->r.B);
-                                cpu->r.BROF = false;
+                                --cpu->rS;
+                                applyMSCW(cpu, cpu->rB);
+                                cpu->bBROF = false;
                         }
                         return;
 
@@ -846,43 +848,43 @@ descriptorcall:	// entry fŕom CDC
                 case 002:
                 case 012:
 			adjustAFull(cpu);
-			if (DESCRIPTOR(cpu->r.A) && !presenceTest(cpu, cpu->r.A)) {
+			if (DESCRIPTOR(cpu->rA) && !presenceTest(cpu, cpu->rA)) {
 				return;
 			}
 			// fall through
                 case 004:
 			if (variant & 04) // XIT only
-				cpu->r.AROF = 0;
-			cpu->r.BROF = 0;
-			cpu->r.PROF = 0;
+				cpu->bAROF = 0;
+			cpu->bBROF = 0;
+			cpu->bPROF = 0;
 			if ((variant & 010) == 0) // RTN and XIT only
-				cpu->r.S = cpu->r.F;	// reset stack to last RCW
+				cpu->rS = cpu->rF;	// reset stack to last RCW
 			loadBviaS(cpu);		// get RCW
-			if (OPERAND(cpu->r.B)) {
+			if (OPERAND(cpu->rB)) {
 				// OOPS, not a control word
-				if (cpu->r.NCSF)
+				if (cpu->bNCSF)
 					causeSyllableIrq(cpu, IRQ_FLAG, "RTN/RTS/XIT RCW FLAG RESET");
 				return;
 			}
 			// set registers from RCW
-			t1 = applyRCW(cpu, cpu->r.B, false, false); /* Restore registers */
-			cpu->r.S = cpu->r.F;	// reset stack to MSCW
-			cpu->r.BROF = 0;
+			t1 = applyRCW(cpu, cpu->rB, false, false); /* Restore registers */
+			cpu->rS = cpu->rF;	// reset stack to MSCW
+			cpu->bBROF = 0;
 			loadBviaS(cpu);		// get MSCW
-			cpu->r.S--; // TODO check for wrap
+			cpu->rS--; // TODO check for wrap
 			// set registers from MSCW
-			applyMSCW(cpu, cpu->r.B);
+			applyMSCW(cpu, cpu->rB);
 			// TODO: whats this for?
-			if (cpu->r.MSFF && cpu->r.SALF) {
-				cpu->r.M = cpu->r.F;
+			if (cpu->bMSFF && cpu->bSALF) {
+				cpu->rM = cpu->rF;
 				do {
 					/* B = [M], M = B[F-FIELD]; */
 					loadMviaM(cpu);	/* Grab previous MCSW */
-				} while(cpu->r.B & MASK_SALF);
-				cpu->r.M = (cpu->r.R << RSHIFT) | RR_MSCW;
+				} while(cpu->rB & MASK_SALF);
+				cpu->rM = (cpu->rR/*TODO SHIFT*/ << RSHIFT) | RR_MSCW;
 				storeBviaS(cpu);
 			}
-			cpu->r.BROF = 0;
+			cpu->bBROF = 0;
 			if (variant & 02) {	/* RTS and RTN */
 				if (t1)
 					goto descriptorcall;
@@ -908,9 +910,9 @@ descriptorcall:	// entry fŕom CDC
 ***********************************************************************/
                 case 001:
                         adjustABFull(cpu);
-                        cpu->r.M = (cpu->r.A + cpu->r.B) & MASKMEM;
-                        cpu->r.A = (cpu->r.A & ~MASKMEM) | cpu->r.M;
-                        cpu->r.BROF = false;
+                        cpu->rM = (cpu->rA + cpu->rB) & MASKMEM;
+                        cpu->rA = (cpu->rA & ~MASKMEM) | cpu->rM;
+                        cpu->bBROF = false;
                         return;
 
 
@@ -920,9 +922,9 @@ descriptorcall:	// entry fŕom CDC
 ***********************************************************************/
                 case 002:
                         adjustABFull(cpu);
-			t1 = cpu->r.A;
-			cpu->r.A = cpu->r.B | MASK_FLAG;
-			cpu->r.B = t1;
+			t1 = cpu->rA;
+			cpu->rA = cpu->rB | MASK_FLAG;
+			cpu->rB = t1;
 			if (variant & 010)
 				goto descriptorcall;
 			else
@@ -934,17 +936,17 @@ descriptorcall:	// entry fŕom CDC
 ***********************************************************************/
                 case 004:
                         adjustABEmpty(cpu);
-                        cpu->r.B = buildMSCW(cpu);
-                        cpu->r.BROF = true;
+                        cpu->rB = buildMSCW(cpu);
+                        cpu->bBROF = true;
                         adjustBEmpty(cpu);
-                        cpu->r.F = cpu->r.S;
-                        if (!cpu->r.MSFF) {
-                                if (cpu->r.SALF) {
+                        cpu->rF = cpu->rS;
+                        if (!cpu->bMSFF) {
+                                if (cpu->bSALF) {
                                         // store the MSCW at R+7
-                                        cpu->r.M = (cpu->r.R<<6) + RR_MSCW;
+                                        cpu->rM = (cpu->rR/*TODO SHIFT*/<<6) + RR_MSCW;
                                         storeBviaM(cpu);
                                 }
-                                cpu->r.MSFF = true;
+                                cpu->bMSFF = true;
                         }
                         return;
 
@@ -954,24 +956,24 @@ descriptorcall:	// entry fŕom CDC
 ***********************************************************************/
                 case 021:
                         adjustABFull(cpu);
-                        switch (cpu->r.A & 3) {
+                        switch (cpu->rA & 3) {
                         case 0: // store F into B.[18:15]
-                                cpu->r.B = (cpu->r.B & ~MASK_FREG) | (cpu->r.F << SHFT_FREG);
+                                cpu->rB = (cpu->rB & ~MASK_FREG) | (cpu->rF << SHFT_FREG);
                                 break;
                         case 1: // store S into B.[33:15]
-                                cpu->r.B = (cpu->r.B & ~MASK_CREG) | (cpu->r.S << SHFT_CREG);
+                                cpu->rB = (cpu->rB & ~MASK_CREG) | (cpu->rS << SHFT_CREG);
                                 break;
                         case 2: // set F from B.[18:15]
-                                cpu->r.F = (cpu->r.B & MASK_FREG) >> SHFT_FREG;
-                                cpu->r.SALF = true;
-                                cpu->r.BROF = false;
+                                cpu->rF = (cpu->rB & MASK_FREG) >> SHFT_FREG;
+                                cpu->bSALF = true;
+                                cpu->bBROF = false;
                                 break;
                         case 3: // set S from B.[33:15]
-                                cpu->r.S = (cpu->r.B & MASK_CREG) >> SHFT_CREG;
-                                cpu->r.BROF = false;
+                                cpu->rS = (cpu->rB & MASK_CREG) >> SHFT_CREG;
+                                cpu->bBROF = false;
                                 break;
                         }
-                        cpu->r.AROF = false;
+                        cpu->bAROF = false;
                         return;
 
 /***********************************************************************
@@ -981,19 +983,19 @@ descriptorcall:	// entry fŕom CDC
                 case 025:
                         adjustABFull(cpu);
                         // get test field
-                        t1 = cpu->r.A & MASK_MANTISSA;
+                        t1 = cpu->rA & MASK_MANTISSA;
                         // test value
-                        cpu->r.M = cpu->r.B & MASKMEM;
+                        cpu->rM = cpu->rB & MASKMEM;
                         // starting link address
                         do {
                                 cpu->cycleCount += 2;
                                 // approximate the timing
                                 loadBviaM(cpu);
-                                t2 = cpu->r.B & MASK_MANTISSA;
+                                t2 = cpu->rB & MASK_MANTISSA;
                                 if (t2 < t1) {
-                                        cpu->r.M = t2 & MASKMEM;
+                                        cpu->rM = t2 & MASKMEM;
                                 } else {
-                                        cpu->r.A = INIT_DD | MASK_PBIT | cpu->r.M;
+                                        cpu->rA = INIT_DD | MASK_PBIT | cpu->rM;
                                         break;
                                         // B >= A: stop look-up
                                 }
@@ -1020,21 +1022,21 @@ descriptorcall:	// entry fŕom CDC
                 adjustAFull(cpu);
                 t2 = variant >> 3; // number of whole chars
                 if (t2) {
-                        t1 = cpu->r.G*6 + cpu->r.H; // starting source bit position
-                        t2 = t2*6 - (variant & 7) - cpu->r.H; // number of bits
+                        t1 = cpu->rGH/*TODO G*/*6 + cpu->rGH/*TODO H*/; // starting source bit position
+                        t2 = t2*6 - (variant & 7) - cpu->rGH/*TODO H*/; // number of bits
                         if (t1+t2 <= 48) {
-                                cpu->r.A = fieldIsolate(cpu->r.A, t1, t2);
+                                cpu->rA = fieldIsolate(cpu->rA, t1, t2);
                         } else {
                                 // handle wrap-around in the source value
-                                cpu->r.A = fieldInsert(
-                                        fieldIsolate(cpu->r.A, 0, t2-48+t1),
+                                cpu->rA = fieldInsert(
+                                        fieldIsolate(cpu->rA, 0, t2-48+t1),
                                         48-t2, 48-t1,
-                                        fieldIsolate(cpu->r.A, t1, 48-t1));
+                                        fieldIsolate(cpu->rA, t1, 48-t1));
                         }
                         // approximate the shift cycle counts
-                        cpu->cycleCount += (variant >> 3) + (variant & 7) + cpu->r.G + cpu->r.H;
-                        cpu->r.G = (cpu->r.G + (variant >> 3)) & 7;
-                        cpu->r.H = 0;
+                        cpu->cycleCount += (variant >> 3) + (variant & 7) + cpu->rGH/*TODO G*/ + cpu->rGH/*TODO H*/;
+                        cpu->rGH/*TODO G*/ = (cpu->rGH/*TODO G*/ + (variant >> 3)) & 7;
+                        cpu->rGH/*TODO H*/ = 0;
                 }
                 return;
 
@@ -1051,26 +1053,26 @@ descriptorcall:	// entry fŕom CDC
 		t2 = variant >> 2;
                 if (t2 == 0) {
 			// field length 0 means false, so just delete word on TOS
-                        if (cpu->r.AROF) {
-                                cpu->r.AROF = false;
-                        } else if (cpu->r.BROF) {
-                                cpu->r.BROF = false;
+                        if (cpu->bAROF) {
+                                cpu->bAROF = false;
+                        } else if (cpu->bBROF) {
+                                cpu->bBROF = false;
                         } else {
-                                --cpu->r.S;
+                                --cpu->rS;
                         }
 			return;
                 }
 		// non-zero field
 		adjustABFull(cpu);
 		// isolate the number of bits to test
-		t1 = fieldIsolate(cpu->r.B, cpu->r.G*6+cpu->r.H, t2);
+		t1 = fieldIsolate(cpu->rB, cpu->rGH/*TODO G*/*6+cpu->rGH/*TODO H*/, t2);
 		// approximate the shift counts
-		cpu->cycleCount += cpu->r.G + cpu->r.H + (t2 >> 1);
+		cpu->cycleCount += cpu->rGH/*TODO G*/ + cpu->rGH/*TODO H*/ + (t2 >> 1);
 		// A is unconditionally empty at end
-		cpu->r.AROF = false;
+		cpu->bAROF = false;
 		// destructive branch?
 		if (variant & 002)
-			cpu->r.BROF = false;
+			cpu->bBROF = false;
 		// test the field
 		if (t1) {
 			// continue at other branch code
@@ -1084,7 +1086,7 @@ descriptorcall:	// entry fŕom CDC
 			goto common_branch;
 		}
 		// branch not taken, remove destination
-		cpu->r.AROF = false;
+		cpu->bAROF = false;
 		return;
 
 /***********************************************************************
@@ -1093,8 +1095,8 @@ descriptorcall:	// entry fŕom CDC
 ***********************************************************************/
         case 055:
                 if (variant) {
-                        cpu->r.G = variant >> 3;
-                        cpu->r.H = variant & 7;
+                        cpu->rGH/*TODO G*/ = variant >> 3;
+                        cpu->rGH/*TODO H*/ = variant & 7;
                 }
                 return;
 
@@ -1104,11 +1106,11 @@ descriptorcall:	// entry fŕom CDC
 ***********************************************************************/
         case 061:
                 if (variant) {
-                        cpu->r.K = variant >> 3;
-                        cpu->r.V = variant & 7;
+                        cpu->rKV/*TODO K*/ = variant >> 3;
+                        cpu->rKV/*TODO V*/ = variant & 7;
                 } else {
-                        cpu->r.VARF = cpu->r.SALF;
-                        cpu->r.SALF = false;
+                        cpu->bVARF = cpu->bSALF;
+                        cpu->bSALF = false;
                 }
                 return;
 
@@ -1126,20 +1128,20 @@ descriptorcall:	// entry fŕom CDC
 	case 065:
                 adjustABFull(cpu);
                 // do it the hard way.. BIT-WISE!
-                t1 = MASK_FLAG >> (cpu->r.G*6 + cpu->r.H); // A register starting bit mask
-                t2 = MASK_FLAG >> (cpu->r.K*6 + cpu->r.V); // B register starting bit mask
+                t1 = MASK_FLAG >> (cpu->rGH/*TODO G*/*6 + cpu->rGH/*TODO H*/); // A register starting bit mask
+                t2 = MASK_FLAG >> (cpu->rKV/*TODO K*/*6 + cpu->rKV/*TODO V*/); // B register starting bit mask
                 // note: t1/t2 turn zero when the test bit is shifted out at the right
                 while (variant && t1 && t2) {
-                        if (cpu->r.A & t1)
-                                cpu->r.B |= t2;
+                        if (cpu->rA & t1)
+                                cpu->rB |= t2;
                         else
-                                cpu->r.B &= ~t2;
+                                cpu->rB &= ~t2;
                         --variant;
                         t1 >>= 1;
                         t2 >>= 1;
                         ++cpu->cycleCount; // approximate the shift counts
                 }
-                cpu->r.AROF = false;
+                cpu->bAROF = false;
                 return;
 
 /***********************************************************************
@@ -1156,13 +1158,13 @@ descriptorcall:	// entry fŕom CDC
         case 071:
                 adjustABFull(cpu);
                 // do it the hard way.. BIT-WISE!
-                t1 = MASK_FLAG >> (cpu->r.G*6 + cpu->r.H); // A register starting bit mask
-                t2 = MASK_FLAG >> (cpu->r.K*6 + cpu->r.V); // B register starting bit mask
+                t1 = MASK_FLAG >> (cpu->rGH/*TODO G*/*6 + cpu->rGH/*TODO H*/); // A register starting bit mask
+                t2 = MASK_FLAG >> (cpu->rKV/*TODO K*/*6 + cpu->rKV/*TODO V*/); // B register starting bit mask
                 // note: t1/t2 turn zero when the test bit is shifted out at the right
                 while (variant && t1 && t2) {
-                        if (cpu->r.A & t1 && !(cpu->r.B & t2)) {
+                        if (cpu->rA & t1 && !(cpu->rB & t2)) {
                                 // A > B: we are done
-                                cpu->r.A = true;
+                                cpu->rA = true;
                                 return;
                         }
                         --variant;
@@ -1170,7 +1172,7 @@ descriptorcall:	// entry fŕom CDC
                         t2 >>= 1;
                         ++cpu->cycleCount; // approximate the shift counts
                 }
-                cpu->r.A = false;
+                cpu->rA = false;
                 return;
 
 /***********************************************************************
@@ -1187,13 +1189,13 @@ descriptorcall:	// entry fŕom CDC
         case 075:
                 adjustABFull(cpu);
                 // do it the hard way.. BIT-WISE!
-                t1 = MASK_FLAG >> (cpu->r.G*6 + cpu->r.H); // A register starting bit mask
-                t2 = MASK_FLAG >> (cpu->r.K*6 + cpu->r.V); // B register starting bit mask
+                t1 = MASK_FLAG >> (cpu->rGH/*TODO G*/*6 + cpu->rGH/*TODO H*/); // A register starting bit mask
+                t2 = MASK_FLAG >> (cpu->rKV/*TODO K*/*6 + cpu->rKV/*TODO V*/); // B register starting bit mask
                 // note: t1/t2 turn zero when the test bit is shifted out at the right
                 while (variant && t1 && t2) {
-                        if (!(cpu->r.A & t1) != !(cpu->r.B & t2)) {
+                        if (!(cpu->rA & t1) != !(cpu->rB & t2)) {
                                 // A <> B: we are done
-                                cpu->r.A = false;
+                                cpu->rA = false;
                                 return;
                         }
                         --variant;
@@ -1201,7 +1203,7 @@ descriptorcall:	// entry fŕom CDC
                         t2 >>= 1;
                         ++cpu->cycleCount; // approximate the shift counts
                 }
-                cpu->r.A = true;
+                cpu->rA = true;
 		return;
 
 /***********************************************************************

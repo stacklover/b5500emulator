@@ -18,6 +18,8 @@
 *   some recoding and checking
 * 2017-09-30  R.Meyer
 *   overhaul of file names
+* 2017-10-28  R.Meyer
+*   adaption to new CPU structure
 ***********************************************************************/
 
 #include <stdio.h>
@@ -45,18 +47,18 @@
 ***********************************************************************/
 void streamAdjustSourceChar(CPU *cpu)
 {
-	if (cpu->r.H > 0) {
+	if (cpu->rGH/*TODO H*/ > 0) {
 		// not at bit position 0
 		// reset bit position
-		cpu->r.H = 0;
+		cpu->rGH/*TODO H*/ = 0;
 		// move to next char
-		if (cpu->r.G < 7) {
-			++cpu->r.G;
+		if (cpu->rGH/*TODO G*/ < 7) {
+			++cpu->rGH/*TODO G*/;
 		} else {
 			// move to next word
-			cpu->r.G = 0;
-			++cpu->r.M;
-			cpu->r.AROF = false;
+			cpu->rGH/*TODO G*/ = 0;
+			++cpu->rM;
+			cpu->bAROF = false;
 		}
 	}
 }
@@ -70,23 +72,23 @@ void streamAdjustSourceChar(CPU *cpu)
 ***********************************************************************/
 void streamAdjustDestChar(CPU *cpu)
 {
-	if (cpu->r.V > 0) {
+	if (cpu->rKV/*TODO V*/ > 0) {
 		// not at bit position 0
 		// reset bit position
-		cpu->r.V = 0;
+		cpu->rKV/*TODO V*/ = 0;
 		// move to next char
-		if (cpu->r.K < 7) {
-			++cpu->r.K;
+		if (cpu->rKV/*TODO K*/ < 7) {
+			++cpu->rKV/*TODO K*/;
 		} else {
 			// move to next word
-			cpu->r.K = 0;
+			cpu->rKV/*TODO K*/ = 0;
 			// store current word when touched
-			if (cpu->r.BROF) {
+			if (cpu->bBROF) {
 				// store it
 				storeBviaS(cpu);
-				cpu->r.BROF = false;
+				cpu->bBROF = false;
 			}
-			++cpu->r.S;
+			++cpu->rS;
 		}
 	}
 }
@@ -111,7 +113,7 @@ void streamAdjustDestChar(CPU *cpu)
 void compareSourceWithDest(CPU *cpu, unsigned count, BIT numeric)
 {
 	// Note: all Q cleared at begin of each execution
-	cpu->r.TFFF = false;
+	cpu->bTFFF = false;
 
 	streamAdjustSourceChar(cpu);
 	streamAdjustDestChar(cpu);
@@ -119,142 +121,142 @@ void compareSourceWithDest(CPU *cpu, unsigned count, BIT numeric)
 	// only do the next if count > 0
 	if (count) {
 		// ensure B is filled
-		if (cpu->r.BROF) {
+		if (cpu->bBROF) {
 			// B already full
-			if (cpu->r.K == 0) {
+			if (cpu->rKV/*TODO K*/ == 0) {
 				// set Q04F if pointer is at start of word, no need to store B later
-				cpu->r.Q04F = true;
+				cpu->bQ04F = true;
 			}
 		} else {
 			// fill B
 			loadBviaS(cpu); // B = [S]
 			// set Q04F -- just loaded B, no need to store it later
-			cpu->r.Q04F = true;
+			cpu->bQ04F = true;
 		}
 		// ensure A is filled
-		if (!cpu->r.AROF) {
+		if (!cpu->bAROF) {
 		        loadAviaM(cpu); // A = [M]
 		}
 
 		// setting Q06F and saving the count in H & V is only significant if this
 		// routine is executed as part of Field Add (FAD) or Field Subtract (FSU).
-		cpu->r.Q06F = true; // set Q06F
-		cpu->r.H = count >> 3;
-		cpu->r.V = count & 7;
+		cpu->bQ06F = true; // set Q06F
+		cpu->rGH/*TODO H*/ = count >> 3;
+		cpu->rKV/*TODO V*/ = count & 7;
 
 		// loop over count
 		do {
 		        ++cpu->cycleCount; // approximate the timing
-		        if (cpu->r.Q03F) {
+		        if (cpu->bQ03F) {
 		                // inequality already detected -- just count down
 		                if (count >= 8) {
 					// skip a full word - G and K not changed!
 		                        count -= 8;
 	                                // test Q04F to see if B may be dirty
-		                        if (!cpu->r.Q04F) {
+		                        if (!cpu->bQ04F) {
 						// B dirty - save it
 		                                storeBviaS(cpu); // [S] = B
 		                                // set Q04F so we won't store B anymore
-		                                cpu->r.Q04F = true;
+		                                cpu->bQ04F = true;
 		                        }
 					// mark A and B empty
-		                        cpu->r.BROF = false;
-		                        cpu->r.AROF = false;
+		                        cpu->bBROF = false;
+		                        cpu->bAROF = false;
 					// advance to next word
-					++cpu->r.S;
-		                        ++cpu->r.M;
+					++cpu->rS;
+		                        ++cpu->rM;
 		                } else {
 					// skip characters
 		                        --count;
-		                        if (cpu->r.K < 7) {
+		                        if (cpu->rKV/*TODO K*/ < 7) {
 						// next char
-		                                ++cpu->r.K;
+		                                ++cpu->rKV/*TODO K*/;
 		                        } else {
 						// next word
-		                                cpu->r.K = 0;
+		                                cpu->rKV/*TODO K*/ = 0;
 	                                        // test Q04F to see if B may be dirty
-		                                if (!cpu->r.Q04F) {
+		                                if (!cpu->bQ04F) {
 		                                        storeBviaS(cpu); // [S] = B
 		                                        // set Q04F so we won't store B anymore
-		                                        cpu->r.Q04F = true;
+		                                        cpu->bQ04F = true;
 		                                }
-		                                cpu->r.BROF = false;
-						++cpu->r.S;
+		                                cpu->bBROF = false;
+						++cpu->rS;
 		                        }
-		                        if (cpu->r.G < 7) {
+		                        if (cpu->rGH/*TODO G*/ < 7) {
 						// next char
-		                                ++cpu->r.G;
+		                                ++cpu->rGH/*TODO G*/;
 		                        } else {
 						// next word
-		                                cpu->r.G = 0;
-		                                cpu->r.AROF = false;
-				                ++cpu->r.M;
+		                                cpu->rGH/*TODO G*/ = 0;
+		                                cpu->bAROF = false;
+				                ++cpu->rM;
 		                        }
 		                }
 		        } else {
 		                // strings still equal -- compare current characters
-				cpu->r.Y = fieldIsolate(cpu->r.A, cpu->r.G*6, 6);
-				cpu->r.Z = fieldIsolate(cpu->r.B, cpu->r.K*6, 6);
+				cpu->rY = fieldIsolate(cpu->rA, cpu->rGH/*TODO G*/*6, 6);
+				cpu->rZ = fieldIsolate(cpu->rB, cpu->rKV/*TODO K*/*6, 6);
 		                if (numeric) {
 					// if numeric compare, clip B and A bits
-		                        cpu->r.Y &= 0xf;
-		                        cpu->r.Z &= 0xf;
+		                        cpu->rY &= 0xf;
+		                        cpu->rZ &= 0xf;
 		                }
 				// now compare
-		                if (cpu->r.Y != cpu->r.Z) {
+		                if (cpu->rY != cpu->rZ) {
 					// inequality detected - set Q03F to stop further comparison
-		                        cpu->r.Q03F = true;
+		                        cpu->bQ03F = true;
 		                        if (numeric) {
-		                                cpu->r.TFFF = cpu->r.Y > cpu->r.Z ? true : false;
+		                                cpu->bTFFF = cpu->rY > cpu->rZ ? true : false;
 		                        } else {
-		                                cpu->r.TFFF = collation[cpu->r.Y] > collation[cpu->r.Z] ? true : false;
+		                                cpu->bTFFF = collation[cpu->rY] > collation[cpu->rZ] ? true : false;
 		                        }
 		                } else {
 		                        // strings still equal -- advance to next character
 		                        --count;
-		                        if (cpu->r.K < 7) {
+		                        if (cpu->rKV/*TODO K*/ < 7) {
 						// next char
-		                                ++cpu->r.K;
+		                                ++cpu->rKV/*TODO K*/;
 		                        } else {
 						// next word
-		                                cpu->r.K = 0;
+		                                cpu->rKV/*TODO K*/ = 0;
 		                                // test Q04F to see if B may be dirty
-		                                if (!cpu->r.Q04F) {
+		                                if (!cpu->bQ04F) {
 		                                        storeBviaS(cpu); // [S] = B
 		                                        // set Q04F so we won't store B anymore
-		                                        cpu->r.Q04F = true;
+		                                        cpu->bQ04F = true;
 		                                }
-						++cpu->r.S;
+						++cpu->rS;
 						// more to compare ?
 		                                if (count > 0) {
 		                                        loadBviaS(cpu); // B = [S]
 		                                } else {
-		                                        cpu->r.BROF = false;
+		                                        cpu->bBROF = false;
 		                                }
 		                        }
-		                        if (cpu->r.G < 7) {
+		                        if (cpu->rGH/*TODO G*/ < 7) {
 		                                // next char
-		                                ++cpu->r.G;
+		                                ++cpu->rGH/*TODO G*/;
 		                        } else {
 		                                // next word
-		                                cpu->r.G = 0;
-				                ++cpu->r.M;
+		                                cpu->rGH/*TODO G*/ = 0;
+				                ++cpu->rM;
 						// more to compare ?
 		                                if (count > 0) {
 		                                        loadAviaM(cpu); // A = [M]
 		                                } else {
-		                                        cpu->r.AROF = false;
+		                                        cpu->bAROF = false;
 		                                }
 		                        }
 		                }
 		        }
 			// check whether S or M went over the limit
-			if (cpu->r.S >= MAXMEM) {
+			if (cpu->rS >= MAXMEM) {
 				prepMessage(cpu);
 				printf("compareSourceWithDest S>MAX\n");
 				stop(cpu);
 			}
-			if (cpu->r.M >= MAXMEM) {
+			if (cpu->rM >= MAXMEM) {
 				prepMessage(cpu);
 				printf("compareSourceWithDest M>MAX\n");
 				stop(cpu);
@@ -283,54 +285,54 @@ void fieldArithmetic(CPU *cpu, unsigned count, BIT adding)
         cpu->cycleCount += 2;   // approximate the timing thus far
 
 	// Q06F => count > 0, so there's characters to add
-        if (cpu->r.Q06F) {
+        if (cpu->bQ06F) {
 		// reset Q06F and Q04F
-                cpu->r.Q06F = false;
-                cpu->r.Q04F = false;
+                cpu->bQ06F = false;
+                cpu->bQ04F = false;
 		// results of compareSourceWithDest are TFFF and Q03F
 
                 // Back the pointers to the last characters of their respective fields
-                if (cpu->r.K > 0) {
-                        --cpu->r.K;
+                if (cpu->rKV/*TODO K*/ > 0) {
+                        --cpu->rKV/*TODO K*/;
                 } else {
-                        cpu->r.K = 7;
-                        cpu->r.BROF = false;
-                        --cpu->r.S;
+                        cpu->rKV/*TODO K*/ = 7;
+                        cpu->bBROF = false;
+                        --cpu->rS;
                 }
 
-                if (cpu->r.G > 0) {
-                        --cpu->r.G;
+                if (cpu->rGH/*TODO G*/ > 0) {
+                        --cpu->rGH/*TODO G*/;
                 } else {
-                        cpu->r.G = 7;
-                        cpu->r.AROF = false;
-                        --cpu->r.M;
+                        cpu->rGH/*TODO G*/ = 7;
+                        cpu->bAROF = false;
+                        --cpu->rM;
                 }
 
-                if (!cpu->r.BROF) {
+                if (!cpu->bBROF) {
                         loadBviaS(cpu); // B = [S]
                 }
 
-                if (!cpu->r.AROF) {
+                if (!cpu->bAROF) {
                         loadAviaM(cpu); // A = [M]
                 }
 
-                cpu->r.Q08F = true; // set Q08F (for display only)
+                cpu->bQ08F = true; // set Q08F (for display only)
 
-                cpu->r.Y = fieldIsolate(cpu->r.A, cpu->r.G*6, 2) == 2 ? 2 : 0; // source sign
-                cpu->r.Z = fieldIsolate(cpu->r.B, cpu->r.K*6, 2) == 2 ? 2 : 0; // dest sign
-                compla = (cpu->r.Y == cpu->r.Z ? !adding : adding); // determine if complement needed
+                cpu->rY = fieldIsolate(cpu->rA, cpu->rGH/*TODO G*/*6, 2) == 2 ? 2 : 0; // source sign
+                cpu->rZ = fieldIsolate(cpu->rB, cpu->rKV/*TODO K*/*6, 2) == 2 ? 2 : 0; // dest sign
+                compla = (cpu->rY == cpu->rZ ? !adding : adding); // determine if complement needed
 
                 resultNegative = !( // determine sign of result
-                        (cpu->r.Z == 0 && !compla) ||
-                        (cpu->r.Z == 0 && cpu->r.Q03F && !cpu->r.TFFF) ||
-                        (cpu->r.Z != 0 && compla && cpu->r.Q03F && cpu->r.TFFF) ||
-                        (compla && !cpu->r.Q03F));
+                        (cpu->rZ == 0 && !compla) ||
+                        (cpu->rZ == 0 && cpu->bQ03F && !cpu->bTFFF) ||
+                        (cpu->rZ != 0 && compla && cpu->bQ03F && cpu->bTFFF) ||
+                        (compla && !cpu->bQ03F));
                 if (compla) {
-                        cpu->r.Q07F = true;
-                        cpu->r.Q02F = true; // set Q07F and Q02F (for display only)
+                        cpu->bQ07F = true;
+                        cpu->bQ02F = true; // set Q07F and Q02F (for display only)
                         carry = true; // preset the carry/borrow bit (Q07F)
-                        if (cpu->r.TFFF) {
-                                cpu->r.Q04F = true; // set Q04F (for display only)
+                        if (cpu->bTFFF) {
+                                cpu->bQ04F = true; // set Q04F (for display only)
                                 zcompl = true;
                         } else {
                                 ycompl = true;
@@ -341,9 +343,9 @@ void fieldArithmetic(CPU *cpu, unsigned count, BIT adding)
                 do {
                         --count;
                         cpu->cycleCount += 2;
-                        cpu->r.Y = fieldIsolate(cpu->r.A, cpu->r.G*6+2, 4); // get the source digit
-                        cpu->r.Z = fieldIsolate(cpu->r.B, cpu->r.K*6+2, 4); // get the dest digit
-                        sd = (ycompl ? 9-cpu->r.Y : cpu->r.Y) + (zcompl ? 9-cpu->r.Z : cpu->r.Z) + carry; // develop binary digit sum
+                        cpu->rY = fieldIsolate(cpu->rA, cpu->rGH/*TODO G*/*6+2, 4); // get the source digit
+                        cpu->rZ = fieldIsolate(cpu->rB, cpu->rKV/*TODO K*/*6+2, 4); // get the dest digit
+                        sd = (ycompl ? 9-cpu->rY : cpu->rY) + (zcompl ? 9-cpu->rZ : cpu->rZ) + carry; // develop binary digit sum
                         if (sd <= 9) {
                                 carry = false;
                         } else {
@@ -355,56 +357,56 @@ void fieldArithmetic(CPU *cpu, unsigned count, BIT adding)
                                 resultNegative = false;
                         }
 
-                        cpu->r.B = fieldInsert(cpu->r.B, cpu->r.K*6, 6, sd);
+                        cpu->rB = fieldInsert(cpu->rB, cpu->rKV/*TODO K*/*6, 6, sd);
 
                         if (count == 0) {
                                 storeBviaS(cpu); // [S] = B, store final dest word
                         } else {
-                                if (cpu->r.K > 0) {
-                                        --cpu->r.K;
+                                if (cpu->rKV/*TODO K*/ > 0) {
+                                        --cpu->rKV/*TODO K*/;
                                 } else {
-                                        cpu->r.K = 7;
+                                        cpu->rKV/*TODO K*/ = 7;
                                         storeBviaS(cpu); // [S] = B
-                                        --cpu->r.S;
+                                        --cpu->rS;
                                         loadBviaS(cpu); // B = [S]
                                 }
-                                if (cpu->r.G > 0) {
-                                        --cpu->r.G;
+                                if (cpu->rGH/*TODO G*/ > 0) {
+                                        --cpu->rGH/*TODO G*/;
                                 } else {
-                                        cpu->r.G = 7;
-                                        --cpu->r.M;
+                                        cpu->rGH/*TODO G*/ = 7;
+                                        --cpu->rM;
                                         loadAviaM(cpu); // A = [M]
                                 }
                         }
                 } while (count);
 
                 // Now restore the character pointers
-                count = cpu->r.H*8 + cpu->r.V;
+                count = cpu->rGH/*TODO H*/*8 + cpu->rKV/*TODO V*/;
                 while (count >= 8) {
                         count -= 8;
                         ++cpu->cycleCount;
-                        ++cpu->r.S;
-                        ++cpu->r.M;
+                        ++cpu->rS;
+                        ++cpu->rM;
                 }
                 cpu->cycleCount += count;
                 while (count > 0) {
                         --count;
-                        if (cpu->r.K < 7) {
-                                ++cpu->r.K;
+                        if (cpu->rKV/*TODO K*/ < 7) {
+                                ++cpu->rKV/*TODO K*/;
                         } else {
-                                cpu->r.K = 0;
-                                ++cpu->r.S;
+                                cpu->rKV/*TODO K*/ = 0;
+                                ++cpu->rS;
                         }
-                        if (cpu->r.G < 7) {
-                                ++cpu->r.G;
+                        if (cpu->rGH/*TODO G*/ < 7) {
+                                ++cpu->rGH/*TODO G*/;
                         } else {
-                                cpu->r.G = 0;
-                                ++cpu->r.M;
+                                cpu->rGH/*TODO G*/ = 0;
+                                ++cpu->rM;
                         }
                 }
-                cpu->r.AROF = cpu->r.BROF = false;
-                cpu->r.H = cpu->r.V = cpu->r.N = 0;
-                cpu->r.TFFF = (compla ? 1-carry : carry); // TFFF = overflow indicator
+                cpu->bAROF = cpu->bBROF = false;
+                cpu->rGH/*TODO H*/ = cpu->rKV/*TODO V*/ = cpu->rN = 0;
+                cpu->bTFFF = (compla ? 1-carry : carry); // TFFF = overflow indicator
         }
 }
 
@@ -423,33 +425,33 @@ void streamBitsToDest(CPU *cpu, unsigned count, WORD48 mask)
 //printf("sBTD\n");
         if (count) {
                 cpu->cycleCount += count;
-                if (!cpu->r.BROF) {
+                if (!cpu->bBROF) {
                         loadBviaS(cpu); // B = [S]
                 }
                 do {
-                        bn = cpu->r.K*6 + cpu->r.V; // starting bit nr.
+                        bn = cpu->rKV/*TODO K*/*6 + cpu->rKV/*TODO V*/; // starting bit nr.
                         fl = 48-bn; // bits remaining in the word
                         if (count < fl) {
                                 fl = count;
                         }
                         if (fl < 48) {
-                                cpu->r.B = fieldInsert(cpu->r.B, bn, fl, mask);
+                                cpu->rB = fieldInsert(cpu->rB, bn, fl, mask);
                         } else {
-                                cpu->r.B = mask; // set the whole word
+                                cpu->rB = mask; // set the whole word
                         }
                         count -= fl; // decrement by number of bits modified
                         bn += fl; // increment the starting bit nr.
                         if (bn < 48) {
-                                cpu->r.V = bn % 6;
-                                cpu->r.K = (bn - cpu->r.V)/6;
+                                cpu->rKV/*TODO V*/ = bn % 6;
+                                cpu->rKV/*TODO K*/ = (bn - cpu->rKV/*TODO V*/)/6;
                         } else {
-                                cpu->r.K = cpu->r.V = 0;
+                                cpu->rKV/*TODO K*/ = cpu->rKV/*TODO V*/ = 0;
                                 storeBviaS(cpu); // [S] = B, save the updated word
-                                ++cpu->r.S;
+                                ++cpu->rS;
                                 if (count > 0) {
                                         loadBviaS(cpu); // B = [S], fetch next word in sequence
                                 } else {
-                                        cpu->r.BROF = false;
+                                        cpu->bBROF = false;
                                 }
                         }
                 } while (count);
@@ -471,52 +473,52 @@ void streamProgramToDest(CPU *cpu, unsigned count)
 //printf("sPTD\n");
         streamAdjustDestChar(cpu);
         if (count) { // count > 0
-                if (!cpu->r.BROF) {
+                if (!cpu->bBROF) {
                         loadBviaS(cpu); // B = [S]
                 }
-                if (!cpu->r.PROF) {
+                if (!cpu->bPROF) {
                         loadPviaC(cpu); // fetch the program word, if necessary
                 }
                 cpu->cycleCount += count; // approximate the timing
-                pBit = (cpu->r.L*2 + (count % 2))*6; // P-reg bit number
-                pw = cpu->r.P;
-                bBit = cpu->r.K*6; // B-reg bit number
-                bw = cpu->r.B;
+                pBit = (cpu->rL*2 + (count % 2))*6; // P-reg bit number
+                pw = cpu->rP;
+                bBit = cpu->rKV/*TODO K*/*6; // B-reg bit number
+                bw = cpu->rB;
                 do {
                         c = fieldIsolate(pw, pBit, 6);
                         bw = fieldInsert(bw, bBit, 6, c);
                         --count;
                         if (bBit < 42) {
                                 bBit += 6;
-                                ++cpu->r.K;
+                                ++cpu->rKV/*TODO K*/;
                         } else {
                                 bBit = false;
-                                cpu->r.K = 0;
-                                cpu->r.B = bw;
+                                cpu->rKV/*TODO K*/ = 0;
+                                cpu->rB = bw;
                                 storeBviaS(cpu); // [S] = B
-                                ++cpu->r.S;
+                                ++cpu->rS;
                                 if (count > 0 && count < 8) { // only need to load B if a partial word is left
                                         loadBviaS(cpu); // B = [S]
-                                        bw = cpu->r.B;
+                                        bw = cpu->rB;
                                 } else {
-                                        cpu->r.BROF = false;
+                                        cpu->bBROF = false;
                                 }
                         }
                         if (pBit < 42) {
                                 pBit += 6;
                                 if (!(count % 2)) {
-                                        ++cpu->r.L;
+                                        ++cpu->rL;
                                 }
                         } else {
                                 pBit = false;
-                                cpu->r.L = 0;
-                                ++cpu->r.C;
+                                cpu->rL = 0;
+                                ++cpu->rC;
                                 loadPviaC(cpu); // P = [C]
-                                pw = cpu->r.P;
+                                pw = cpu->rP;
                         }
                 } while (count);
-                cpu->r.B = bw;
-                cpu->r.Y = c;   // for display purposes only
+                cpu->rB = bw;
+                cpu->rY = c;   // for display purposes only
         }
 }
 
@@ -536,17 +538,17 @@ void streamCharacterToDest(CPU *cpu, unsigned count)
         streamAdjustSourceChar(cpu);
         streamAdjustDestChar(cpu);
         if (count) {
-                if (!cpu->r.BROF) {
+                if (!cpu->bBROF) {
                         loadBviaS(cpu); // B = [S]
                 }
-                if (!cpu->r.AROF) {
+                if (!cpu->bAROF) {
                         loadAviaM(cpu); // A = [M]
                 }
                 cpu->cycleCount += 10 + count*2; // approximate the timing
-                aBit = cpu->r.G*6; // A-bit number
-                aw = cpu->r.A;
-                bBit = cpu->r.K*6; // B-bit number
-                bw = cpu->r.B;
+                aBit = cpu->rGH/*TODO G*/*6; // A-bit number
+                aw = cpu->rA;
+                bBit = cpu->rKV/*TODO K*/*6; // B-bit number
+                bw = cpu->rB;
                 do {
                         c = fieldIsolate(aw, aBit, 6);
 //printf("%c", translatetable_bic2ascii[c]);
@@ -554,37 +556,37 @@ void streamCharacterToDest(CPU *cpu, unsigned count)
                         --count;
                         if (bBit < 42) {
                                 bBit += 6;
-                                ++cpu->r.K;
+                                ++cpu->rKV/*TODO K*/;
                         } else {
                                 bBit = false;
-                                cpu->r.K = 0;
-                                cpu->r.B = bw;
+                                cpu->rKV/*TODO K*/ = 0;
+                                cpu->rB = bw;
                                 storeBviaS(cpu); // [S] = B
-                                ++cpu->r.S;
+                                ++cpu->rS;
                                 if (count > 0 && count < 8) { // only need to load B if a partial word is left
                                         loadBviaS(cpu); // B = [S]
-                                        bw = cpu->r.B;
+                                        bw = cpu->rB;
                                 } else {
-                                        cpu->r.BROF = false;
+                                        cpu->bBROF = false;
                                 }
                         }
                         if (aBit < 42) {
                                 aBit += 6;
-                                ++cpu->r.G;
+                                ++cpu->rGH/*TODO G*/;
                         } else {
                                 aBit = false;
-                                cpu->r.G = 0;
-                                ++cpu->r.M;
+                                cpu->rGH/*TODO G*/ = 0;
+                                ++cpu->rM;
                                 if (count > 0) { // only need to load A if there's more to do
                                         loadAviaM(cpu); // A = [M]
-                                        aw = cpu->r.A;
+                                        aw = cpu->rA;
                                 } else {
-                                        cpu->r.AROF = false;
+                                        cpu->bAROF = false;
                                 }
                         }
                 } while (count);
-                cpu->r.B = bw;
-                cpu->r.Y = c; // for display purposes only
+                cpu->rB = bw;
+                cpu->rY = c; // for display purposes only
         }
 //printf("'\n");
 }
@@ -606,10 +608,10 @@ void streamNumericToDest(CPU *cpu, unsigned count, unsigned zones)
         streamAdjustSourceChar(cpu);
         streamAdjustDestChar(cpu);
         if (count) {
-                if (!cpu->r.BROF) {
+                if (!cpu->bBROF) {
                         loadBviaS(cpu); // B = [S]
                 }
-                if (!cpu->r.AROF) {
+                if (!cpu->bAROF) {
                         loadAviaM(cpu); // A = [M]
                 }
                 if (zones) { // approximate the timing
@@ -618,10 +620,10 @@ void streamNumericToDest(CPU *cpu, unsigned count, unsigned zones)
                         cpu->cycleCount += 10 + count*3;
                 }
 
-                aBit = cpu->r.G*6; // A-bit number
-                aw = cpu->r.A;
-                bBit = cpu->r.K*6; // B-bit number
-                bw = cpu->r.B;
+                aBit = cpu->rGH/*TODO G*/*6; // A-bit number
+                aw = cpu->rA;
+                bBit = cpu->rKV/*TODO K*/*6; // B-bit number
+                bw = cpu->rB;
                 do {
                         c = fieldIsolate(aw, aBit, 6);
                         if (zones) { // transfer only the zone portion of the char
@@ -634,39 +636,39 @@ void streamNumericToDest(CPU *cpu, unsigned count, unsigned zones)
                         --count;
                         if (bBit < 42) {
                                 bBit += 6;
-                                ++cpu->r.K;
+                                ++cpu->rKV/*TODO K*/;
                         } else {
                                 bBit = false;
-                                cpu->r.K = 0;
-                                cpu->r.B = bw;
+                                cpu->rKV/*TODO K*/ = 0;
+                                cpu->rB = bw;
                                 storeBviaS(cpu); // [S] = B
-                                ++cpu->r.S;
+                                ++cpu->rS;
                                 if (count > 0) {
                                         loadBviaS(cpu); // B = [S]
-                                        bw = cpu->r.B;
+                                        bw = cpu->rB;
                                 } else {
-                                        cpu->r.BROF = false;
+                                        cpu->bBROF = false;
                                 }
                         }
                         if (aBit < 42) {
                                 aBit += 6;
-                                ++cpu->r.G;
+                                ++cpu->rGH/*TODO G*/;
                         } else {
                                 aBit = false;
-                                cpu->r.G = 0;
-                                ++cpu->r.M;
+                                cpu->rGH/*TODO G*/ = 0;
+                                ++cpu->rM;
                                 if (count > 0) { // only need to load A if there's more to do
                                         loadAviaM(cpu); // A = [M]
-                                        aw = cpu->r.A;
+                                        aw = cpu->rA;
                                 } else {
-                                        cpu->r.AROF = false;
+                                        cpu->bAROF = false;
                                 }
                         }
                 } while (count);
-                cpu->r.B = bw;
-                cpu->r.Y = c; // for display purposes only
+                cpu->rB = bw;
+                cpu->rY = c; // for display purposes only
                 if (!zones && (c & 0x30) == 0x20) {
-                        cpu->r.TFFF = true; // last char had a negative sign
+                        cpu->bTFFF = true; // last char had a negative sign
                 }
         }
 //printf("'\n");
@@ -686,23 +688,23 @@ void streamBlankForNonNumeric(CPU *cpu, unsigned count)
         unsigned        c;      // current destination character
 
 //printf("sBFNN %u '", count);
-        cpu->r.TFFF = true; // assume the count will be exhausted
+        cpu->bTFFF = true; // assume the count will be exhausted
         streamAdjustDestChar(cpu);
         if (count) {
-                if (!cpu->r.BROF) {
+                if (!cpu->bBROF) {
                         loadBviaS(cpu); // B = [S]
                 }
-                bBit = cpu->r.K*6; // B-bit number
-                bw = cpu->r.B;
+                bBit = cpu->rKV/*TODO K*/*6; // B-bit number
+                bw = cpu->rB;
                 do {
                         cpu->cycleCount += 2; // approximate the timing
                         c = fieldIsolate(bw, bBit, 6);
 //printf("%c", translatetable_bic2ascii[c]);
                         if (c > 0 && c <= 9) {
                                 // is numeric and non-zero: stop blanking
-                                cpu->r.TFFF = false;
+                                cpu->bTFFF = false;
                                 // set Q03F (display only)
-                                cpu->r.Q03F = true;
+                                cpu->bQ03F = true;
                                 // terminate, pointing at cpu char
                                 break;
                         } else {
@@ -710,24 +712,24 @@ void streamBlankForNonNumeric(CPU *cpu, unsigned count)
                                 --count;
                                 if (bBit < 42) {
                                         bBit += 6;
-                                        ++cpu->r.K;
+                                        ++cpu->rKV/*TODO K*/;
                                 } else {
                                         bBit = false;
-                                        cpu->r.K = 0;
-                                        cpu->r.B = bw;
+                                        cpu->rKV/*TODO K*/ = 0;
+                                        cpu->rB = bw;
                                         storeBviaS(cpu); // [S] = B
-                                        ++cpu->r.S;
+                                        ++cpu->rS;
                                         if (count > 0) {
                                                 loadBviaS(cpu); // B = [S]
-                                                bw = cpu->r.B;
+                                                bw = cpu->rB;
                                         } else {
-                                                cpu->r.BROF = false;
+                                                cpu->bBROF = false;
                                         }
                                 }
                         }
                 } while (count);
-                cpu->r.B = bw;
-                cpu->r.Z = c; // for display purposes only
+                cpu->rB = bw;
+                cpu->rZ = c; // for display purposes only
         }
 //printf("'\n");
 }
@@ -754,41 +756,41 @@ void streamInputConvert(CPU *cpu, unsigned count)
 
 //printf("sIC %u '", count);
         streamAdjustSourceChar(cpu);
-        if (cpu->r.BROF) {
+        if (cpu->bBROF) {
                 storeBviaS(cpu); // [S] = B
-                cpu->r.BROF = false;
+                cpu->bBROF = false;
         }
-        if (cpu->r.K || cpu->r.V) { // adjust dest to word boundary
-                cpu->r.K = cpu->r.V = 0;
-                ++cpu->r.S;
+        if (cpu->rKV/*TODO K*/ || cpu->rKV/*TODO V*/) { // adjust dest to word boundary
+                cpu->rKV/*TODO K*/ = cpu->rKV/*TODO V*/ = 0;
+                ++cpu->rS;
         }
         if (count) { // no conversion if count is zero
                 cpu->cycleCount += count*2 + 27;
                 count = ((count-1) & 0x07) + 1; // limit the count to 8
-                if (!cpu->r.AROF) {
+                if (!cpu->bAROF) {
                         loadAviaM(cpu); // A = [M]
                 }
 
                 // First, assemble the digits into B as 4-bit BCD
                 do {
-                        b = (b << 4) | ((cpu->r.Y = fieldIsolate(cpu->r.A, cpu->r.G*6, 6)) & 0x0F);
-//printf("%c", translatetable_bic2ascii[cpu->r.Y]);
-                        if (cpu->r.G < 7) {
-                                ++cpu->r.G;
+                        b = (b << 4) | ((cpu->rY = fieldIsolate(cpu->rA, cpu->rGH/*TODO G*/*6, 6)) & 0x0F);
+//printf("%c", translatetable_bic2ascii[cpu->rY]);
+                        if (cpu->rGH/*TODO G*/ < 7) {
+                                ++cpu->rGH/*TODO G*/;
                         } else {
-                                cpu->r.G = 0;
-                                ++cpu->r.M;
+                                cpu->rGH/*TODO G*/ = 0;
+                                ++cpu->rM;
                                 if (count > 1) {
                                         loadAviaM(cpu); // A = [M], only if more chars are needed
                                 } else {
-                                        cpu->r.AROF = false;
+                                        cpu->bAROF = false;
                                 }
                         }
                 } while (--count);
 
                 // Then do the artful shifting to form the binary value in A
-                cpu->r.AROF = false;
-                cpu->r.B = b; // for display purposes only
+                cpu->bAROF = false;
+                cpu->rB = b; // for display purposes only
                 while (b) {
                         if (b & 0x01) {
                                 a += power;
@@ -812,13 +814,13 @@ void streamInputConvert(CPU *cpu, unsigned count)
 
                 // Finally, fix up the binary sign and store the result
                 if (a) { // zero results have sign bit reset
-                        if ((cpu->r.Y & 0x30) == 0x20) {
+                        if ((cpu->rY & 0x30) == 0x20) {
                                 a |= MASK_SIGNMANT; // set the sign bit
                         }
                 }
-                cpu->r.A = a;
+                cpu->rA = a;
                 storeAviaS(cpu); // [S] = A
-                ++cpu->r.S;
+                ++cpu->rS;
         }
 //printf("'\n");
 }
@@ -839,26 +841,26 @@ void streamOutputConvert(CPU *cpu, unsigned count)
         WORD48  power = 1;      // power-of-64 factor for result digits
 
 //printf("%08u sOC %d ", instr_count, count);
-        cpu->r.TFFF = true; // set TFFF unless there's overflow
+        cpu->bTFFF = true; // set TFFF unless there's overflow
         streamAdjustDestChar(cpu);
-        if (cpu->r.BROF) {
+        if (cpu->bBROF) {
                 storeBviaS(cpu); // [S] = B, but leave BROF set
         }
-        if (cpu->r.G || cpu->r.H) { // adjust source to word boundary
-                cpu->r.G = cpu->r.H = 0;
-                cpu->r.AROF = false;
-                ++cpu->r.M;
+        if (cpu->rGH/*TODO G*/ || cpu->rGH/*TODO H*/) { // adjust source to word boundary
+                cpu->rGH/*TODO G*/ = cpu->rGH/*TODO H*/ = 0;
+                cpu->bAROF = false;
+                ++cpu->rM;
         }
         if (count) { // count > 0
                 cpu->cycleCount += count*2 + 27;
-                if (!cpu->r.AROF) {
+                if (!cpu->bAROF) {
                         loadAviaM(cpu); // A = [M]
                 }
-//printf("A=%016llo '", cpu->r.A);
+//printf("A=%016llo '", cpu->rA);
                 count = ((count-1) & 0x07) + 1; // limit the count to 8
-                a = cpu->r.A & MASK_MANTISSA; // get absolute mantissa value, ignore exponent
+                a = cpu->rA & MASK_MANTISSA; // get absolute mantissa value, ignore exponent
                 if (a) { // mantissa is non-zero, so conversion is required
-                        if (cpu->r.A & MASK_SIGNMANT) {
+                        if (cpu->rA & MASK_SIGNMANT) {
                                 // result is negative, so preset the sign in the low-order digit
                                 b = 040;        // BA'8421=10'0000
                         }
@@ -872,31 +874,31 @@ void streamOutputConvert(CPU *cpu, unsigned count)
                         } while (a && (++d < count));
                         if (a) {
                                 // overflow occurred, so reset TFFF
-                                cpu->r.TFFF = false;
+                                cpu->bTFFF = false;
                         }
                 }
-                cpu->r.AROF = false; // invalidate A
-                ++cpu->r.M; // and advance to the next source word
+                cpu->bAROF = false; // invalidate A
+                ++cpu->rM; // and advance to the next source word
 
                 // Finally, stream the digits from A (whose value is still in local b) to the destination
-                cpu->r.A = b; // for display purposes only
+                cpu->rA = b; // for display purposes only
                 loadBviaS(cpu); // B = [S], restore original value of B
                 d = 48 - count*6; // starting bit in A
                 do {
                         c = fieldIsolate(b, d, 6);
 //printf("%c", translatetable_bic2ascii[c]);
-                        cpu->r.B = fieldInsert(cpu->r.B, cpu->r.K*6, 6, c);
+                        cpu->rB = fieldInsert(cpu->rB, cpu->rKV/*TODO K*/*6, 6, c);
                         d += 6;
-                        if (cpu->r.K < 7) {
-                                ++cpu->r.K;
+                        if (cpu->rKV/*TODO K*/ < 7) {
+                                ++cpu->rKV/*TODO K*/;
                         } else {
                                 storeBviaS(cpu); // [S] = B
-                                cpu->r.K = 0;
-                                ++cpu->r.S;
+                                cpu->rKV/*TODO K*/ = 0;
+                                ++cpu->rS;
                                 if (count > 1) {
                                         loadBviaS(cpu); // B = [S]
                                 } else {
-                                        cpu->r.BROF = false;
+                                        cpu->bBROF = false;
                                 }
                         }
                 } while (--count);

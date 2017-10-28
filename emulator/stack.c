@@ -15,6 +15,8 @@
 *   changed "this" to "cpu" to avoid errors when using g++
 * 2017-09-30  R.Meyer
 *   overhaul of file names
+* 2017-10-28  R.Meyer
+*   adaption to new CPU structure
 ***********************************************************************/
 
 #include "common.h"
@@ -25,26 +27,26 @@
  */
 void adjustABFull(CPU *cpu)
 {
-        if (cpu->r.AROF) {
-                if (cpu->r.BROF) {
+        if (cpu->bAROF) {
+                if (cpu->bBROF) {
                         // A and B are already full, so we're done
                 } else {
                         // A is full and B is empty, so load B from [S]
                         loadBviaS(cpu); // B = [S]
-                        --cpu->r.S;
+                        --cpu->rS;
                 }
         } else {
-                if (cpu->r.BROF) {
+                if (cpu->bBROF) {
                         // A is empty and B is full, so copy B to A and load B from [S]
-                        cpu->r.A = cpu->r.B;
-                        cpu->r.AROF = 1;
+                        cpu->rA = cpu->rB;
+                        cpu->bAROF = 1;
                 } else {
                         // A and B are empty, so simply load them from [S]
                         loadAviaS(cpu); // A = [S]
-                        --cpu->r.S;
+                        --cpu->rS;
                 }
                 loadBviaS(cpu); // B = [S]
-                --cpu->r.S;
+                --cpu->rS;
         }
 }
 
@@ -54,14 +56,14 @@ void adjustABFull(CPU *cpu)
  */
 void adjustAFull(CPU *cpu)
 {
-        if (!cpu->r.AROF) {
-                if (cpu->r.BROF) {
-                        cpu->r.A = cpu->r.B;
-                        cpu->r.AROF = 1;
-                        cpu->r.BROF = 0;
+        if (!cpu->bAROF) {
+                if (cpu->bBROF) {
+                        cpu->rA = cpu->rB;
+                        cpu->bAROF = 1;
+                        cpu->bBROF = 0;
                 } else {
                         loadAviaS(cpu); // A = [S]
-                        --cpu->r.S;
+                        --cpu->rS;
                 }
         }
         // else we're done -- A is already full
@@ -73,9 +75,9 @@ void adjustAFull(CPU *cpu)
  */
 void adjustBFull(CPU *cpu)
 {
-        if (!cpu->r.BROF) {
+        if (!cpu->bBROF) {
                 loadBviaS(cpu); // B = [S]
-                --cpu->r.S;
+                --cpu->rS;
         }
         // else we're done -- B is already full
 }
@@ -87,34 +89,34 @@ void adjustBFull(CPU *cpu)
 void adjustABEmpty(CPU *cpu)
 {
         // B occupied ?
-        if (cpu->r.BROF) {
+        if (cpu->bBROF) {
                 // empty B to stack
-                if (((cpu->r.S >> 6) == cpu->r.R) && cpu->r.NCSF) {
+                if (((cpu->rS >> 6) == cpu->rR/*TODO SHIFT*/) && cpu->bNCSF) {
                         // set I03F: stack overflow
-                        cpu->r.I |= 0x04;
+                        cpu->rI |= 0x04;
                         signalInterrupt(cpu->id, "StackOverflow");
                 } else {
-                        ++cpu->r.S;
+                        ++cpu->rS;
                         storeBviaS(cpu); // [S] = B
                 }
                 // B is now empty
-                cpu->r.BROF = 0;
+                cpu->bBROF = 0;
         }
         // else we're done -- B is already empty
 
         // A occupied ?
-        if (cpu->r.AROF) {
+        if (cpu->bAROF) {
                 // empty A to stack
-                if (((cpu->r.S >> 6) == cpu->r.R) && cpu->r.NCSF) {
+                if (((cpu->rS >> 6) == cpu->rR/*TODO SHIFT*/) && cpu->bNCSF) {
                         // set I03F: stack overflow
-                        cpu->r.I |= 0x04;
+                        cpu->rI |= 0x04;
                         signalInterrupt(cpu->id, "StackOverflow");
                 } else {
-                        ++cpu->r.S;
+                        ++cpu->rS;
                         storeAviaS(cpu); // [S] = B
                 }
                 // A is now empty
-                cpu->r.AROF = 0;
+                cpu->bAROF = 0;
         }
         // else we're done -- A is already empty
 }
@@ -126,23 +128,23 @@ void adjustABEmpty(CPU *cpu)
 void adjustAEmpty(CPU *cpu)
 {
         // A occupied ?
-        if (cpu->r.AROF) {
+        if (cpu->bAROF) {
                 // B occupied ?
-                if (cpu->r.BROF) {
+                if (cpu->bBROF) {
                         // empty B to stack
-                        if (((cpu->r.S >> 6) == cpu->r.R) && cpu->r.NCSF) {
+                        if (((cpu->rS >> 6) == cpu->rR/*TODO SHIFT*/) && cpu->bNCSF) {
                                 // set I03F: stack overflow
-                                cpu->r.I |= 0x04;
+                                cpu->rI |= 0x04;
                                 signalInterrupt(cpu->id, "StackOverflow");
                         } else {
-                                ++cpu->r.S;
+                                ++cpu->rS;
                                 storeBviaS(cpu); // [S] = B
                         }
                 }
                 // B is now empty, move A to B
-                cpu->r.B = cpu->r.A;
-                cpu->r.AROF = 0;
-                cpu->r.BROF = 1;
+                cpu->rB = cpu->rA;
+                cpu->bAROF = 0;
+                cpu->bBROF = 1;
         }
         // else we're done -- A is already empty
 }
@@ -154,18 +156,18 @@ void adjustAEmpty(CPU *cpu)
 void adjustBEmpty(CPU *cpu)
 {
         // B occupied ?
-        if (cpu->r.BROF) {
+        if (cpu->bBROF) {
                 // empty B to stack
-                if (((cpu->r.S >> 6) == cpu->r.R) && cpu->r.NCSF) {
+                if (((cpu->rS >> 6) == cpu->rR/*TODO SHIFT*/) && cpu->bNCSF) {
                         // set I03F: stack overflow
-                        cpu->r.I |= 0x04;
+                        cpu->rI |= 0x04;
                         signalInterrupt(cpu->id, "StackOverflow");
                 } else {
-                        ++cpu->r.S;
+                        ++cpu->rS;
                         storeBviaS(cpu); // [S] = B
                 }
                 // B is now empty
-                cpu->r.BROF = 0;
+                cpu->bBROF = 0;
         }
         // else we're done -- B is already empty
 }
@@ -177,30 +179,30 @@ void exchangeTOS(CPU *cpu)
 {
         WORD48 temp;
 
-        if (cpu->r.AROF) {
-                if (cpu->r.BROF) {
+        if (cpu->bAROF) {
+                if (cpu->bBROF) {
                         // A and B are full, so simply exchange them
-                        temp = cpu->r.A;
-                        cpu->r.A = cpu->r.B;
-                        cpu->r.B = temp;
+                        temp = cpu->rA;
+                        cpu->rA = cpu->rB;
+                        cpu->rB = temp;
                 } else {
                         // A is full and B is empty, so push A to B and load A from [S]
-                        cpu->r.B = cpu->r.A;
-                        cpu->r.BROF = 1;
+                        cpu->rB = cpu->rA;
+                        cpu->bBROF = 1;
                         loadAviaS(cpu); // A = [S]
-                        --cpu->r.S;
+                        --cpu->rS;
                 }
         } else {
-                if (cpu->r.BROF) {
+                if (cpu->bBROF) {
                         // A is empty and B is full, so load A from [S]
                         loadAviaS(cpu); // A = [S]
-                        --cpu->r.S;
+                        --cpu->rS;
                 } else {
                         // A and B are empty, so simply load them in reverse order
                         loadBviaS(cpu); // B = [S]
-                        --cpu->r.S;
+                        --cpu->rS;
                         loadAviaS(cpu); // A = [S]
-                        --cpu->r.S;
+                        --cpu->rS;
                 }
         }
 }

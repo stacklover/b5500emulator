@@ -15,6 +15,8 @@
 *   changed "this" to "cpu" to avoid errors when using g++
 * 2017-09-30  R.Meyer
 *   overhaul of file names
+* 2017-10-28  R.Meyer
+*   adaption to new CPU structure
 ***********************************************************************/
 
 #include <stdio.h>
@@ -26,11 +28,11 @@
 WORD48 buildMSCW(CPU *cpu)
 {
         WORD48 t1 = INIT_MSCW |
-                ((WORD48)cpu->r.F << SHFT_FREG) |
-                ((WORD48)cpu->r.R << SHFT_RREG);
-        if (cpu->r.SALF)
+                ((WORD48)cpu->rF << SHFT_FREG) |
+                ((WORD48)cpu->rR/*TODO SHIFT*/ << SHFT_RREG);
+        if (cpu->bSALF)
               t1 |= MASK_SALF;
-        if (cpu->r.MSFF)
+        if (cpu->bMSFF)
               t1 |= MASK_MSFF;
         return t1;
 }
@@ -41,10 +43,10 @@ WORD48 buildMSCW(CPU *cpu)
  */
 void applyMSCW(CPU *cpu, WORD48 word)
 {
-        cpu->r.F = (word & MASK_FREG) >> SHFT_FREG;
-        cpu->r.R = (word & MASK_RREG) >> SHFT_RREG;
-        cpu->r.SALF = (word & MASK_SALF) ? true : false;
-        cpu->r.MSFF = (word & MASK_MSFF) ? true : false;
+        cpu->rF = (word & MASK_FREG) >> SHFT_FREG;
+        cpu->rR/*TODO SHIFT*/ = (word & MASK_RREG) >> SHFT_RREG;
+        cpu->bSALF = (word & MASK_SALF) ? true : false;
+        cpu->bMSFF = (word & MASK_MSFF) ? true : false;
 }
 
 /*
@@ -53,13 +55,13 @@ void applyMSCW(CPU *cpu, WORD48 word)
 WORD48 buildRCW(CPU *cpu, BIT descriptorCall)
 {
         WORD48 t1 = INIT_RCW |
-                ((WORD48)cpu->r.C << SHFT_CREG) |
-                ((WORD48)cpu->r.F << SHFT_FREG) |
-                ((WORD48)cpu->r.K << SHFT_KREG) |
-                ((WORD48)cpu->r.G << SHFT_GREG) |
-                ((WORD48)cpu->r.L << SHFT_LREG) |
-                ((WORD48)cpu->r.V << SHFT_VREG) |
-                ((WORD48)cpu->r.H << SHFT_HREG);
+                ((WORD48)cpu->rC << SHFT_CREG) |
+                ((WORD48)cpu->rF << SHFT_FREG) |
+                ((WORD48)cpu->rKV/*TODO K*/ << SHFT_KREG) |
+                ((WORD48)cpu->rGH/*TODO G*/ << SHFT_GREG) |
+                ((WORD48)cpu->rL << SHFT_LREG) |
+                ((WORD48)cpu->rKV/*TODO V*/ << SHFT_VREG) |
+                ((WORD48)cpu->rGH/*TODO H*/ << SHFT_HREG);
         if (descriptorCall)
                 t1 |= MASK_RCWTYPE;
         return t1;
@@ -73,16 +75,16 @@ WORD48 buildRCW(CPU *cpu, BIT descriptorCall)
 BIT applyRCW(CPU *cpu, WORD48 word, BIT no_set_lc, BIT no_bits)
 {
 	if (!no_set_lc) {
-		cpu->r.C = (word & MASK_CREG) >> SHFT_CREG;
-		cpu->r.L = (word & MASK_LREG) >> SHFT_LREG;
-		cpu->r.PROF = false;    // require fetch at SECL
+		cpu->rC = (word & MASK_CREG) >> SHFT_CREG;
+		cpu->rL = (word & MASK_LREG) >> SHFT_LREG;
+		cpu->bPROF = false;    // require fetch at SECL
 	}
-	cpu->r.F = (word & MASK_FREG) >> SHFT_FREG;
+	cpu->rF = (word & MASK_FREG) >> SHFT_FREG;
 	if (!no_bits) {
-		cpu->r.K = (word & MASK_KREG) >> SHFT_KREG;
-		cpu->r.G = (word & MASK_GREG) >> SHFT_GREG;
-		cpu->r.V = (word & MASK_VREG) >> SHFT_VREG;
-		cpu->r.H = (word & MASK_HREG) >> SHFT_HREG;
+		cpu->rKV/*TODO K*/ = (word & MASK_KREG) >> SHFT_KREG;
+		cpu->rGH/*TODO G*/ = (word & MASK_GREG) >> SHFT_GREG;
+		cpu->rKV/*TODO V*/ = (word & MASK_VREG) >> SHFT_VREG;
+		cpu->rGH/*TODO H*/ = (word & MASK_HREG) >> SHFT_HREG;
 	}
 	return (word & MASK_PBIT) ? true : false;
 }
@@ -93,11 +95,11 @@ BIT applyRCW(CPU *cpu, WORD48 word, BIT no_set_lc, BIT no_bits)
  */
 void enterSubroutine(CPU *cpu, BIT descriptorCall)
 {
-        WORD48  aw = cpu->r.A;  // local copy of word in A reg
+        WORD48  aw = cpu->rA;  // local copy of word in A reg
         BIT     arg = (aw & MASK_ARGS) ? true : false;
         BIT     mode = (aw & MASK_MODE) ? true : false;
-        //printf("enterSubroutine: MSFF=%u\n", cpu->r.MSFF);
-        if (arg && !cpu->r.MSFF) {
+        //printf("enterSubroutine: MSFF=%u\n", cpu->bMSFF);
+        if (arg && !cpu->bMSFF) {
                 // just leave the Program Descriptor on TOS
         } else if (mode && !arg) {
                 // ditto
@@ -106,40 +108,40 @@ void enterSubroutine(CPU *cpu, BIT descriptorCall)
                 adjustBEmpty(cpu);
                 if (!arg) {
                         // Accidental entry -- mark the stack
-                        cpu->r.B = buildMSCW(cpu);
-                        cpu->r.BROF = true;
+                        cpu->rB = buildMSCW(cpu);
+                        cpu->bBROF = true;
                         adjustBEmpty(cpu);
-                        cpu->r.F = cpu->r.S;
+                        cpu->rF = cpu->rS;
                 }
 
                 // Push a RCW
-                cpu->r.B = buildRCW(cpu, descriptorCall);
-                cpu->r.BROF = true;
+                cpu->rB = buildRCW(cpu, descriptorCall);
+                cpu->bBROF = true;
                 adjustBEmpty(cpu);
 
                 // Fetch the first word of subroutine code
-                cpu->r.C = (aw & MASK_ADDR) >> SHFT_ADDR;
-                cpu->r.L = 0;
+                cpu->rC = (aw & MASK_ADDR) >> SHFT_ADDR;
+                cpu->rL = 0;
                 // require fetch at SECL
-                cpu->r.PROF = false;
+                cpu->bPROF = false;
 
                 // Fix up the rest of the registers
                 if (arg) {
-                        cpu->r.F = cpu->r.S;
+                        cpu->rF = cpu->rS;
                 } else {
-                        cpu->r.F = (aw & MASK_FREG) >> SHFT_FREG;
+                        cpu->rF = (aw & MASK_FREG) >> SHFT_FREG;
                         // aw.[18:15]
                 }
-                cpu->r.AROF = false;
-                cpu->r.BROF = false;
-                cpu->r.SALF = true;
-                cpu->r.MSFF = false;
+                cpu->bAROF = false;
+                cpu->bBROF = false;
+                cpu->bSALF = true;
+                cpu->bMSFF = false;
                 if (mode) {
-                        cpu->r.CWMF = 1;
-                        cpu->r.R = 0;
+                        cpu->bCWMF = 1;
+                        cpu->rR/*TODO SHIFT*/ = 0;
                         // TODO: make this into mask and shift
-                        cpu->r.X = fieldInsert(cpu->r.X, 18, 15, cpu->r.S);
-                        cpu->r.S = 0;
+                        cpu->rX = fieldInsert(cpu->rX, 18, 15, cpu->rS);
+                        cpu->rS = 0;
                 }
         }
 }
@@ -162,33 +164,33 @@ int exitSubroutine(CPU *cpu, int in_line)
 {
         int     result;
 
-        if (OPERAND(cpu->r.B)) {
+        if (OPERAND(cpu->rB)) {
                 // flag bit not set
                 result = 2;
-                if (cpu->r.NCSF) {
-                        cpu->r.I = (cpu->r.I & 0x0F) | 0x80; // set I08: flag-bit
+                if (cpu->bNCSF) {
+                        cpu->rI = (cpu->rI & 0x0F) | 0x80; // set I08: flag-bit
                         signalInterrupt(cpu->id, "XIT no FLAG");
                 }
         } else {
                 // flag bit is set
-                result = applyRCW(cpu, cpu->r.B, in_line, false);
-                cpu->r.X = cpu->r.B & MASK_MANTISSA;
+                result = applyRCW(cpu, cpu->rB, in_line, false);
+                cpu->rX = cpu->rB & MASK_MANTISSA;
                 // save F setting from RCW to restore S at end
-                cpu->r.S = cpu->r.F;
+                cpu->rS = cpu->rF;
                 loadBviaS(cpu); // B = [S], fetch the MSCW
-                applyMSCW(cpu, cpu->r.B);
+                applyMSCW(cpu, cpu->rB);
 
-                if (cpu->r.MSFF && cpu->r.SALF) {
-                        cpu->r.Q06F = true; // set Q06F, not used except for display
+                if (cpu->bMSFF && cpu->bSALF) {
+                        cpu->bQ06F = true; // set Q06F, not used except for display
                         do {
-                                cpu->r.S = (cpu->r.B & MASK_FREG) >> SHFT_FREG;
+                                cpu->rS = (cpu->rB & MASK_FREG) >> SHFT_FREG;
                                 loadBviaS(cpu); // B = [S], fetch prior MSCW
-                        } while (cpu->r.B & MASK_MSFF); // MSFF
-                        cpu->r.S = (cpu->r.R<<6) + 7;
+                        } while (cpu->rB & MASK_MSFF); // MSFF
+                        cpu->rS = (cpu->rR/*TODO SHIFT*/<<6) + 7;
                         storeBviaS(cpu); // [S] = B, store last MSCW at [R]+7
                 }
-                cpu->r.S = ((cpu->r.X & MASK_FREG) >> SHFT_FREG) - 1;
-                cpu->r.BROF = false;
+                cpu->rS = ((cpu->rX & MASK_FREG) >> SHFT_FREG) - 1;
+                cpu->bBROF = false;
         }
         //printf("exitSubroutine: %d\n", result);
         return result;
