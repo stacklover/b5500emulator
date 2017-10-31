@@ -2,6 +2,8 @@
 
    Copyright (c) 2016, Richard Cornwell
 
+   Copyright (c) 2017, Reinhard Meyer (for the adaption to my B5500 project)
+
    Permission is hereby granted, free of charge, to any person obtaining a
    copy of this software and associated documentation files (the "Software"),
    to deal in the Software without restriction, including without limitation
@@ -90,23 +92,24 @@
   | |g| |s  |            |               |               |
   +-+-+-+---+------------+---------------+---------------+
 
+  Major Changes by Reinhard Meyer:
+
+  1. Removed SIMH specific stuff
+  2. Changed Register access from global variables to Pointer
+     to structure with registers
+  3. sim_exec() runs for only one instruction plus eventually
+     injected instructions
+  4. The Q register is unused
+  5. Interrupts are set in the I register and IAR is recalculated
+     in the same moment (functions cause***Irq())
+  6. The processor E register is set
+
+
 */
-
+
 #include "b5500_defs.h"
-#ifndef NOSIMH
-  #include "sim_timer.h"
-#endif
 #include <math.h>
 #include <time.h>
-
-#define UNIT_V_MSIZE    (UNIT_V_UF + 0)
-#define UNIT_MSIZE      (7 << UNIT_V_MSIZE)
-#define MEMAMOUNT(x)    (x << UNIT_V_MSIZE)
-
-#define TMR_RTC         0
-
-#define HIST_MAX        5000
-#define HIST_MIN        64
 
 t_uint64 bit_mask[64] = {
         00000000000000001LL,
@@ -191,178 +194,7 @@ uint8 rank[64] = {
         51, 52, 14, 15, 44, 16, 17, 18,  /* 70 */
 };
 
-
-#ifdef NOSIMH
-extern CPU *cpu; // TODO: shall become a parameter to sim_instr()
-#define M MAIN
-#else
-int                 cpu_index;                  /* Current running cpu */
-t_uint64            M[MAXMEMSIZE] = { 0 };      /* memory */
-t_uint64            a_reg[2];                   /* A register */
-t_uint64            b_reg[2];                   /* B register */
-t_uint64            x_reg[2];                   /* extension to B */
-t_uint64            y_reg[2];                   /* extension to A not original */
-uint8               arof_reg[2];                /* True if A full */
-uint8               brof_reg[2];                /* True if B full */
-uint8               gh_reg[2];                  /* G & H source char selectors */
-uint8               kv_reg[2];                  /* K & V dest char selectors */
-uint16              ma_reg[2];                  /* M memory address regiser */
-uint16              s_reg[2];                   /* S Stack pointer */
-uint16              f_reg[2];                   /* F MCSV pointer */
-uint16              r_reg[2];                   /* R PRT pointer */
-t_uint64            p_reg[2];                   /* P insruction buffer */
-uint8               prof_reg[2];                /* True if P valid */
-uint16              t_reg[2];                   /* T current instruction */
-uint8               trof_reg[2];                /* True if T valid */
-uint16              c_reg[2];                   /* C program counter */
-uint16              l_reg[2];                   /* L current syllable pointer */
-uint8               ncsf_reg[2];                /* True if normal state */
-uint8               salf_reg[2];                /* True if subrogram mode */
-uint8               cwmf_reg[2];                /* True if character mode */
-uint8               hltf[2];                    /* True if processor halted */
-uint8               msff_reg[2];                /* Mark stack flag Word mode */
-#define TFFF MSFF                               /* True state in Char mode */
-uint8               varf_reg[2];                /* Variant Flag */
-uint8               q_reg[2];                   /* Holds error code */
-uint16              IAR;                        /* Interrupt register */
-uint32              iostatus;                   /* Hold status of devices */
-uint8               RTC;                        /* Real time clock counter */
-uint8               loading;                    /* Set when loading */
-uint8               HALT;                       /* Set when halt requested */
-uint8               P1_run;                     /* Run flag for P1 */
-uint8               P2_run;                     /* Run flag for P2 */
-uint16              idle_addr = 0;              /* Address of idle loop */
-#endif
-
-
-struct InstHistory
-{
-        uint16          c;
-        uint16          op;
-        uint16          s;
-        uint16          f;
-        uint16          r;
-        uint16          ma;
-        t_uint64        a_reg;
-        t_uint64        b_reg;
-        t_uint64        x_reg;
-        uint8           flags;
-        uint8           gh;
-        uint8           kv;
-        uint16          l;
-        uint8           q;
-        uint8           cpu;
-        uint16          iar;
-};
-
-#ifndef NOSIMH
-struct InstHistory *hst = NULL;
-int32               hst_p = 0;
-int32               hst_lnt = 0;
-#endif /* NOSIMH */
-
-#define F_AROF          00001
-#define F_BROF          00002
-#define F_CWMF          00004
-#define F_NCSF          00010
-#define F_SALF          00020
-#define F_MSFF          00040
-#define F_VARF          00100
-#define HIST_PC         0100000
-
-#ifndef NOSIMH
-t_stat              cpu_ex(t_value * vptr, t_addr addr, UNIT * uptr,
-                           int32 sw);
-t_stat              cpu_dep(t_value val, t_addr addr, UNIT * uptr,
-                            int32 sw);
-t_stat              cpu_reset(DEVICE * dptr);
-t_stat              cpu_set_size(UNIT * uptr, int32 val, CONST char *cptr,
-                                 void *desc);
-t_stat              cpu_show_size(FILE * st, UNIT * uptr, int32 val,
-                                  CONST void *desc);
-t_stat              cpu_show_hist(FILE * st, UNIT * uptr, int32 val,
-                                  CONST void *desc);
-t_stat              cpu_set_hist(UNIT * uptr, int32 val, CONST char *cptr,
-                                 void *desc);
-t_stat              cpu_help(FILE *, DEVICE *, UNIT *, int32, const char *);
-/* Interval timer */
-t_stat              rtc_srv(UNIT * uptr);
-
-int32               rtc_tps = 60 ;
-
-
-/* CPU data structures
-
-   cpu_dev      CPU device descriptor
-   cpu_unit     CPU unit descriptor
-   cpu_reg      CPU register list
-   cpu_mod      CPU modifiers list
-*/
-
-UNIT                cpu_unit[] =
-    {{ UDATA(rtc_srv, MEMAMOUNT(7)|UNIT_IDLE, MAXMEMSIZE ), 16667 },
-    { UDATA(0, UNIT_DISABLE|UNIT_DIS, 0 ), 0 }};
-
-REG                 cpu_reg[] = {
-    {BRDATAD(C, c_reg, 8,15,2,   "Instruction pointer"), REG_FIT},
-    {BRDATAD(L, l_reg, 8,2,2,    "Sylable pointer")},
-    {BRDATA(A, a_reg, 8,48,2), REG_FIT},
-    {BRDATA(B, b_reg, 8,48,2), REG_FIT},
-    {BRDATA(X, x_reg, 8,39,2), REG_FIT},
-    {BRDATA(GH, gh_reg, 8,6,2)},
-    {BRDATA(KV, kv_reg, 8,6,2)},
-    {BRDATAD(MA, ma_reg, 8,15,2, "Memory address")},
-    {BRDATAD(S, s_reg, 8,15,2,   "Stack pointer")},
-    {BRDATAD(F, f_reg, 8,15,2,   "Frame pointer")},
-    {BRDATAD(R, r_reg, 8,15,2,   "PRT pointer/Tally")},
-    {BRDATAD(P, p_reg, 8,48,2,   "Last code word cache")},
-    {BRDATAD(T, t_reg, 8,12,2,   "Current instruction")},
-    {BRDATAD(Q, q_reg, 8,9,2,    "Error condition")},
-    {BRDATA(AROF, arof_reg, 2,1,2)},
-    {BRDATA(BROF, brof_reg, 2,1,2)},
-    {BRDATA(PROF, prof_reg, 2,1,2)},
-    {BRDATA(TROF, trof_reg, 2,1,2)},
-    {BRDATA(NCSF, ncsf_reg, 2,1,2)},
-    {BRDATA(SALF, salf_reg, 2,1,2)},
-    {BRDATA(CWMF, cwmf_reg, 2,1,2)},
-    {BRDATA(MSFF, msff_reg, 2,1,2)},
-    {BRDATA(VARF, varf_reg, 2,1,2)},
-    {BRDATA(HLTF, hltf, 2,1,2)},
-    {ORDATAD(IAR, IAR, 15,      "Interrupt pending")},
-    {ORDATAD(TUS, iostatus, 32, "Perpherial ready status")},
-    {FLDATA(HALT, HALT, 0)},
-    {NULL}
-};
-
-MTAB                cpu_mod[] = {
-    {UNIT_MSIZE|MTAB_VDV, MEMAMOUNT(0), NULL, "4K", &cpu_set_size},
-    {UNIT_MSIZE|MTAB_VDV, MEMAMOUNT(1), NULL, "8K", &cpu_set_size},
-    {UNIT_MSIZE|MTAB_VDV, MEMAMOUNT(2), NULL, "12K", &cpu_set_size},
-    {UNIT_MSIZE|MTAB_VDV, MEMAMOUNT(3), NULL, "16K", &cpu_set_size},
-    {UNIT_MSIZE|MTAB_VDV, MEMAMOUNT(4), NULL, "20K", &cpu_set_size},
-    {UNIT_MSIZE|MTAB_VDV, MEMAMOUNT(5), NULL, "24K", &cpu_set_size},
-    {UNIT_MSIZE|MTAB_VDV, MEMAMOUNT(6), NULL, "28K", &cpu_set_size},
-    {UNIT_MSIZE|MTAB_VDV, MEMAMOUNT(7), NULL, "32K", &cpu_set_size},
-    {MTAB_VDV, 0, "MEMORY", NULL, NULL, &cpu_show_size},
-    {MTAB_XTD|MTAB_VDV, 0, "IDLE", "IDLE", &sim_set_idle, &sim_show_idle },
-    {MTAB_XTD|MTAB_VDV, 0, NULL, "NOIDLE", &sim_clr_idle, NULL },
-    {MTAB_XTD | MTAB_VDV | MTAB_NMO | MTAB_SHP, 0, "HISTORY", "HISTORY",
-     &cpu_set_hist, &cpu_show_hist},
-    {0}
-};
-
-DEVICE              cpu_dev = {
-    "CPU", cpu_unit, cpu_reg, cpu_mod,
-    2, 8, 15, 1, 8, 48,
-    &cpu_ex, &cpu_dep, &cpu_reset, NULL, NULL, NULL,
-    NULL, DEV_DEBUG, 0, dev_debug,
-    NULL, NULL, &cpu_help
-};
-#endif /* NOSIMH */
-
-
 /* Define registers */
-#ifdef NOSIMH
 #undef MSFF
 #undef TFFF
 #define A       cpu->rA
@@ -375,7 +207,7 @@ DEVICE              cpu_dev = {
 //#define Q       cpu->rQ
 #define GH      cpu->rGH
 #define KV      cpu->rKV
-#define Ma      cpu->rM
+#define M      cpu->rM
 #define S       cpu->rS
 #define F       cpu->rF
 #define R       cpu->rR
@@ -392,33 +224,6 @@ DEVICE              cpu_dev = {
 #define TFFF    cpu->bTFFF
 #define VARF    cpu->bVARF
 #define HLTF    cpu->bHLTF
-#else
-#define A       a_reg[cpu_index]
-#define B       b_reg[cpu_index]
-#define C       c_reg[cpu_index]
-#define L       l_reg[cpu_index]
-#define X       x_reg[cpu_index]
-#define Y       y_reg[cpu_index]
-#define Q       q_reg[cpu_index]
-#define GH      gh_reg[cpu_index]
-#define KV      kv_reg[cpu_index]
-#define Ma      ma_reg[cpu_index]
-#define S       s_reg[cpu_index]
-#define F       f_reg[cpu_index]
-#define R       r_reg[cpu_index]
-#define P       p_reg[cpu_index]
-#define T       t_reg[cpu_index]
-#define AROF    arof_reg[cpu_index]
-#define BROF    brof_reg[cpu_index]
-#define PROF    prof_reg[cpu_index]
-#define TROF    trof_reg[cpu_index]
-#define NCSF    ncsf_reg[cpu_index]
-#define SALF    salf_reg[cpu_index]
-#define CWMF    cwmf_reg[cpu_index]
-#define MSFF    msff_reg[cpu_index]
-#define VARF    varf_reg[cpu_index]
-#define HLTF    hltf[cpu_index]
-#endif /* NOSIMH */
 
 /* Definitions to help extract fields */
 #define FF(x)    (uint16)(((x) & FFIELD) >> FFIELD_V)
@@ -427,7 +232,7 @@ DEVICE              cpu_dev = {
 #define RF(x)    (uint16)(((x) & RFIELD) >> RFIELD_V)
 
 #define toF(x)   ((((t_uint64)(x)) << FFIELD_V) & FFIELD)
-#define toC(x)    (((t_uint64)(x)) & CORE)
+#define toC(x)   (((t_uint64)(x)) & CORE)
 #define toL(x)   ((((t_uint64)(x)) << RL_V) & RL)
 #define toR(x)   ((((t_uint64)(x)) << RFIELD_V) & RFIELD)
 
@@ -439,98 +244,85 @@ DEVICE              cpu_dev = {
 
 /* Definitions to handle building of control words */
 #define MSCW     (FLAG | DFLAG | toR(R) | toF(F) | \
-                                ((MSFF)?SMSFF:0) | ((SALF)?SSALF:0))
+                 ((MSFF)?SMSFF:0) | ((SALF)?SSALF:0))
 #define ICW      (FLAG | DFLAG | toR(R) | ((VARF)?SVARF:0) | \
-                    ((MSFF)?SMSFF:0) | ((SALF)?SSALF:0)) | toC(Ma)
+                 ((MSFF)?SMSFF:0) | ((SALF)?SSALF:0)) | toC(M)
 #define Pointer(x)      ((t_uint64)((((x) & 070) >> 3) | ((x & 07) << 8)))
 #define RCW(x)   (FLAG | DFLAG | toF(F) | toC(C) | toL(L) | \
-                        (Pointer(GH) << RGH_V) | (Pointer(KV) << RKV_V)) | \
-                        ((x)?PRESENT:0)
+                 (Pointer(GH) << RGH_V) | (Pointer(KV) << RKV_V)) | \
+                 ((x)?PRESENT:0)
 #define LCW(f, x)        toF(f) | toC(C) | toL(L) | \
-                                (((t_uint64)(x) << REPFLD_V) & REPFLD)
+                         (((t_uint64)(x) << REPFLD_V) & REPFLD)
 #define VARIANT(x) ((x) >> 6)
 
 
-/* E
-        2       A = M[S]
-        3       B = M[S]
-        4       A = M[Ma]
-        5       B = M[Ma]
-        6       Ma = M[Ma]<18:32>
-        10      M[S] = A           1010
-        11      M[S] = B           1011
-        12      M[Ma] = A          1100
-        13      M[Ma] = B          1101
+/***********************************************************************
+* The is the only function that accesses the core memory.
+* E       Operation
+* -----------------
+* 2       A = [S], set AROF
+* 3       B = [S], set BROF
+* 4       A = [M], set AROF
+* 5       B = [M], set BROF
+* 6       M = [M]<18:32>
+* 10      [S] = A
+* 11      [S] = B
+* 12      [M] = A
+* 13      [M] = B
+* as bits:
+* 1       B/A
+* 2       S
+* 4       M
+* 8       Write/Read
+* 16      Fetch
+***********************************************************************/
+BIT memory_cycle(CPU *cpu, uint8 E) {
+        ADDR15 addr = 0;
 
-        1       B/A
-        2       S
-        4       Ma
-        8       Write/Read
-        16      Fetch
-*/
-
-int memory_cycle(uint8 E) {
-        uint16 addr = 0;
-
-#ifdef NOSIMH
-	cpu->rE = E;
-#else
-        sim_interval--;
-#endif
-        if (E & 2)
-           addr = S;
-        if (E & 4)
-           addr = Ma;
-        if (E & 020)
-           addr = C;
-#ifdef NOSIMH
+	cpu->rE = E;		/* for display */
+	/* which register holds the address ? */
+        if (E & 020)    addr = C;
+        else if (E & 4) addr = M;
+        else if (E & 2) addr = S;
+	/* sanity check - should never happen to be true */
         if (addr >= MAXMEM) {
-#else
-        if (addr > MEMSIZE) {
-#endif
-#ifdef NOSIMH
 	   causeMemoryIrq(cpu, IRQ_INVA, "addr >= MAXMEM");
-#else
-           Q |= INVALID_ADDR;
-#endif
-           return 1;
+           return true;
         }
+	/* in normal state, addresses below 01000 are not accessible */
         if (NCSF && addr < 01000) {
-#ifdef NOSIMH
 	   causeMemoryIrq(cpu, IRQ_INVA, "NCSF && addr < 01000");
-#else
-           Q |= INVALID_ADDR;
-#endif
-           return 1;
+           return true;
         }
+	/* now do the memory access */
         if (E & 020) {
-            P = M[addr];
-            PROF = 1;
-            return 0;
-        }
-        if (E & 010) {
+	    /* fetch from code */
+            P = MAIN[addr];
+            PROF = true;
+        } else if (E & 010) {
+	    /* write to memory */
             if (E & 1)
-                M[addr] = B;
+                MAIN[addr] = B;
             else
-                M[addr] = A;
+                MAIN[addr] = A;
         } else {
+	    /* read from memory */
             if (E == 6) {
-                B = M[addr];
-                Ma = FF(B);
+                B = MAIN[addr];
+                M = FF(B);
             } else if (E & 1) {
-                B = M[addr];
-                BROF = 1;
+                B = MAIN[addr];
+                BROF = true;
             } else {
-                A = M[addr];
-                AROF = 1;
+                A = MAIN[addr];
+                AROF = true;
             }
         }
-        return 0;
+        return false;
 }
 
-
 /* Set registers based on MSCW */
-void set_via_MSCW(t_uint64 word) {
+void set_via_MSCW(CPU *cpu, t_uint64 word) {
         F = FF(word);
         R = RF(word);
         MSFF = (word & SMSFF) != 0;
@@ -541,7 +333,7 @@ void set_via_MSCW(t_uint64 word) {
    if no_set_lc is non-zero don't set LC from RCW.
    if no_bits is non-zero don't set GH and KV,
    return BROF flag  */
-int  set_via_RCW(t_uint64 word, int no_set_lc, int no_bits) {
+int  set_via_RCW(CPU *cpu, t_uint64 word, int no_set_lc, int no_bits) {
         if (!no_set_lc) {
             L = LF(word);
             C = CF(word);
@@ -559,14 +351,14 @@ int  set_via_RCW(t_uint64 word, int no_set_lc, int no_bits) {
 }
 
 /* Set the stack pointer from INCW */
-void set_via_INCW(t_uint64 word) {
+void set_via_INCW(CPU *cpu, t_uint64 word) {
         S = CF(word);
         CWMF = (word & SCWMF) != 0;
 }
 
 /* Set registers from ICW */
-void set_via_ICW(t_uint64 word) {
-        Ma = CF(word);
+void set_via_ICW(CPU *cpu, t_uint64 word) {
+        M = CF(word);
         MSFF = (word & SMSFF) != 0;
         SALF = (word & SSALF) != 0;
         VARF = (word & SVARF) != 0;
@@ -574,7 +366,7 @@ void set_via_ICW(t_uint64 word) {
 }
 
 /* Make sure that B is empty */
-void B_empty() {
+void B_empty(CPU *cpu) {
     if (BROF) {
         next_addr(S);
         if (NCSF && (S & 077700) == R) {
@@ -585,15 +377,15 @@ void B_empty() {
 #endif
            return;
         }
-        memory_cycle(013);      /* Save B */
+        memory_cycle(cpu, 013);      /* Save B */
         BROF = 0;
     }
 }
 
 /* Make sure A is empty, push to B if not */
-void A_empty() {
+void A_empty(CPU *cpu) {
     if (AROF) {
-        B_empty();
+        B_empty(cpu);
         B = A;
         AROF = 0;
         BROF = 1;
@@ -601,8 +393,8 @@ void A_empty() {
 }
 
 /* Make sure both A and B are empty */
-void AB_empty() {
-    B_empty();
+void AB_empty(CPU *cpu) {
+    B_empty(cpu);
     if (AROF) {
         next_addr(S);
         if (NCSF && (S & 077700) == R) {
@@ -613,13 +405,13 @@ void AB_empty() {
 #endif
            return;
         }
-        memory_cycle(012);      /* Save A */
+        memory_cycle(cpu, 012);      /* Save A */
         AROF = 0;
     }
 }
 
 /* Make sure that A is valid, copy from B or memory */
-void A_valid() {
+void A_valid(CPU *cpu) {
     if (!AROF) {
         if (BROF) {             /* Transfer B to A */
             A = B;
@@ -634,15 +426,15 @@ void A_valid() {
 #endif
                return;
             }
-            memory_cycle(2);    /* Read A */
+            memory_cycle(cpu, 2);    /* Read A */
             prev_addr(S);
         }
     }
 }
 
 /* Make sure both A and B are valid */
-void AB_valid() {
-    A_valid();
+void AB_valid(CPU *cpu) {
+    A_valid(cpu);
     if (!BROF) {
         if (NCSF && (S & 077700) == R) {
 #ifdef NOSIMH
@@ -652,14 +444,14 @@ void AB_valid() {
 #endif
             return;
         }
-        memory_cycle(3);        /* Read B */
+        memory_cycle(cpu, 3);        /* Read B */
         prev_addr(S);
     }
 }
 
 /* Make sure A is empty and B is valid */
-void B_valid() {
-    A_empty();
+void B_valid(CPU *cpu) {
+    A_empty(cpu);
     if (!BROF) {
         if (NCSF && (S & 077700) == R) {
 #ifdef NOSIMH
@@ -669,13 +461,13 @@ void B_valid() {
 #endif
             return;
         }
-        memory_cycle(3);        /* Read B */
+        memory_cycle(cpu, 3);        /* Read B */
         prev_addr(S);
     }
 }
 
 /* Make sure B is valid, don't care about A */
-void B_valid_and_A() {
+void B_valid_and_A(CPU *cpu) {
     if (!BROF) {
         if (NCSF && (S & 077700) == R) {
 #ifdef NOSIMH
@@ -685,28 +477,28 @@ void B_valid_and_A() {
 #endif
             return;
         }
-        memory_cycle(3);        /* Read B */
+        memory_cycle(cpu, 3);        /* Read B */
         prev_addr(S);
     }
 }
 
 /* Saves the top word on the stack into MA */
-void save_tos() {
+void save_tos(CPU *cpu) {
     if (AROF) {
-        memory_cycle(014);      /* Store A in Ma */
+        memory_cycle(cpu, 014);      /* Store A in M */
         AROF = 0;
     } else if (BROF) {
-        memory_cycle(015);      /* Store B in Ma */
+        memory_cycle(cpu, 015);      /* Store B in M */
         BROF = 0;
     } else {                    /* Fetch B then Store */
-        A_valid();              /* Use A register since it is quicker */
-        memory_cycle(014);
+        A_valid(cpu);              /* Use A register since it is quicker */
+        memory_cycle(cpu, 014);
         AROF = 0;
     }
 }
 
 /* Enter a subroutine, flag true for descriptor, false for opdc */
-void enterSubr(int flag) {
+void enterSubr(CPU *cpu, int flag) {
     /* Program descriptor */
     if ((A & ARGF) != 0 && MSFF == 0) {
         return;
@@ -714,17 +506,17 @@ void enterSubr(int flag) {
     if ((A & MODEF) != 0 && (A & ARGF) == 0) {
         return;
     }
-    B_empty();
+    B_empty(cpu);
     /* Check if accidental entry */
     if ((A & ARGF) == 0) {
         B = MSCW;
         BROF = 1;
-        B_empty();
+        B_empty(cpu);
         F = S;
     }
     B = RCW(flag);
     BROF = 1;
-    B_empty();
+    B_empty(cpu);
     C = CF(A);
     L = 0;
     if ((A & ARGF) == 0) {
@@ -746,7 +538,7 @@ void enterSubr(int flag) {
 }
 
 /* Make B register into an integer, return 1 if failed */
-int mkint() {
+int mkint(CPU *cpu) {
         int     exp_b;
         int     last_digit;
         int     f = 0;
@@ -789,10 +581,10 @@ int mkint() {
 }
 
 /* Compute an index word return true if failed. */
-int indexWord() {
+int indexWord(CPU *cpu) {
     if (A & WCOUNT) {
-        B_valid_and_A();
-        if (mkint()) {
+        B_valid_and_A(cpu);
+        if (mkint(cpu)) {
              if (NCSF)
 #ifdef NOSIMH
 		 causeSyllableIrq(cpu, IRQ_INTO, "indexWord");
@@ -819,12 +611,12 @@ int indexWord() {
 #endif
             return 1;
         }
-        Ma = (A + (B & 01777)) & CORE;
+        M = (A + (B & 01777)) & CORE;
         A &= ~(WCOUNT|CORE);
-        A |= Ma;
+        A |= M;
         BROF = 0;
     } else {
-        Ma = CF(A);
+        M = CF(A);
     }
     return 0;
 }
@@ -833,26 +625,26 @@ int indexWord() {
 /* Character mode helper routines */
 
 /* Adjust source bit pointers to point to char */
-void adjust_source() {
+void adjust_source(CPU *cpu) {
     if (GH & 07) {
         GH &= 070;
         GH += 010;
         if (GH > 077) {
             AROF = 0;
             GH = 0;
-            next_addr(Ma);
+            next_addr(M);
         }
     }
 }
 
 /* Adjust destination bit pointers to point to char */
-void adjust_dest() {
+void adjust_dest(CPU *cpu) {
     if (KV & 07) {
         KV &= 070;
         KV += 010;
         if (KV > 075) {
         if (BROF)
-           memory_cycle(013);
+           memory_cycle(cpu, 013);
         BROF = 0;
         KV = 0;
         next_addr(S);
@@ -861,7 +653,7 @@ void adjust_dest() {
 }
 
 /* Advance to next destination bit/char */
-void next_dest(int bit) {
+void next_dest(CPU *cpu, int bit) {
     if (bit)
        KV += 1;
     else
@@ -872,7 +664,7 @@ void next_dest(int bit) {
     }
     if (KV > 075) {
        if (BROF)
-          memory_cycle(013);
+          memory_cycle(cpu, 013);
        BROF = 0;
        KV = 0;
        next_addr(S);
@@ -880,12 +672,12 @@ void next_dest(int bit) {
 }
 
 /* Advance to previous destination bit/char */
-void prev_dest(int bit) {
+void prev_dest(CPU *cpu, int bit) {
     if (bit) {
        if ((KV & 07) == 0) {
           if (KV == 0) {
              if (BROF)
-                memory_cycle(013);
+                memory_cycle(cpu, 013);
              BROF = 0;
          prev_addr(S);
          KV = 076;
@@ -898,7 +690,7 @@ void prev_dest(int bit) {
        KV &= 070;
        if (KV == 0) {
           if (BROF)
-             memory_cycle(013);
+             memory_cycle(cpu, 013);
           BROF = 0;
           prev_addr(S);
           KV = 070;
@@ -908,15 +700,15 @@ void prev_dest(int bit) {
 }
 
 /* Make sure destination have valid data */
-void fill_dest() {
+void fill_dest(CPU *cpu) {
     if (BROF == 0) {
-       memory_cycle(3);
+       memory_cycle(cpu, 3);
        BROF = 1;
     }
 }
 
 /* Advance source to next bit/char */
-void next_src(int bit) {
+void next_src(CPU *cpu, int bit) {
     if (bit)
        GH += 1;
     else
@@ -928,17 +720,17 @@ void next_src(int bit) {
     if (GH > 075) {
        AROF = 0;
        GH = 0;
-       next_addr(Ma);
+       next_addr(M);
     }
 }
 
 /* Advance source to previous bit/char */
-void prev_src(int bit) {
+void prev_src(CPU *cpu, int bit) {
     if (bit) {
        if ((GH & 07) == 0) {
           if (GH == 0) {
              AROF = 0;
-         prev_addr(Ma);
+         prev_addr(M);
          GH = 076;
           } else {
          GH = ((GH - 010) & 070) | 06;
@@ -949,7 +741,7 @@ void prev_src(int bit) {
        GH &= 070;
        if (GH == 0) {
           AROF = 0;
-          prev_addr(Ma);
+          prev_addr(M);
           GH = 070;
        } else
           GH -= 010;
@@ -957,9 +749,9 @@ void prev_src(int bit) {
 }
 
 /* Make sure source has valid data */
-void fill_src() {
+void fill_src(CPU *cpu) {
     if (AROF == 0) {
-       memory_cycle(4);
+       memory_cycle(cpu, 4);
        AROF = 1;
     }
 }
@@ -968,9 +760,9 @@ void fill_src() {
 /* Helper routines for managing processor */
 
 /* Fetch next program sylable */
-void next_prog() {
+void next_prog(CPU *cpu) {
     if (!PROF)
-        memory_cycle(020);
+        memory_cycle(cpu, 020);
     T = (P >> ((3 - L) * 12)) & 07777;
     if ( L++ == 3) {
        C++;
@@ -981,29 +773,29 @@ void next_prog() {
 }
 
 /* Initiate a processor, A must contain the ICW */
-void initiate() {
+void initiate(CPU *cpu) {
     int brflg, arflg, temp;
 
-    set_via_INCW(A);    /* Set up Stack */
+    set_via_INCW(cpu, A);    /* Set up Stack */
     AROF = 0;
-    memory_cycle(3);    /* Fetch IRCW from stack */
+    memory_cycle(cpu, 3);    /* Fetch IRCW from stack */
     prev_addr(S);
-    brflg = set_via_RCW(B, 0, 0);
-    memory_cycle(3);    /* Fetch ICW from stack */
+    brflg = set_via_RCW(cpu, B, 0, 0);
+    memory_cycle(cpu, 3);    /* Fetch ICW from stack */
     prev_addr(S);
-    set_via_ICW(B);
+    set_via_ICW(cpu, B);
     BROF = 0;           /* Note memory_cycle set this */
     if (CWMF) {
-        memory_cycle(3);        /* Fetch LCW from stack */
+        memory_cycle(cpu, 3);        /* Fetch LCW from stack */
         prev_addr(S);
         arflg = (B & PRESENT) != 0;
         X = B & MANT;
         if (brflg) {
-            memory_cycle(3);    /* Load B via S */
+            memory_cycle(cpu, 3);    /* Load B via S */
             prev_addr(S);
         }
         if (arflg)  {
-            memory_cycle(2);    /* Load A via S */
+            memory_cycle(cpu, 2);    /* Load A via S */
             prev_addr(S);
         }
         AROF = arflg;
@@ -1018,7 +810,7 @@ void initiate() {
 }
 
 /* Save processor state in case of error or halt */
-void storeInterrupt(int forced, int test) {
+void storeInterrupt(CPU *cpu, int forced, int test) {
     int         f;
     t_uint64    temp;
 
@@ -1032,38 +824,38 @@ void storeInterrupt(int forced, int test) {
         X = replF(X, temp);
         if (AROF || test) {     /* Push A First */
              next_addr(S);
-             memory_cycle(10);
+             memory_cycle(cpu, 10);
         }
         if (BROF || test) {     /* Push B second */
              next_addr(S);
-             memory_cycle(11);
+             memory_cycle(cpu, 11);
         }
         /* Make ILCW */
         B = X | ((i)? PRESENT : 0) | FLAG | DFLAG;
         next_addr(S);     /* Save B */
-        memory_cycle(11);
+        memory_cycle(cpu, 11);
     } else {
         if (BROF || test) {     /* Push B First */
              next_addr(S);
-             memory_cycle(11);
+             memory_cycle(cpu, 11);
         }
         if (AROF || test) {     /* Push A Second */
              next_addr(S);
-             memory_cycle(10);
+             memory_cycle(cpu, 10);
         }
     }
     AROF = 0;
     B = ICW;            /* Set ICW into B */
     next_addr(S); /* Save B */
-    memory_cycle(11);
+    memory_cycle(cpu, 11);
     B = RCW(f);         /* Save IRCW */
     next_addr(S); /* Save B */
-    memory_cycle(11);
+    memory_cycle(cpu, 11);
     if (CWMF) {
         /* Get the correct value of R */
-        Ma = F;
-        memory_cycle(6);        /* Load B via Ma, Indirect */
-        memory_cycle(5);        /* Load B via Ma */
+        M = F;
+        memory_cycle(cpu, 6);        /* Load B via M, Indirect */
+        memory_cycle(cpu, 5);        /* Load B via M */
         R = RF(B);
         B = FLAG|DFLAG|SCWMF|toC(S);
     } else {
@@ -1072,8 +864,8 @@ void storeInterrupt(int forced, int test) {
 #ifndef NOSIMH
     B |= ((t_uint64)Q) << 35;	// TODO: why are the IRQ flags stored here?
 #endif
-    Ma = R | 010;
-    memory_cycle(015);  /* Store B in Ma */
+    M = R | 010;
+    memory_cycle(cpu, 015);  /* Store B in M */
     R = 0;
     BROF = 0;
     MSFF = 0;
@@ -1083,8 +875,8 @@ void storeInterrupt(int forced, int test) {
         CWMF = 0;
     PROF = 0;
     if (test) {
-        Ma = 0;
-        memory_cycle(5);        /* Load location 0 to B. */
+        M = 0;
+        memory_cycle(cpu, 5);        /* Load location 0 to B. */
         BROF = 0;
         C = CF(B);
         L = 0;
@@ -1170,7 +962,7 @@ int check_idle() {
         return 2 if B > A
         return 4 if B < A
 */
-uint8   compare() {
+uint8   compare(CPU *cpu) {
     int         sign_a, sign_b;
     int         exp_a, exp_b;
     t_uint64    ma, mb;
@@ -1238,12 +1030,12 @@ uint8   compare() {
 
 /* Handle addition instruction.
    A & B valid. */
-void add(int opcode) {
+void add(CPU *cpu, int opcode) {
     int exp_a, exp_b;
     int sa, sb;
     int rnd;
 
-    AB_valid();
+    AB_valid(cpu);
     if (opcode == WMOP_SUB)     /* Subtract */
         A ^= MSIGN;
     AROF = 0;
@@ -1403,12 +1195,12 @@ void mult_step(t_uint64 a, t_uint64 *b, t_uint64 *x) {
 }
 
 /* Do multiply instruction */
-void multiply() {
+void multiply(CPU *cpu) {
     int         exp_a, exp_b;
     int         f;
     int         int_f;
 
-    AB_valid();
+    AB_valid(cpu);
     AROF = 0;
     /* Check if Either argument already zero */
     if ((A & MANT) == 0 || (B & MANT) == 0) {
@@ -1498,11 +1290,11 @@ void multiply() {
 
 
 /* Do divide instruction */
-void divide(int op) {
+void divide(CPU *cpu, int op) {
     int exp_a, exp_b, q, sa, sb;
     t_uint64 t;
 
-    AB_valid();
+    AB_valid(cpu);
     AROF = 0;
     t = B;
 
@@ -1659,17 +1451,17 @@ void divide(int op) {
 /* Double precision addition.
    A & tY (not in real B5500) have operand 1.
    B & X have operand 2 */
-void double_add(int opcode) {
+void double_add(CPU *cpu, int opcode) {
     int         exp_a, exp_b;
     int         sa, sb;
     int         ld;
     t_uint64    temp, tY;
 
-    AB_valid();
+    AB_valid(cpu);
     X = A;              /* Save registers. X = H, tY=L*/
     tY = B;
     AROF = BROF = 0;
-    AB_valid(); /* Grab other operand */
+    AB_valid(cpu); /* Grab other operand */
     temp = A;   /* Oprands A,tY and B,X */
     A = X;
     X = B;
@@ -1817,17 +1609,17 @@ void double_add(int opcode) {
 /* Double precision multiply.
    A & tY (not in real B5500) have operand 1.
    B & X have operand 2 */
-void double_mult() {
+void double_mult(CPU *cpu) {
     int         exp_a, exp_b;
     int         f;
     int         ld;
     t_uint64    m7, m6, tY;
 
-    AB_valid();
+    AB_valid(cpu);
     X = A;              /* Save registers. X = H, tY=L*/
     tY = B;
     AROF = BROF = 0;
-    AB_valid(); /* Grab other operand */
+    AB_valid(cpu); /* Grab other operand */
     m7 = A;     /* Oprands A,tY and B,X */
     A = X;
     X = B;
@@ -1942,18 +1734,18 @@ void double_mult() {
 /* Double precision divide.
    A & tY (not in real B5500) have operand 1.
    B & X have operand 2 */
-void double_divide() {
+void double_divide(CPU *cpu) {
     int exp_a, exp_b;
     int f;
     int         n;
     int         q;
     t_uint64    Q1, q1, tY;
 
-    AB_valid();
+    AB_valid(cpu);
     X = A;              /* Save registers. X = H, tY=L*/
     tY = B;
     AROF = BROF = 0;
-    AB_valid(); /* Grab other operand */
+    AB_valid(cpu); /* Grab other operand */
     Q1 = A;     /* Oprands A,tY and B,X */
     A = X;
     X = B;
@@ -2091,11 +1883,11 @@ void double_divide() {
         tY = MANT ^ X;   /* Load q2 into A */
         B = Q1;
         X = q1;
-        double_mult();
+        double_mult(cpu);
     }
 }
 
-void relativeAddr(int store) {
+void relativeAddr(CPU *cpu, int store) {
     uint16    base = R;
     uint16    addr = (uint16)(A & 01777);
 
@@ -2112,8 +1904,8 @@ void relativeAddr(int store) {
        case 5:
           addr &= 0377;
           if (MSFF) {
-               Ma = R+7;
-               memory_cycle(4);
+               M = R+7;
+               memory_cycle(cpu, 4);
                base = FF(A);
           } else
                base = F;
@@ -2127,19 +1919,19 @@ void relativeAddr(int store) {
        case 7:
           addr = -(addr & 0177);
           if (MSFF) {
-               Ma = R+7;
-               memory_cycle(4);
+               M = R+7;
+               memory_cycle(cpu, 4);
                base = FF(A);
           } else
                base = F;
           break;
        }
     }
-    Ma = (base + addr) & CORE;
+    M = (base + addr) & CORE;
 }
 
 t_stat
-sim_instr(void)
+sim_instr(CPU *cpu)
 {
     t_stat              reason;
     t_uint64            temp = 0LL;
@@ -2164,11 +1956,11 @@ sim_instr(void)
         if (cpu->isP1) {
             if (TROF == 0 && NCSF && (CC->IAR != 0 || HLTF))
                 /* Force a SFI */
-                storeInterrupt(1,0);
+                storeInterrupt(cpu, 1,0);
         } else {
             if (TROF == 0 && NCSF && CC->IAR != 0)
                 /* Force a SFI */
-                storeInterrupt(1,0);
+                storeInterrupt(cpu, 1,0);
         }
 #else
     while (reason == 0) {       /* loop until halted */
@@ -2213,7 +2005,7 @@ sim_instr(void)
             /* Check if interrupt pending. */
             if (TROF == 0 && NCSF && ((Q != 0) || HLTF))
                 /* Force a SFI */
-                storeInterrupt(1,0);
+                storeInterrupt(cpu, 1,0);
         } else {
             cpu_index = 0;
 
@@ -2221,12 +2013,12 @@ sim_instr(void)
             if (TROF == 0 && NCSF && ((Q != 0) ||
                                  (IAR != 0)))
                 /* Force a SFI */
-                storeInterrupt(1,0);
+                storeInterrupt(cpu, 1,0);
         }
 #endif /* NOSIMH */
 
         if (TROF == 0)
-            next_prog();
+            next_prog(cpu);
 
 crf_loop:
         opcode = T & 077;
@@ -2234,7 +2026,7 @@ crf_loop:
         TROF = 0;
 
 #ifdef NOSIMH
-	sim_traceinstr();	
+	sim_traceinstr(cpu);	
 #else
         if (hst_lnt) {  /* history enabled? */
             /* Ignore idle loop when recording history */
@@ -2253,7 +2045,7 @@ crf_loop:
             hst[hst_p].s = S;
             hst[hst_p].f = F;
             hst[hst_p].r = R;
-            hst[hst_p].ma = Ma;
+            hst[hst_p].ma = M;
             hst[hst_p].a_reg = A;
             hst[hst_p].b_reg = B;
             hst[hst_p].x_reg = X;
@@ -2287,11 +2079,11 @@ crf_loop:
             switch(opcode) {
             case CMOP_EXC:              /* EXIT char mode */
                 if (BROF) {
-                    memory_cycle(013);
+                    memory_cycle(cpu, 013);
                 }
                 S = F;
                 AROF = 0;
-                memory_cycle(3);        /* Load B from S */
+                memory_cycle(cpu, 3);        /* Load B from S */
                 if ((B & FLAG) == 0) {
                     if (NCSF)
 #ifdef NOSIMH
@@ -2301,20 +2093,20 @@ crf_loop:
 #endif
                     break;
                 }
-                f = set_via_RCW(B, (field & 1), 0);
+                f = set_via_RCW(cpu, B, (field & 1), 0);
                 S = F;
-                memory_cycle(3);        /* Load MSW from S to B */
-                set_via_MSCW(B);
+                memory_cycle(cpu, 3);        /* Load MSW from S to B */
+                set_via_MSCW(cpu, B);
                 prev_addr(S);
                 CWMF = 0;
                 if (MSFF && SALF) {
-                     Ma = F;
+                     M = F;
                      do {
-                        /* B = M[FIELD], Ma = B[FIELD]; */
-                        memory_cycle(6);        /* Grab previous MCSW */
+                        /* B = M[FIELD], M = B[FIELD]; */
+                        memory_cycle(cpu, 6);        /* Grab previous MCSW */
                      } while(B & SMSFF);
-                     Ma = R | 7;
-                     memory_cycle(015); /* Store B in Ma */
+                     M = R | 7;
+                     memory_cycle(cpu, 015); /* Store B in M */
                 }
                 BROF = 0;
                 X = 0;
@@ -2324,56 +2116,56 @@ crf_loop:
 
             case CMOP_BSD:      /* Skip Bit Destiniation */
                 if (BROF) {
-                    memory_cycle(013);
+                    memory_cycle(cpu, 013);
                 }
                 while(field > 0) {
                     field--;
-                    next_dest(1);
+                    next_dest(cpu, 1);
                 }
                 break;
 
             case CMOP_SRS:      /* Skip Reverse Source */
-                adjust_source();
+                adjust_source(cpu);
                 while(field > 0) {
                     field--;
-                    prev_src(0);
+                    prev_src(cpu, 0);
                 }
                 break;
 
             case CMOP_SFS:      /* Skip Forward Source */
-                adjust_source();
+                adjust_source(cpu);
                 while(field > 0) {
                     field--;
-                    next_src(0);
+                    next_src(cpu, 0);
                 }
                 break;
 
             case CMOP_BSS:      /* SKip Bit Source */
                 while(field > 0) {
                     field--;
-                    next_src(1);
+                    next_src(cpu, 1);
                 }
                 break;
 
             case CMOP_SFD:      /* Skip Forward Destination */
-                adjust_dest();
+                adjust_dest(cpu);
                 while(field > 0) {
                     field--;
-                    next_dest(0);
+                    next_dest(cpu, 0);
                 }
                 break;
 
             case CMOP_SRD:      /* Skip Reverse Destination */
-                adjust_dest();
+                adjust_dest(cpu);
                 while(field > 0) {
                     field--;
-                    prev_dest(0);
+                    prev_dest(cpu, 0);
                 }
                 break;
 
             case CMOP_RSA:      /* Recall Source Address */
-                Ma = (F - field) & CORE;
-                memory_cycle(4);
+                M = (F - field) & CORE;
+                memory_cycle(cpu, 4);
                 AROF = 0;
                 if (A & FLAG) {
                     if ((A & PRESENT) == 0) {
@@ -2389,14 +2181,14 @@ crf_loop:
                 } else {
                     GH = (A >> 12) & 070;
                 }
-                Ma = CF(A);
+                M = CF(A);
                 break;
 
             case CMOP_RDA:      /* Recall Destination Address */
                 if (BROF)
-                    memory_cycle(013);
+                    memory_cycle(cpu, 013);
                 S = (F - field) & CORE;
-                memory_cycle(3);
+                memory_cycle(cpu, 3);
                 BROF = 0;
                 if (B & FLAG) {
                     if ((B & PRESENT) == 0) {
@@ -2420,7 +2212,7 @@ crf_loop:
                 A = B;  /* Save B temporarly */
                 atemp = S;      /* Save S */
                 S = (F - field) & CORE;
-                memory_cycle(3);        /* Load word in B */
+                memory_cycle(cpu, 3);        /* Load word in B */
                 S = atemp;      /* Restore S */
                 if (B & FLAG) {
                     if ((B & PRESENT) == 0) {
@@ -2450,50 +2242,50 @@ crf_loop:
 
             case CMOP_SED:      /* Set Destination Address */
                 if (BROF)
-                    memory_cycle(013);
+                    memory_cycle(cpu, 013);
                 S = (F - field) & CORE;
                 KV = 0;
                 BROF = 0;
                 break;
 
             case CMOP_SES:      /* Set Source Address */
-                Ma = (F - field) & CORE;
+                M = (F - field) & CORE;
                 GH = 0;
                 AROF = 0;
                 break;
 
             case CMOP_TSA:      /* Transfer Source Address */
                 if (BROF)
-                    memory_cycle(013);
+                    memory_cycle(cpu, 013);
                 BROF = 0;
-                adjust_source();
+                adjust_source(cpu);
                 field = 3;
                 while(field > 0) {
-                    fill_src();
+                    fill_src(cpu);
                     i = (A >> bit_number[GH | 07]) & 077;
                     B <<= 6;
                     B |= i;
-                    next_src(0);
+                    next_src(cpu, 0);
                     field--;
                 }
                 B &= FLAG|FWORD;
                 GH = (uint8)((B >> 12) & 070);
-                Ma = CF(B);
+                M = CF(B);
                 break;
 
             case CMOP_TDA:      /* Transfer Destination Address */
                 if (BROF)
-                    memory_cycle(013);
+                    memory_cycle(cpu, 013);
                 BROF = 0;
-                adjust_dest();
+                adjust_dest(cpu);
                 field = 3;
                 temp = 0;
                 while(field > 0) {
-                    fill_dest();
+                    fill_dest(cpu);
                     i = (B >> bit_number[KV | 07]) & 077;
                     temp <<= 6;
                     temp |= i;
-                    next_dest(0);
+                    next_dest(cpu, 0);
                     field--;
                 }
                 BROF = 0;
@@ -2508,7 +2300,7 @@ crf_loop:
                 F = S;
                 S = FF(B);
                 S = (S - field) & CORE;
-                memory_cycle(013);      /* Store B in S */
+                memory_cycle(cpu, 013);      /* Store B in S */
                 S = F;
                 F = FF(B);
                 B = A;
@@ -2517,12 +2309,12 @@ crf_loop:
                 break;
 
             case CMOP_SDA:      /* Store Destination Address */
-                adjust_dest();
+                adjust_dest(cpu);
                 A = B;
                 AROF = BROF;
                 B = ((t_uint64)(KV & 070) << (FFIELD_V - 3)) | toC(S);
                 S = (F - field) & CORE;
-                memory_cycle(013);      /* Store B in S */
+                memory_cycle(cpu, 013);      /* Store B in S */
                 S = CF(B);
                 B = A;
                 BROF = AROF;
@@ -2530,13 +2322,13 @@ crf_loop:
                 break;
 
             case CMOP_SSA:      /* Store Source Address */
-                adjust_source();
+                adjust_source(cpu);
                 A = B;
                 AROF = BROF;
-                B = ((t_uint64)(GH & 070) << (FFIELD_V - 3)) | toC(Ma);
-                Ma = (F - field) & CORE;
-                memory_cycle(015);      /* Store B in Ma */
-                Ma = CF(B);
+                B = ((t_uint64)(GH & 070) << (FFIELD_V - 3)) | toC(M);
+                M = (F - field) & CORE;
+                memory_cycle(cpu, 015);      /* Store B in M */
+                M = CF(B);
                 B = A;
                 BROF = AROF;
                 AROF = 0;
@@ -2544,11 +2336,11 @@ crf_loop:
 
             case CMOP_TRW:      /* Transfer Words */
                 if (BROF) {
-                    memory_cycle(013);
+                    memory_cycle(cpu, 013);
                     BROF = 0;
                 }
                 if (GH != 0) {
-                    next_addr(Ma);
+                    next_addr(M);
                     GH = 0;
                     AROF = 0;
                 }
@@ -2558,9 +2350,9 @@ crf_loop:
                 }
                 while(field > 0) {
                     field--;
-                    memory_cycle(4);
-                    memory_cycle(012);
-                    next_addr(Ma);
+                    memory_cycle(cpu, 4);
+                    memory_cycle(cpu, 012);
+                    next_addr(M);
                     next_addr(S);
                 }
                 BROF = 0;
@@ -2574,8 +2366,8 @@ crf_loop:
             case CMOP_TEL:      /* Test For Equal or Less 34 */
             case CMOP_TLS:      /* Test For Less 35 */
             case CMOP_TAN:      /* Test for Alphanumeric 36 */
-                adjust_source();
-                fill_src();
+                adjust_source(cpu);
+                fill_src(cpu);
                 i = rank[(A >> bit_number[GH | 07]) & 077];
                 j = rank[field];
                 if (i == j)
@@ -2611,18 +2403,18 @@ crf_loop:
             case CMOP_BIR:      /* Reet Bit */
                 while(field > 0) {
                      field--;
-                     fill_dest();
+                     fill_dest(cpu);
                      temp = bit_mask[bit_number[KV]];
                      if (opcode & 1)
                         B &= ~temp;
                      else
                         B |= temp;
-                     next_dest(1);
+                     next_dest(cpu, 1);
                 }
                 break;
 
             case CMOP_BIT:      /* Test Bit */
-                fill_src();
+                fill_src(cpu);
                 i = (A >> bit_number[GH]) & 01;
                 TFFF = (i == (field & 1));
                 break;
@@ -2633,7 +2425,7 @@ crf_loop:
 
             case CMOP_STC:      /* Store Tally */
                 if (BROF)
-                    memory_cycle(11);
+                    memory_cycle(cpu, 11);
                 AROF = 0;
                 BROF = 0;
                 A = toC(F);
@@ -2641,7 +2433,7 @@ crf_loop:
                 F = S;
                 S = CF(A);
                 S = (S - field) & CORE;
-                memory_cycle(11);
+                memory_cycle(cpu, 11);
                 S = F;
                 F = CF(A);
                 break;
@@ -2661,7 +2453,7 @@ crf_loop:
                 /* Decrement S */
                 S = (atemp - field) & CORE;
                 /* Read value to B, S <= F, F <= B */
-                memory_cycle(3);
+                memory_cycle(cpu, 3);
                 /* field = B & 077 */
                 field = B & 077;
                 /* Restore B */
@@ -2671,7 +2463,7 @@ crf_loop:
                 BROF = AROF;
                 AROF = 0;
                 /* fetch_next; */
-                next_prog();
+                next_prog(cpu);
                 /* If field == 0, opcode |= 4; field = T */
                 if (field == 0) {
                     T &= 07700;
@@ -2692,7 +2484,7 @@ crf_loop:
                 /* Read Loop/Return control word */
                 atemp = S;
                 S = FF(X);
-                memory_cycle(2);        /* Load S to A */
+                memory_cycle(cpu, 2);        /* Load S to A */
                 AROF = 0;
                 X = (A & MANT);
                 S = atemp;
@@ -2735,11 +2527,11 @@ crf_loop:
                      L = LF(B);
                      C = CF(B);
                      PROF = 0;
-                     memory_cycle(020);
+                     memory_cycle(cpu, 020);
                 } else {
                      atemp = S;
                      S = FF(X);
-                     memory_cycle(3);   /* Load B */
+                     memory_cycle(cpu, 3);   /* Load B */
                      X = B & MANT;
                      S = atemp;
                 }
@@ -2757,7 +2549,7 @@ crf_loop:
                 atemp = S;
                 S = FF(B);
                 next_addr(S);
-                memory_cycle(013);
+                memory_cycle(cpu, 013);
                 X = LCW(S, field);
                 S = atemp;
                 B = A;
@@ -2766,15 +2558,15 @@ crf_loop:
                 break;
 
             case CMOP_OCV:      /* Output Convert */
-                adjust_dest();
+                adjust_dest(cpu);
                 if (BROF) {
-                   memory_cycle(013);
+                   memory_cycle(cpu, 013);
                    BROF = 0;
                 }
                 /* Adjust source to word boundry */
                 if (GH) {
                     GH = 0;
-                    next_addr(Ma);
+                    next_addr(M);
                     AROF = 0;
                 }
 
@@ -2782,8 +2574,8 @@ crf_loop:
                    break;
 
                 /* Load word into A */
-                fill_src();
-                next_addr(Ma);
+                fill_src(cpu);
+                next_addr(M);
                 AROF = 0;
                 B = 0;
                 temp = 0;
@@ -2821,22 +2613,22 @@ crf_loop:
                         if (j != 0)
                             TFFF = 0;
                     } else {
-                        fill_dest();
+                        fill_dest(cpu);
                         temp = 077LL << bit_number[KV | 07];
                         B &= ~temp;
                         if (i == 0 && f)
                             j |= 040;
                         B |= ((t_uint64)j) << bit_number[KV | 07];
                         BROF = 1;
-                        next_dest(0);
+                        next_dest(cpu, 0);
                     }
                 }
                 break;
 
             case CMOP_ICV:      /* Input Convert */
-                adjust_source();
+                adjust_source(cpu);
                 if (BROF) {
-                   memory_cycle(013);
+                   memory_cycle(cpu, 013);
                    BROF = 0;
                 }
                 /* Align result to word boundry */
@@ -2852,12 +2644,12 @@ crf_loop:
                 f = 0;
                 /* Collect the source field into a string of BCD digits */
                 while(field > 0) {
-                   fill_src();
+                   fill_src(cpu);
                    i = (int)(A >> bit_number[GH | 07]);
                    B = (B << 4) | (i & 017);
                    f = (i & 060) == 040;        /* Keep sign */
                    field = (field - 1) & 07;
-                   next_src(0);
+                   next_src(cpu, 0);
                 }
                 /* We loop over the BCD number in B, dividing it by 2
                    each cycle, while shifting the lsb into the top of
@@ -2876,7 +2668,7 @@ crf_loop:
                 }
                 if (f && A != 0)
                    A |= MSIGN;
-                memory_cycle(012);
+                memory_cycle(cpu, 012);
                 AROF = 0;
                 next_addr(S);
                 break;
@@ -2889,13 +2681,13 @@ crf_loop:
             case CMOP_CLS:      /* Compare for Less 71 */
             case CMOP_FSU:      /* Field Subtract 72 */
             case CMOP_FAD:      /* Field Add 73 */
-                adjust_source();
-                adjust_dest();
+                adjust_source(cpu);
+                adjust_dest(cpu);
                 TFFF = 1;       /* flag to show greater */
                 f = 1;          /* Still comparaing */
                 while(field > 0) {
-                    fill_src();
-                    fill_dest();
+                    fill_src(cpu);
+                    fill_dest(cpu);
                     if (f) {
                         i = (A >> bit_number[GH | 07]) & 077;
                         j = (B >> bit_number[KV | 07]) & 077;
@@ -2924,8 +2716,8 @@ crf_loop:
                             }
                         }
                     }
-                    next_src(0);
-                    next_dest(0);
+                    next_src(cpu, 0);
+                    next_dest(cpu, 0);
                     field--;
                 }
                 /* If F = 1, fields are equal.
@@ -2939,10 +2731,10 @@ crf_loop:
                     int ss, sd, sub;
                     int c;
                     /* Back up one location */
-                    prev_src(0);
-                    prev_dest(0);
-                    fill_src();
-                    fill_dest();
+                    prev_src(cpu, 0);
+                    prev_dest(cpu, 0);
+                    fill_src(cpu);
+                    fill_dest(cpu);
                     field = (T >> 6) & 077;
                     i = (A >> bit_number[GH | 07]) & 077;
                     j = (B >> bit_number[KV | 07]) & 077;
@@ -2996,10 +2788,10 @@ crf_loop:
                         temp = 077LL << bit_number[KV | 07];
                         B &= ~temp;
                         B |= ((t_uint64)i) << bit_number[KV | 07];
-                        prev_src(0);
-                        prev_dest(0);
-                        fill_src();
-                        fill_dest();
+                        prev_src(cpu, 0);
+                        prev_dest(cpu, 0);
+                        fill_src(cpu);
+                        fill_dest(cpu);
                         i = (A >> bit_number[GH | 07]) & 017;
                         j = (B >> bit_number[KV | 07]) & 017;
                         field--;
@@ -3009,11 +2801,11 @@ crf_loop:
                     }
                     /* Lastly back to end of field. */
                     field = (T >> 6) & 077;
-                    next_src(0);
-                    next_dest(0);
+                    next_src(cpu, 0);
+                    next_dest(cpu, 0);
                     while (field > 0) {
-                        next_src(0);
-                        next_dest(0);
+                        next_src(cpu, 0);
+                        next_dest(cpu, 0);
                         field--;
                     }
                     break;
@@ -3041,11 +2833,11 @@ crf_loop:
                 break;
 
             case CMOP_TRP:      /* Transfer Program Characters 74 */
-                adjust_dest();
+                adjust_dest(cpu);
                 while(field > 0) {
-                   fill_dest();
+                   fill_dest(cpu);
                    if (!TROF)
-                       next_prog();
+                       next_prog(cpu);
                    if (field & 1) {
                        i = T & 077;
                        TROF = 0;
@@ -3055,7 +2847,7 @@ crf_loop:
                    temp = 077LL << bit_number[KV | 07];
                    B &= ~temp;
                    B |= ((t_uint64)i) << bit_number[KV | 07];
-                   next_dest(0);
+                   next_dest(cpu, 0);
                    field--;
                 }
                 TROF = 0;
@@ -3064,11 +2856,11 @@ crf_loop:
             case CMOP_TRN:      /* Transfer Numeric 75 */
             case CMOP_TRZ:      /* Transfer Zones 76 */
             case CMOP_TRS:      /* Transfer Source Characters 77 */
-                adjust_source();
-                adjust_dest();
+                adjust_source(cpu);
+                adjust_dest(cpu);
                 while(field > 0) {
-                   fill_dest();
-                   fill_src();
+                   fill_dest(cpu);
+                   fill_src(cpu);
                    i = (int)(A >> bit_number[GH | 07]);
                    if (opcode == CMOP_TRS) {
                         i &= 077;
@@ -3088,17 +2880,17 @@ crf_loop:
                    }
                    B &= ~temp;
                    B |= ((t_uint64)i) << bit_number[KV | 07];
-                   next_src(0);
-                   next_dest(0);
+                   next_src(cpu, 0);
+                   next_dest(cpu, 0);
                    field--;
                 }
                 break;
 
             case CMOP_TBN:      /* Transfer Blanks for Non-Numerics 12 */
-                adjust_dest();
+                adjust_dest(cpu);
                 TFFF = 1;
                 while(field > 0) {
-                   fill_dest();
+                   fill_dest(cpu);
                    i = (B >> bit_number[KV | 07]) & 077;
                    if (i > 0 && i <= 9) {
                         TFFF = 0;
@@ -3106,7 +2898,7 @@ crf_loop:
                    }
                    B &= ~(077LL << bit_number[KV | 07]);
                    B |= 060LL << bit_number[KV | 07];
-                   next_dest(0);
+                   next_dest(cpu, 0);
                    field--;
                 }
                 break;
@@ -3118,16 +2910,16 @@ crf_loop:
         /* Word mode opcodes */
             switch(opcode & 03) {
             case WMOP_LITC:             /* Load literal */
-                A_empty();
+                A_empty(cpu);
                 A = toC(T >> 2);
                 AROF = 1;
                 break;
 
             case WMOP_OPDC:             /* Load operand */
-                A_empty();
+                A_empty(cpu);
                 A = toC(T >> 2);
-                relativeAddr(0);
-                memory_cycle(4);
+                relativeAddr(cpu, 0);
+                memory_cycle(cpu, 4);
                 SALF |= VARF;
                 VARF = 0;
 opdc:
@@ -3148,11 +2940,11 @@ opdc:
                     }
                     /* Program Descriptor */
                     if ((A & (DFLAG|PROGF)) == (DFLAG|PROGF)) {
-                        enterSubr(0);
+                        enterSubr(cpu, 0);
                     } else {
-                        if (indexWord())
+                        if (indexWord(cpu))
                            break;
-                        memory_cycle(4);
+                        memory_cycle(cpu, 4);
                         if (NCSF && (A & FLAG))
 #ifdef NOSIMH
 			    causeSyllableIrq(cpu, IRQ_FLAG, "OPDC");
@@ -3164,17 +2956,17 @@ opdc:
                 break;
 
             case WMOP_DESC:             /* Load Descriptor */
-                A_empty();
+                A_empty(cpu);
                 A = toC(T >> 2);
-                relativeAddr(0);
-                memory_cycle(4);
+                relativeAddr(cpu, 0);
+                memory_cycle(cpu, 4);
                 SALF |= VARF;
                 VARF = 0;
 desc:
                 if (A & FLAG) {
                     /* Check if it is a control word. */
                     if ((A & DFLAG) != 0 && (A & PROGF) == 0) {
-                        A = FLAG | PRESENT | toC(Ma);
+                        A = FLAG | PRESENT | toC(M);
                         break;
                     }
                     /* Check if descriptor present */
@@ -3189,14 +2981,14 @@ desc:
                     }
                     /* Data descriptor */
                     if ((A & (DFLAG|PROGF)) == (DFLAG|PROGF)) {
-                        enterSubr(1);
+                        enterSubr(cpu, 1);
                     } else {
-                        if (indexWord())
+                        if (indexWord(cpu))
                            break;
                         A |= FLAG | PRESENT;
                     }
                 } else {
-                    A = FLAG | PRESENT | toC(Ma);
+                    A = FLAG | PRESENT | toC(M);
                 }
                 break;
 
@@ -3206,15 +2998,15 @@ desc:
                 switch(field) {
                 case VARIANT(WMOP_SUB): /* Subtract */
                 case VARIANT(WMOP_ADD): /* Add */
-                        add(T);
+                        add(cpu, T);
                         break;
                 case VARIANT(WMOP_MUL): /* Multiply */
-                        multiply();
+                        multiply(cpu);
                         break;
                 case VARIANT(WMOP_DIV): /* Divide */
                 case VARIANT(WMOP_IDV): /* Integer Divide Integer */
                 case VARIANT(WMOP_RDV): /* Remainder Divide */
-                        divide(T);
+                        divide(cpu, T);
                         break;
                 }
                 break;
@@ -3223,13 +3015,13 @@ desc:
                 switch(field) {
                 case VARIANT(WMOP_DLS): /* Double Precision Subtract */
                 case VARIANT(WMOP_DLA): /* Double Precision Add */
-                        double_add(T);
+                        double_add(cpu, T);
                         break;
                 case VARIANT(WMOP_DLM): /* Double Precision Multiply */
-                        double_mult();
+                        double_mult(cpu);
                         break;
                 case VARIANT(WMOP_DLD): /* Double Precision Divide */
-                        double_divide();
+                        double_divide(cpu);
                         break;
                 }
                 break;
@@ -3242,11 +3034,11 @@ control:
                 switch(field) {
                 /* Different in Character mode */
                 case VARIANT(WMOP_SFT): /* Store for Test */
-                        storeInterrupt(0,1);
+                        storeInterrupt(cpu, 0,1);
                         break;
 
                 case VARIANT(WMOP_SFI): /* Store for Interrupt */
-                        storeInterrupt(0,0);
+                        storeInterrupt(cpu, 0,0);
                         break;
 
                 case VARIANT(WMOP_ITI): /* Interrogate interrupt */
@@ -3324,11 +3116,11 @@ control:
 
                         /* Fall through */
                 case VARIANT(WMOP_PRL): /* Program Release */
-                        A_valid();
+                        A_valid(cpu);
                         if ((A & FLAG) == 0) {
-                            relativeAddr(1);
+                            relativeAddr(cpu, 1);
                         } else if (A & PRESENT) {
-                            Ma = CF(A);
+                            M = CF(A);
                         } else {
                             if (NCSF)
 #ifdef NOSIMH
@@ -3338,28 +3130,28 @@ control:
 #endif
                             break;
                         }
-                        memory_cycle(4);        /* Read Ma to A */
+                        memory_cycle(cpu, 4);        /* Read M to A */
                         if (NCSF) {             /* Can't occur for IOR */
 #ifdef NOSIMH
 			    causeSyllableIrq(cpu, (A & CONTIN) ? IRQ_CONT : IRQ_PREL, "IOR/PRL");
 #else
                             Q |= (A & CONTIN) ? CONT_BIT : PROG_REL;
 #endif
-                            A = toC(Ma);
-                            Ma = R | 9;
+                            A = toC(M);
+                            M = R | 9;
                         } else {
                             if (field == VARIANT(WMOP_PRL))
                                 A &= ~PRESENT;
                             else
                                 A |= PRESENT;
                         }
-                        memory_cycle(014);      /* Store A to Ma */
+                        memory_cycle(cpu, 014);      /* Store A to M */
                         AROF = 0;
                         break;
 
                 case VARIANT(WMOP_RTR): /* Read Timer */
                         if (!NCSF) {
-                            A_empty();
+                            A_empty(cpu);
 #ifdef NOSIMH
 			    // my RTC
 			    A = readTimer(cpu);
@@ -3374,8 +3166,8 @@ control:
 
                 case VARIANT(WMOP_COM): /* Communication operator */
                         if (NCSF) {
-                            Ma = R|9;
-                            save_tos();
+                            M = R|9;
+                            save_tos(cpu);
 #ifdef NOSIMH
 			    causeSyllableIrq(cpu, IRQ_COM, "COM");
 #else
@@ -3420,20 +3212,20 @@ control:
                 case VARIANT(WMOP_IP1): /* Initiate P1 */
                         if (NCSF)
                            break;
-                        A_valid();      /* Load ICW */
+                        A_valid(cpu);      /* Load ICW */
 #ifdef NOSIMH
 	// TODO: add my debug
 #else
                         sim_debug(DEBUG_DETAIL, &cpu_dev, "INIT P1\n\r");
 #endif /* NOSIMH */
-                        initiate();
+                        initiate(cpu);
                         break;
 
                 case VARIANT(WMOP_IP2): /* Initiate P2 */
                         if (NCSF)
                            break;
-                        Ma = 010;
-                        save_tos();
+                        M = 010;
+                        save_tos(cpu);
                         /* If CPU is operating, or disabled, return busy */
 #ifdef NOSIMH
 	// TODO: add my IP2 handling
@@ -3447,18 +3239,18 @@ control:
                         hltf[1] = 0;
                         P2_run = 1;
                         cpu_index = 1;  /* To CPU 2 */
-                        Ma = 010;
-                        memory_cycle(4);
+                        M = 010;
+                        memory_cycle(cpu, 4);
                         sim_debug(DEBUG_DETAIL, &cpu_dev, "INIT P2\n\r");
 #endif /* NOSIMH */
-                        initiate();
+                        initiate(cpu);
                         break;
 
                 case VARIANT(WMOP_IIO): /* Initiate I/O */
                         if (NCSF)
                            break;
-                        Ma = 010;
-                        save_tos();
+                        M = 010;
+                        save_tos(cpu);
 #ifdef NOSIMH
 			// my IIO
 			initiateIO(cpu);
@@ -3485,35 +3277,35 @@ control:
             case 0015:
                 switch(field) {
                 case VARIANT(WMOP_LNG): /* Logical Negate */
-                        A_valid();
+                        A_valid(cpu);
                         A = (A ^ FWORD);
                         break;
 
                 case VARIANT(WMOP_LOR): /* Logical Or */
-                        AB_valid();
+                        AB_valid(cpu);
                         A = (A & FWORD) | B;
                         BROF = 0;
                         break;
 
                 case VARIANT(WMOP_LND): /* Logical And */
-                        AB_valid();
+                        AB_valid(cpu);
                         A = (A & B & FWORD) | (B & FLAG);
                         BROF = 0;
                         break;
 
                 case VARIANT(WMOP_LQV): /* Logical Equivalence */
-                        AB_valid();
+                        AB_valid(cpu);
                         B = ((~(A ^ B) & FWORD)) | (B & FLAG);
                         AROF = 0;
                         break;
 
                 case VARIANT(WMOP_MOP): /* Reset Flag bit */
-                        A_valid();
+                        A_valid(cpu);
                         A &= ~FLAG;
                         break;
 
                 case VARIANT(WMOP_MDS): /* Set Flag Bit */
-                        A_valid();
+                        A_valid(cpu);
                         A |= FLAG;
                         break;
                 }
@@ -3527,7 +3319,7 @@ control:
                 case VARIANT(WMOP_ISN): /* 42 Integer Store Non-Destructive */
                 case VARIANT(WMOP_STD): /* 04 B Store Destructive */
                 case VARIANT(WMOP_SND): /* 10 B Store Non-destructive */
-                        AB_valid();
+                        AB_valid(cpu);
                         if (A & FLAG) {
                             if ((A & PRESENT) == 0) {
                                 if (NCSF)
@@ -3538,9 +3330,9 @@ control:
 #endif
                                 break;
                             }
-                            Ma = CF(A);
+                            M = CF(A);
                         } else {
-                            relativeAddr(1);
+                            relativeAddr(cpu, 1);
                         }
                         SALF |= VARF;
                         VARF = 0;
@@ -3548,7 +3340,7 @@ control:
                             if ((B & EXPO) != 0) {
                                 /* Check if force to integer */
                                 if ((A & INTEGR) != 0 || (field & 040) != 0) {
-                                   if (mkint()) {
+                                   if (mkint(cpu)) {
                                       /* Fail if not an integer */
                                       if (NCSF)
 #ifdef NOSIMH
@@ -3562,13 +3354,13 @@ control:
                             }
                         }
                         AROF = 0;
-                        memory_cycle(015);      /* Store B in Ma */
+                        memory_cycle(cpu, 015);      /* Store B in M */
                         if (field & 5)          /* Destructive store */
                            BROF = 0;
                         break;
 
                 case VARIANT(WMOP_LOD): /* Load */
-                        A_valid();
+                        A_valid(cpu);
                         if (A & FLAG) {
                             if ((A & PRESENT) == 0) {
                                 if (NCSF)
@@ -3579,13 +3371,13 @@ control:
 #endif
                                 break;
                             }
-                            Ma = CF(A);
+                            M = CF(A);
                         } else {
-                            relativeAddr(0);
+                            relativeAddr(cpu, 0);
                         }
                         SALF |= VARF;
                         VARF = 0;
-                        memory_cycle(4);        /* Read Ma to A */
+                        memory_cycle(cpu, 4);        /* Read M to A */
                         break;
                 }
                 break;
@@ -3598,9 +3390,9 @@ control:
                 case VARIANT(WMOP_LEQ): /* B Less Than or Equal to A */
                 case VARIANT(WMOP_LSS): /* B Less Than A */
                 case VARIANT(WMOP_EQL): /* B Equal A */
-                        AB_valid();
+                        AB_valid(cpu);
                         f = 0;
-                        i = compare();
+                        i = compare(cpu);
                         switch(field) {
                         case VARIANT(WMOP_GEQ):
                                 if ((i & 5) != 0) f = 1; break;
@@ -3620,35 +3412,35 @@ control:
                         break;
 
                 case VARIANT(WMOP_XCH): /* Exchange */
-                        AB_valid();
+                        AB_valid(cpu);
                         temp = A;
                         A = B;
                         B = temp;
                         break;
 
                 case VARIANT(WMOP_FTF): /* Transfer F Field to F Field */
-                        AB_valid();
+                        AB_valid(cpu);
                         B &= ~FFIELD;
                         B |= (A & FFIELD);
                         AROF = 0;
                         break;
 
                 case VARIANT(WMOP_FTC): /* Transfer F Field to Core Field */
-                        AB_valid();
+                        AB_valid(cpu);
                         B &= ~CORE;
                         B |= (A & FFIELD) >> FFIELD_V;
                         AROF = 0;
                         break;
 
                 case VARIANT(WMOP_CTC): /* Transfer Core Field to Core Field */
-                        AB_valid();
+                        AB_valid(cpu);
                         B &= ~CORE;
                         B |= (A & CORE);
                         AROF = 0;
                         break;
 
                 case VARIANT(WMOP_CTF): /* Transfer Core Field to F Field */
-                        AB_valid();
+                        AB_valid(cpu);
                         B &= ~FFIELD;
                         B |= FFIELD & (A << FFIELD_V);
                         AROF = 0;
@@ -3656,7 +3448,7 @@ control:
 
                 case VARIANT(WMOP_DUP): /* Duplicate */
                         if (AROF && BROF) {
-                             B_empty();
+                             B_empty(cpu);
                              B = A;
                              BROF = 1;
                         } else if (AROF || BROF) {
@@ -3666,7 +3458,7 @@ control:
                                 A = B;
                              AROF = BROF = 1;
                         } else {
-                             A_valid(); /* Make A Valid */
+                             A_valid(cpu); /* Make A Valid */
                              B = A;
                              BROF = 1;
                         }
@@ -3680,7 +3472,7 @@ control:
                 case VARIANT(WMOP_BBC): /* Branch Backward Conditional 0131 */
                 case VARIANT(WMOP_LFC): /* Word Branch Forward Conditional 2231 */
                 case VARIANT(WMOP_LBC): /* Word Branch Backward Conditional 2131 */
-                        AB_valid();
+                        AB_valid(cpu);
                         BROF = 0;
                         if (B & 1) {
                             AROF = 0;
@@ -3692,7 +3484,7 @@ control:
                 case VARIANT(WMOP_BBW): /* Banch Backward Unconditional 4131 */
                 case VARIANT(WMOP_LFU): /* Word Branch Forward Unconditional  6231*/
                 case VARIANT(WMOP_LBU): /* Word Branch Backward Unconditional 6131 */
-                        A_valid();
+                        A_valid(cpu);
                         if (A & FLAG) {
                             if ((A & PRESENT) == 0) {
                                 if (L == 0)     /* Back up to branch word */
@@ -3766,22 +3558,22 @@ control:
                         break;
 
                 case VARIANT(WMOP_SSN): /* Set Sign Bit */
-                        A_valid();
+                        A_valid(cpu);
                         A |= MSIGN;
                         break;
 
                 case VARIANT(WMOP_CHS): /* Change sign bit */
-                        A_valid();
+                        A_valid(cpu);
                         A ^= MSIGN;
                         break;
 
                 case VARIANT(WMOP_SSP): /* Reset Sign Bit */
-                        A_valid();
+                        A_valid(cpu);
                         A &= ~MSIGN;
                         break;
 
                 case VARIANT(WMOP_TOP): /* Test Flag Bit */
-                        B_valid();      /* Move result to B */
+                        B_valid(cpu);      /* Move result to B */
                         if (B & FLAG)
                            A = 0;
                         else
@@ -3790,7 +3582,7 @@ control:
                         break;
 
                 case VARIANT(WMOP_TUS): /* Interrogate Peripheral Status */
-                        A_empty();
+                        A_empty(cpu);
 #ifdef NOSIMH
 			// my TUS
 			A = interrogateUnitStatus(cpu);
@@ -3800,7 +3592,7 @@ control:
                         break;
 
                 case VARIANT(WMOP_TIO): /* Interrogate I/O Channels */
-                        A_empty();
+                        A_empty(cpu);
 #ifdef NOSIMH
 			// my TIO
 			A = interrogateIOChannel(cpu);
@@ -3810,14 +3602,14 @@ control:
                         break;
 
                 case VARIANT(WMOP_FBS): /* Flag Bit Search */
-                        A_valid();
-                        Ma = CF(A);
-                        memory_cycle(4);        /* Read A */
+                        A_valid(cpu);
+                        M = CF(A);
+                        memory_cycle(cpu, 4);        /* Read A */
                         while((A & FLAG) == 0) {
-                            next_addr(Ma);
-                            memory_cycle(4);
+                            next_addr(M);
+                            memory_cycle(cpu, 4);
                         }
-                        A = FLAG | PRESENT | toC(Ma);
+                        A = FLAG | PRESENT | toC(M);
                         break;
                 }
                 break;
@@ -3825,7 +3617,7 @@ control:
             case 0035:
                 switch(field) {
                 case VARIANT(WMOP_BRT): /* Branch Return */
-                        B_valid();
+                        B_valid(cpu);
                         if ((B & PRESENT) == 0) {
                            if (NCSF)
 #ifdef NOSIMH
@@ -3835,19 +3627,19 @@ control:
 #endif
                            break;
                         }
-                        f = set_via_RCW(B, 0, 1); /* Restore registers */
+                        f = set_via_RCW(cpu, B, 0, 1); /* Restore registers */
                         L = 0;
                         S = F;
-                        memory_cycle(3);        /* Read B */
+                        memory_cycle(cpu, 3);        /* Read B */
                         prev_addr(S);
-                        set_via_MSCW(B);
+                        set_via_MSCW(cpu, B);
                         BROF = 0;
                         PROF = 0;
                         break;
 
                 case VARIANT(WMOP_RTN): /* Return normal  02 */
                 case VARIANT(WMOP_RTS): /* Return Special 12 */
-                        A_valid();
+                        A_valid(cpu);
                         if (A & FLAG) {
                             if ((A & PRESENT) == 0) {
                                 if (NCSF)
@@ -3868,7 +3660,7 @@ control:
                         PROF = 0;
                         if ((field & 010) == 0) /* normal return & XIT */
                             S = F;
-                        memory_cycle(3);        /* Restore RCW to B*/
+                        memory_cycle(cpu, 3);        /* Restore RCW to B*/
                         if ((B & FLAG) == 0) {
                             if (NCSF)
 #ifdef NOSIMH
@@ -3878,20 +3670,20 @@ control:
 #endif
                             break;
                         }
-                        f = set_via_RCW(B, 0, 0); /* Restore registers */
+                        f = set_via_RCW(cpu, B, 0, 0); /* Restore registers */
                         S = F;
                         BROF = 0;
-                        memory_cycle(3);        /* Read B */
+                        memory_cycle(cpu, 3);        /* Read B */
                         prev_addr(S);
-                        set_via_MSCW(B);
+                        set_via_MSCW(cpu, B);
                         if (MSFF && SALF) {
-                             Ma = F;
+                             M = F;
                              do {
-                                /* B = M[FIELD], Ma = B[FIELD]; */
-                                memory_cycle(6);        /* Grab previous MCSW */
+                                /* B = M[FIELD], M = B[FIELD]; */
+                                memory_cycle(cpu, 6);        /* Grab previous MCSW */
                              } while(B & SMSFF);
-                             Ma = R | 7;
-                             memory_cycle(015); /* Store B in Ma */
+                             M = R | 7;
+                             memory_cycle(cpu, 015); /* Store B in M */
                         }
                         BROF = 0;
                         if (field & 2) {        /* RTS and RTN */
@@ -3905,17 +3697,17 @@ control:
                 break;
 
             case 0041:
-                A_valid();
+                A_valid(cpu);
                 switch(field) {
                 case VARIANT(WMOP_INX): /* Index */
-                        AB_valid();
+                        AB_valid(cpu);
                         A = (A & (~CORE)) | ((A + B) & CORE);
                         BROF = 0;
                         break;
 
                 case VARIANT(WMOP_COC): /* Construct Operand Call */
                 case VARIANT(WMOP_CDC): /* Construct descriptor call */
-                        AB_valid();
+                        AB_valid(cpu);
                         temp = A;
                         A = B | FLAG;
                         B = temp;
@@ -3927,7 +3719,7 @@ control:
                         break;
 
                 case VARIANT(WMOP_SSF): /* Set or Store S or F registers */
-                        AB_valid();
+                        AB_valid(cpu);
                         switch( A & 03) {
                         case 0:                 /* F => B */
                                 B = replF(B, F);
@@ -3949,22 +3741,22 @@ control:
                         break;
 
                 case VARIANT(WMOP_LLL): /* Link List Look-up */
-                        AB_valid();
+                        AB_valid(cpu);
                         A = MANT ^ A;
                         do {
-                            Ma = CF(B);
-                            memory_cycle(5);
+                            M = CF(B);
+                            memory_cycle(cpu, 5);
                             temp = (B & MANT) + (A & MANT);
                         } while ((temp & EXPO) == 0);
-                        A = FLAG | PRESENT | toC(Ma);
+                        A = FLAG | PRESENT | toC(M);
                         break;
 
                 case VARIANT(WMOP_CMN): /* Enter Character Mode In Line */
-                        A_valid();      /* Make sure TOS is in A. */
-                        AB_empty();     /* Force A&B to stack */
+                        A_valid(cpu);      /* Make sure TOS is in A. */
+                        AB_empty(cpu);     /* Force A&B to stack */
                         B = RCW(0);     /* Build RCW word */
                         BROF = 1;
-                        B_empty();      /* Save return control word */
+                        B_empty(cpu);      /* Save return control word */
                         CWMF = 1;
                         SALF = 1;
                         MSFF = 0;
@@ -3992,14 +3784,14 @@ control:
                         break;
 
                 case VARIANT(WMOP_MKS): /* Mark Stack */
-                        AB_empty();
+                        AB_empty(cpu);
                         B = MSCW;
                         BROF = 1;
-                        B_empty();
+                        B_empty(cpu);
                         F = S;
                         if (!MSFF && SALF) {
-                            Ma = R | 7;
-                            memory_cycle(015);  /* Store B in Ma */
+                            M = R | 7;
+                            memory_cycle(cpu, 015);  /* Store B in M */
                         }
                         MSFF = 1;
                         break;
@@ -4016,7 +3808,7 @@ control:
                         prev_addr(S);
                     break;
                 }
-                AB_valid();
+                AB_valid(cpu);
                 f = 0;
                 bit_b = bit_number[GH];
                 if (field & 2)
@@ -4048,7 +3840,7 @@ control:
                 break;
 
             case WMOP_ISO:              /* Variable Field Isolate XX */
-                A_valid();
+                A_valid(cpu);
                 if ((field & 070) != 0) {
                     bit_a = bit_number[GH | 07];        /* First Character */
                     X = A >> bit_a;                     /* Get first char */
@@ -4069,7 +3861,7 @@ control:
             case WMOP_TRB:              /* Transfer Bits XX */
             case WMOP_FCL:              /* Compare Field Low XX */
             case WMOP_FCE:              /* Compare Field Equal XX */
-                AB_valid();
+                AB_valid(cpu);
                 f = 1;
                 bit_a = bit_number[GH];
                 bit_b = bit_number[KV];

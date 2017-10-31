@@ -20,6 +20,7 @@
 #include <ctype.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <time.h>
 #include "common.h"
 
 /***********************************************************************
@@ -40,24 +41,26 @@
 
 #define NAMELEN 100
 #define	BUFLEN 80
+#define TIMESTAMP 1
 
-/*
- * the SPO
- */
+/***********************************************************************
+* the SPO
+***********************************************************************/
 char	filename[NAMELEN];
 FILE	*fp = stdin;
 BIT	ready;
 char	spoinbuf[BUFLEN];
 char	spooutbuf[BUFLEN];
+time_t	stamp;
 
-/*
- * set spo (no function)
- */
+/***********************************************************************
+* set spo (no function)
+***********************************************************************/
 int set_spo(const char *, void *) {return 0; }
 
-/*
- * specify load type
- */
+/***********************************************************************
+* specify load type
+***********************************************************************/
 int set_spoload(const char *v, void *) {
 	if (strcmp(v, "disk") == 0) {
 		CC->CLS = false;
@@ -69,26 +72,34 @@ int set_spoload(const char *v, void *) {
 	}
 	return 0; // OK
 }
-/*
- * command table
- */
+
+/***********************************************************************
+* command table
+***********************************************************************/
 const command_t spo_commands[] = {
 	{"spo", set_spo},
 	{"load", set_spoload},
 	{NULL, NULL},
 };
 
-/*
- * Initialize command from argv scanner or special SPO input
- */
+/***********************************************************************
+* Initialize command from argv scanner or special SPO input
+***********************************************************************/
 int spo_init(const char *option) {
 	ready = true;
 	return command_parser(spo_commands, option);
 }
 
-/*
- * query ready status
- */
+/***********************************************************************
+* query SPO ready status
+*
+* this function has a few "side effects":
+* on first call, the SPO is initialized
+* on every call, the operating system is polled for input (select)
+* if input is present, it is read into a buffer
+* if the buffer contains the "#" escape, the line is handled in the
+* emulator, otherwise the "INPUT REQUEST" interuppt is caused
+***********************************************************************/
 BIT spo_ready(unsigned index) {
         struct timeval tv = {0, 0};
 
@@ -114,6 +125,9 @@ BIT spo_ready(unsigned index) {
 				handle_option(spoinp+1);
 				// mark the input buffer empty again
 				spoinbuf[0] = 0;
+				// remember when this input was
+				time(&stamp);
+
 			} else {
 				// signal input request
 				CC->CCI05F = true;
@@ -127,14 +141,22 @@ BIT spo_ready(unsigned index) {
 	return ready;
 }
 
-/*
- * write a single line
- */
+/***********************************************************************
+* write a single line to SPO
+***********************************************************************/
 WORD48 spo_write(WORD48 iocw) {
 	int count;
 	ACCESSOR acc;
 	char *spooutp = spooutbuf;
-
+#if TIMESTAMP
+	time_t now;
+	struct tm tm;
+	time(&now);
+	// subtract stamp
+	now -= stamp;
+	gmtime_r(&now, &tm);
+	spooutp += sprintf(spooutp, "%02d:%02u:%02u ", tm.tm_hour, tm.tm_min, tm.tm_sec);
+#endif
 	acc.id = "SPO";
 	acc.MAIL = false;
 	acc.addr = iocw & MASKMEM;
@@ -157,9 +179,9 @@ done:	*spooutp++ = 0;
 	return (iocw & (MASK_IODUNIT | MASK_IODREAD)) | acc.addr;
 }
 
-/*
- * read a single line
- */
+/***********************************************************************
+* read a single line from the SPO input buffer
+***********************************************************************/
 WORD48 spo_read(WORD48 iocw) {
 	int count;
 	ACCESSOR acc;
@@ -209,4 +231,5 @@ WORD48 spo_read(WORD48 iocw) {
 
 	return (iocw & (MASK_IODUNIT | MASK_IODREAD)) | acc.addr;
 }
+
 

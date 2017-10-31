@@ -446,24 +446,15 @@ WORD48 interrogateUnitStatus(CPU *cpu) {
 	int i, j;
 	WORD48 unitsready = 0LL;
 
+#if 0
         // TODO: simulate timer - this should NOT be done this way - fix it
         static int td = 0;
         if (++td > 200) {
 		union sigval sv;
-		extern void timer60hz(sigval);
 		timer60hz(sv);
-#if 0
-                CC->TM++;
-                if (CC->TM >= 63) {
-                        CC->TM = 0;
-                        CC->CCI03F = true;
-                        signalInterrupt("CC", "TIMER");
-                } else {
-                        CC->TM++;
-                }
-#endif
                 td = 0;
         }
+#endif
 
 	// go through all units
 	for (i=0; i<32; i++) for (j=0; j<2; j++)

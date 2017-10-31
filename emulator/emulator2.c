@@ -22,6 +22,8 @@
 #include <ctype.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <signal.h>
+#include <time.h>
 #include "common.h"
 
 #define MAXLINELENGTH   (264)   /* maximum line length for all devices - must be multiple of 8 */
@@ -380,7 +382,7 @@ void preset(CPU *cpu, ADDR15 runAddr)
 void run(CPU *cpu)
 {
 	// execute one instruction
-	sim_instr();
+	sim_instr(cpu);
 	// check for any registers gone wild
 #define CHECK(R,M,T) if((cpu->rR) & ~(M))printf("*\tCHECK "T" = %llo\n", (WORD48)(cpu->rR))
 	CHECK(A, MASK_WORD48, "A");
@@ -393,7 +395,7 @@ void run(CPU *cpu)
 	CHECK(S, MASK_ADDR15, "S");
 }
 
-void sim_traceinstr(void) {
+void sim_traceinstr(CPU *cpu) {
 	if (dotrcins) {
 		ADDR15 c;
 		WORD2 l;
@@ -541,6 +543,15 @@ int handle_option(const char *option) {
 	return 1; // WARNING
 }
 
+/* 60 Hz timer */
+timer_t timerid;
+struct sigevent sev;
+struct itimerspec its;
+long long freq_nanosecs;
+sigset_t mask;
+struct sigaction sa;
+extern void timer60hz(sigval);
+
 int main(int argc, char *argv[])
 {
 	FILE *inifile = NULL;
@@ -661,6 +672,28 @@ int main(int argc, char *argv[])
         opt = openfile(&spiofile, "r");
         if (opt)
                 exit(2);
+
+#if 1
+	// Create the timer
+	sev.sigev_notify = SIGEV_THREAD;
+	sev.sigev_notify_function = timer60hz;
+	sev.sigev_value.sival_int = 0;
+	if (timer_create(CLOCK_MONOTONIC, &sev, &timerid) == -1) {
+		perror("timer_create");
+		exit(2);
+	}
+	printf("timer ID is 0x%lx\n", (long) timerid);
+
+	// Start the timer
+	its.it_value.tv_sec = 0;
+	its.it_value.tv_nsec = 16666667; // 16.666667ms ~ 60 Hz
+	its.it_interval.tv_sec = its.it_value.tv_sec;
+	its.it_interval.tv_nsec = its.it_value.tv_nsec;
+	if (timer_settime(timerid, 0, &its, NULL) == -1) {
+		perror("timer_settime");
+		exit(2);
+	}
+#endif
 
         addr = 020; // boot addr
         if (CC->CLS) {

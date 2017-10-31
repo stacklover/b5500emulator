@@ -601,9 +601,9 @@ extern void b5500_execute_wm(CPU *);
 extern void run(CPU *);
 
 /* Richards simulator code */
-extern int sim_instr(void);
+extern int sim_instr(CPU *);
 /* and callbacks */
-extern void sim_traceinstr(void);
+extern void sim_traceinstr(CPU *);
 
 /* devices */
 extern int spo_init(const char *info);

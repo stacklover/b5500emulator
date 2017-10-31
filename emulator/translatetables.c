@@ -48,6 +48,19 @@ const WORD6 translatetable_bcl2bic[64]   = { // Index by 6-bit BCL to get 6-bit 
         034,021,022,023,024,025,026,027,        // @60-67
         030,031,020,032,033,035,036,037};       // @70-77
 
+const char * translatetable_bic2baudot_as_ascii[64] = {
+// Index by 6-bit BIC to get 8-bit BAUDOT with ASCII representation
+// Note: ASCII # stands for BAUDOT "who are you?" symbol
+// Note: ASCII ^ stands for BAUDOR "bell" symbol
+        "0", "1", "2", "3", "4", "5", "6", "7",         // @00: 0 1 2 3 4 5 6 7
+        "8", "9", "#", "^A", "?", ":", ")-", ")=",      // @10: 8 9 # @ ? : > >=
+        "+", "A", "B", "C", "D", "E", "F", "G",         // @20: + A B C D E F G
+        "H", "I", ".", "(.", "^U", "(", "-(", ":=",     // @30: H I . [ & ( < <-
+        "//", "J", "K", "L", "M", "N", "O", "P",        // @40: | J K L M N O P
+        "Q", "R", "^S", "^+", "-", ")", ".,", "=(",     // @50: Q R $ * - ) ; <=
+        " ", "/", "S", "T", "U", "V", "W", "X",         // @60: _ / S T U V W X  (_ = blank)
+        "Y", "Z", ",", "./.", "^I", "=", ".)", "''"};   // @70: Y Z , % ! = ] "
+
 // index by BIC to get collation value
 const WORD6 collation[64] = {
         53, 54, 55, 56, 57, 58, 59, 60,         // @00: 0 1 2 3 4 5 6 7
@@ -58,4 +71,5 @@ const WORD6 collation[64] = {
         42, 43,  7,  8, 12,  9, 10, 11,         // @50: Q R $ * - ) ; {
          0, 13, 45, 46, 47, 48, 49, 50,         // @60: _ / S T U V W X  (_ = blank)
         51, 52, 14, 15, 44, 16, 17, 18};        // @70: Y Z , % ! = ] "
+
 
