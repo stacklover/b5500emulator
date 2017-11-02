@@ -42,6 +42,7 @@
 #define NAMELEN 100
 #define	BUFLEN 80
 #define TIMESTAMP 1
+#define	AUTOEXEC 1
 
 /***********************************************************************
 * the SPO
@@ -52,6 +53,11 @@ BIT	ready;
 char	spoinbuf[BUFLEN];
 char	spooutbuf[BUFLEN];
 time_t	stamp;
+#if AUTOEXEC
+unsigned autoexec = false;
+const char *auto_cmd = "cra file=cards/DCMCP-PATCH-COMPILE.card";
+const char *auto_trigger = "ESPOL/DISK= 2 EOJ";
+#endif
 
 /***********************************************************************
 * set spo (no function)
@@ -74,11 +80,29 @@ int set_spoload(const char *v, void *) {
 }
 
 /***********************************************************************
+* specify autoexec on/off
+***********************************************************************/
+int set_autoexec(const char *v, void *) {
+	if (strcmp(v, "on") == 0) {
+		autoexec = true;
+	} else if (strcmp(v, "off") == 0) {
+		autoexec = false;
+	} else {
+		printf("specify on or off\n");
+		return 2; // FATAL
+	}
+	return 0; // OK
+}
+
+/***********************************************************************
 * command table
 ***********************************************************************/
 const command_t spo_commands[] = {
 	{"spo", set_spo},
 	{"load", set_spoload},
+#if AUTOEXEC
+	{"autoexec", set_autoexec},
+#endif
 	{NULL, NULL},
 };
 
@@ -122,7 +146,11 @@ BIT spo_ready(unsigned index) {
 			spoinp = spoinbuf;
 			// divert input starting with '#' to our scanner
 			if (*spoinp == '#') {
-				handle_option(spoinp+1);
+				int res = handle_option(spoinp+1);
+				if (res == 0)
+					printf("#ok\n");
+				else
+					printf("#error %d\n", res);
 				// mark the input buffer empty again
 				spoinbuf[0] = 0;
 				// remember when this input was
@@ -165,9 +193,9 @@ loop:	fetch(&acc);
 	for (count=0; count<8; count++) {
 		// prevent buffer overrun
 		if (spooutp >= spooutbuf + sizeof spooutbuf - 1)
-		  goto done;
+			goto done;
 		if (((acc.word >> 42) & 0x3f) == 037)
-		  goto done;
+			goto done;
 		*spooutp++ = translatetable_bic2ascii[(acc.word>>42) & 0x3f];
 		acc.word <<= 6;
 	}
@@ -176,6 +204,13 @@ loop:	fetch(&acc);
 
 done:	*spooutp++ = 0;
 	printf ("%s\n", spooutbuf);
+#if AUTOEXEC
+	if (autoexec > 0 && strstr(spooutbuf, auto_trigger)) {
+		printf("***** AUTOEXEC #%d *****\n", autoexec++);
+		time(&stamp);
+		handle_option(auto_cmd);
+	}
+#endif
 	return (iocw & (MASK_IODUNIT | MASK_IODREAD)) | acc.addr;
 }
 

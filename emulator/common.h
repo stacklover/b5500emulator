@@ -191,7 +191,7 @@ typedef struct cpu {
         unsigned        runCycles;      // Current cycle count for this.run()
         unsigned        totalCycles;    // Total cycles executed on this processor
         BIT             isP1;           // we are CPU #1
-        BIT             busy;           // CPU is busy
+        BIT             XXXbusy;        // CPU is busy (not used anymore, replaced by "bHLTF")
 } CPU;
 
 /*
@@ -601,7 +601,7 @@ extern void b5500_execute_wm(CPU *);
 extern void run(CPU *);
 
 /* Richards simulator code */
-extern int sim_instr(CPU *);
+extern void sim_instr(CPU *);
 /* and callbacks */
 extern void sim_traceinstr(CPU *);
 

@@ -61,10 +61,15 @@ char name[MAXNAME][29];
 
 /* instruction execution counter */
 unsigned instr_count;
+unsigned iar_count;
+FILE *tracefp = stdout;
 
 CPU *cpu;
 
 
+/***********************************************************************
+* open a text and/or trace file
+***********************************************************************/
 int openfile(FILEHANDLE *f, const char *mode) {
         if (f->name != NULL) {
                 f->fp = fopen(f->name, mode);
@@ -93,6 +98,9 @@ int openfile(FILEHANDLE *f, const char *mode) {
         return f->fp ? 1 : 0;
 }
 
+/***********************************************************************
+* close a text file and a trace file
+***********************************************************************/
 int closefile(FILEHANDLE *f) {
         if (f->fp != NULL)
                 fclose(f->fp);
@@ -106,6 +114,9 @@ int closefile(FILEHANDLE *f) {
         return 0;
 }
 
+/***********************************************************************
+* get next text line from a file
+***********************************************************************/
 void getlin(FILEHANDLE *f) { /* get next line */
         if (f->eof)
                 return;
@@ -122,6 +133,9 @@ void getlin(FILEHANDLE *f) { /* get next line */
         linep = linebuf;
 }
 
+/***********************************************************************
+* read the current timer value
+***********************************************************************/
 WORD48 readTimer(CPU *cpu) {
         WORD48 result = 0;
 
@@ -132,6 +146,10 @@ WORD48 readTimer(CPU *cpu) {
         return result;
 }
 
+/***********************************************************************
+* convert a relative address into a string
+* warning: static buffer, not thread save!
+***********************************************************************/
 const char *relsym(unsigned offset, BIT cEnabled) {
         static char buf[32];
         if (cpu->bSALF) {
@@ -199,6 +217,9 @@ prtuse:
         return "should not happen";
 }
 
+/***********************************************************************
+* find and print the best matching label for a given code address
+***********************************************************************/
 void codesym(ADDR15 c, WORD2 l) {
         unsigned bestmatch = 0;
         unsigned index;
@@ -218,11 +239,17 @@ void codesym(ADDR15 c, WORD2 l) {
                 }
         }
         if (bestmatch > 0)
-                printf("%08u %s+%04o (%05o:%o) ", instr_count, name[bestmatch], ((c - bestaddr) << 2) + l, c, l);
+                fprintf(tracefp, "%08u %s+%04o (%05o:%o) ",
+			instr_count, name[bestmatch],
+			((c - bestaddr) << 2) + l, c, l);
         else
-                printf("%08u (%05o:%o) ", instr_count, c, l);
+                fprintf(tracefp, "%08u (%05o:%o) ",
+			instr_count, c, l);
 }
 
+/***********************************************************************
+* disassemble one instruction
+***********************************************************************/
 void printinstr(WORD12 code, BIT cwmf)
 {
         const INSTRUCTION *ip;
@@ -234,25 +261,30 @@ void printinstr(WORD12 code, BIT cwmf)
                 case OP_BRAS:
                 case OP_BRAW:
                         if (ip->cwmf == cwmf && ip->code == code) {
-                                printf ("%-4.4s        %04o", ip->name, code);
+                                fprintf(tracefp, "%-4.4s        %04o",
+					ip->name, code);
                                 return;
                         }
                         break;
                 case OP_TOP4:
                         if (ip->cwmf == cwmf && ip->code == (code & 0x0ff)) {
-                                printf ("%-4.4s  %4u  %04o", ip->name, code >> 8, code);
+                                fprintf(tracefp, "%-4.4s  %4u  %04o",
+					ip->name, code >> 8, code);
                                 return;
                         }
                         break;
                 case OP_TOP6:
                         if (ip->cwmf == cwmf && ip->code == (code & 0x03f)) {
-                                printf ("%-4.4s  %02o    %04o", ip->name, code >> 6, code);
+                                fprintf(tracefp, "%-4.4s  %02o    %04o",
+					ip->name, code >> 6, code);
                                 return;
                         }
                         break;
                 case OP_TOP10:
                         if (ip->cwmf == cwmf && ip->code == (code & 0x003)) {
-                                printf ("%-4.4s  %04o  %04o  (%s)", ip->name, code >> 2, code, relsym(code >> 2, true));
+                                fprintf(tracefp, "%-4.4s  %04o  %04o  (%s)",
+					ip->name, code >> 2, code,
+					relsym(code >> 2, true));
                                 return;
                         }
                         break;
@@ -261,9 +293,14 @@ void printinstr(WORD12 code, BIT cwmf)
                 }
                 ip++;
         }
-        printf("unknown instruction %04o", code);
+        fprintf(tracefp, "unknown instruction %04o", code);
 }
 
+/***********************************************************************
+* convert a machine word into 8 two digit octal value and into
+* 8 character ASCII string: "OO OO OO OO OO OO OO OO AAAAAAAA"
+* warning: static buffer, not thread save!
+***********************************************************************/
 char *word2string(WORD48 w)
 {
         static char buf[33];
@@ -279,6 +316,10 @@ char *word2string(WORD48 w)
         return buf;
 }
 
+/***********************************************************************
+* convert a Loop Control Word into a string
+* warning: static buffer, not thread save!
+***********************************************************************/
 char *lcw2string(WORD48 w)
 {
         static char buf[33];
@@ -295,6 +336,9 @@ char *lcw2string(WORD48 w)
         return buf;
 }
 
+/***********************************************************************
+* do a complete core momory dump in readable text form
+***********************************************************************/
 void memdump(void) {
         WORD48 w;
         ADDR15 memaddr = 0;
@@ -339,7 +383,7 @@ void memdump(void) {
 void start(CPU *cpu)
 {
 	prepMessage(cpu); printf("start\n");
-	cpu->busy = true;
+	cpu->bHLTF = false;
 }
 
 /***********************************************************************
@@ -349,14 +393,13 @@ void stop(CPU *cpu)
 {
 	prepMessage(cpu); printf("stop\n");
 	cpu->rT = 0;
-	cpu->bTROF = 0;	// idle the processor
-	cpu->bPROF = 0;
-	cpu->busy = 0;
-	cpu->cycleLimit = 0;	// exit the loop
+	cpu->bTROF = false;	// idle the processor
+	cpu->bPROF = false;
+	cpu->bHLTF = true;
 }
 
 /***********************************************************************
-* Presets the processor registers for a load condition at C=runAddr
+* Presets the processor registers for a start at C=runAddr
 ***********************************************************************/
 void preset(CPU *cpu, ADDR15 runAddr)
 {
@@ -368,21 +411,22 @@ void preset(CPU *cpu, ADDR15 runAddr)
         cpu->bTROF = false;	// cause instrction fetch
         cpu->rR = 0;
         cpu->rS = 0;
+	cpu->bHLTF = true;
 }
 
-/*
- * Instruction execution driver for the B5500 processor. This function is
- * an artifact of the emulator design and does not represent any physical
- * process or state of the processor. This routine assumes the registers are
- * set up -- in particular there must be a syllable in T with TROF set, the
- * current program word must be in P with PROF set, and the C & L registers
- * must point to the next syllable to be executed.
- * This routine will continue to run while cpu->r.runCycles < cpu->r.cycleLimit
- */
+/***********************************************************************
+* Instruction execution driver for the B5500 processor.
+* This routine assumes the C:L registers are set up.
+* if TROF is set an instruction must be in T
+* and C:L must point to the next instruction.
+* if PROF is set, the current program word must be in P.
+***********************************************************************/
 void run(CPU *cpu)
 {
 	// execute one instruction
 	sim_instr(cpu);
+
+#if 0
 	// check for any registers gone wild
 #define CHECK(R,M,T) if((cpu->rR) & ~(M))printf("*\tCHECK "T" = %llo\n", (WORD48)(cpu->rR))
 	CHECK(A, MASK_WORD48, "A");
@@ -391,10 +435,32 @@ void run(CPU *cpu)
 	CHECK(F, MASK_ADDR15, "F");
 	CHECK(M, MASK_ADDR15, "M");
 	CHECK(P, MASK_WORD48, "P");
-	CHECK(R, MASK_ADDR15,  "R");
+	CHECK(R, MASK_ADDR15, "R");
 	CHECK(S, MASK_ADDR15, "S");
+#endif
+
+	// check for IAR not serviced for nnn instructions
+	if (CC->IAR) {
+		iar_count++;
+		if (iar_count == 100000) {
+			// switch on instruction trace
+			dotrcins = true;
+			tracefp = fopen("instrace.txt", "w");
+		}
+		if (iar_count == 110000) {
+			// do a memory dump and exit
+			memdump();
+			stop(cpu);
+		}
+	} else {
+		iar_count = 0;
+	}
 }
 
+/***********************************************************************
+* called back from emulator code when an instruction has been fetched
+* into T
+***********************************************************************/
 void sim_traceinstr(CPU *cpu) {
 	if (dotrcins) {
 		ADDR15 c;
@@ -407,78 +473,78 @@ void sim_traceinstr(CPU *cpu) {
 		} else {
 			l--;
 		}
-		printf("\n");
+		// start a new line and print a symbolic name (if available)
+		// and the raw C:L values
+		fprintf(tracefp, "\n");
 		codesym(c, l);
+		// print the instruction itself
 		printinstr(cpu->rT, cpu->bCWMF);
-		printf("\n");
+		// end the line
+		fprintf(tracefp, "\n");
 	}
 }
 
+/***********************************************************************
+* print all useful registers
+* word mode and char mode are different printouts
+***********************************************************************/
+void sim_printregs(CPU *cpu) {
+	if (cpu->bCWMF) {
+		fprintf(tracefp, "\tSI(M:GH)=%05o:%02o A=%s (%u) Y=%02o\n",
+			cpu->rM, cpu->rGH,
+			word2string(cpu->rA), cpu->bAROF,
+			(WORD6)cpu->rY);
+		fprintf(tracefp, "\tDI(S:KV)=%05o:%02o B=%s (%u) Z=%02o\n",
+			cpu->rS, cpu->rKV,
+			word2string(cpu->rB), cpu->bBROF,
+			cpu->rZ);
+		fprintf(tracefp, "\tR=%05o N=%d F=%05o TFFF=%u SALF=%u NCSF=%u T=%04o\n",
+			cpu->rR, cpu->rN, cpu->rF,
+			cpu->bTFFF, cpu->bSALF, cpu->bNCSF, cpu->rT);
+		fprintf(tracefp, "\tX=__%014llo %s\n", cpu->rX, lcw2string(cpu->rX));
+	} else {
+		fprintf(tracefp, "\tA=%016llo(%u) GH=%02o Y=%02o M=%05o F=%05o N=%d NCSF=%u T=%04o\n",
+			cpu->rA, cpu->bAROF,
+			cpu->rGH,
+			(WORD6)cpu->rY, cpu->rM,
+			cpu->rF,
+			cpu->rN, cpu->bNCSF, cpu->rT);
+		fprintf(tracefp, "\tB=%016llo(%u) KV=%02o Z=%02o S=%05o R=%05o MSFF=%u SALF=%u\n",
+			cpu->rB, cpu->bBROF,
+			cpu->rKV,
+			cpu->rZ, cpu->rS,
+			cpu->rR,
+			cpu->bMSFF, cpu->bSALF);
+	}
+}
+
+/***********************************************************************
+* excecute instructions until halted
+***********************************************************************/
 void execute(ADDR15 addr) {
 	preset(cpu, addr);
 
 runagain:
         start(cpu);
-	//printf("runn: C=%05o L=%o T=%04o\n", cpu->r.C, cpu->r.L, cpu->r.T);
-        while (cpu->busy) {
+
+        while (!cpu->bHLTF) {
                 instr_count++;
-#if 0
-                // check for instruction count
-                if (instr_count > 800000) {
-                        dotrcmem = dodmpins = dotrcins = false;
-                        memdump();
-                        closefile(&diskfile);
-                        closefile(&spiofile);
-                        exit (0);
-                } else if (instr_count >= 680000) {
-                        dotrcmem = dodmpins = dotrcins = true;
-                }
-#endif
-                // end check for instruction count
-                cpu->cycleLimit = 1;
+
                 run(cpu);
-                if (cpu->rT == 03011)
-                        printf("\tgotcha 3011!\n");
-                if (dotrcins) {
-                        if (cpu->bCWMF) {
-                                printf("\tSI(M:GH)=%05o:%02o A=%s (%u) Y=%02o\n",
-                                        cpu->rM, cpu->rGH,
-                                        word2string(cpu->rA), cpu->bAROF,
-                                        (WORD6)cpu->rY);
-                                printf("\tDI(S:K:V)=%05o:%02o B=%s (%u) Z=%02o\n",
-                                        cpu->rS, cpu->rKV,
-                                        word2string(cpu->rB), cpu->bBROF,
-                                        cpu->rZ);
-                                printf("\tR=%05o N=%d F=%05o TFFF=%u SALF=%u NCSF=%u T=%04o\n",
-                                        cpu->rR, cpu->rN, cpu->rF,
-                                        cpu->bTFFF, cpu->bSALF, cpu->bNCSF, cpu->rT);
-                                printf("\tX=__%014llo %s\n", cpu->rX, lcw2string(cpu->rX));
-                        } else {
-                                printf("\tA=%016llo(%u) GH=%02o Y=%02o M=%05o F=%05o N=%d NCSF=%u T=%04o\n",
-                                        cpu->rA, cpu->bAROF,
-                                        cpu->rGH,
-                                        (WORD6)cpu->rY, cpu->rM,
-                                        cpu->rF,
-                                        cpu->rN, cpu->bNCSF, cpu->rT);
-                                printf("\tB=%016llo(%u) KV=%02o Z=%02o S=%05o R=%05o MSFF=%u SALF=%u\n",
-                                        cpu->rB, cpu->bBROF,
-                                        cpu->rKV,
-                                        cpu->rZ, cpu->rS,
-                                        cpu->rR,
-                                        cpu->bMSFF, cpu->bSALF);
-                        }
-                }
+		if (dotrcins)
+			sim_printregs(cpu);
         }
-        // CPU stopped
-        printf("\n\n***** CPU stopped *****\nContinue?  ");
+
+        // CPU halted
+        printf("\n\n***** CPU HALT *****\nContinue?  ");
         (void)fgets(linebuf, sizeof linebuf, stdin);
         if (linebuf[0] != 'n')
                 goto runagain;
 }
 
-/*
- * command parser
- */
+/***********************************************************************
+* command parser
+***********************************************************************/
 int command_parser(const command_t *table, const char *op) {
 	const char *delim;
 	const char *equals;
@@ -527,6 +593,9 @@ next:
 	return 0; // OK
 }
 
+/***********************************************************************
+* handle an option/command by passing it to the proper "unit"
+***********************************************************************/
 int handle_option(const char *option) {
 	if (strncmp(option, "spo", 3) == 0) {
                 return spo_init(option); /* console emulation options */
@@ -543,7 +612,9 @@ int handle_option(const char *option) {
 	return 1; // WARNING
 }
 
-/* 60 Hz timer */
+/***********************************************************************
+* 60 Hz timer variables
+***********************************************************************/
 timer_t timerid;
 struct sigevent sev;
 struct itimerspec its;
@@ -552,6 +623,9 @@ sigset_t mask;
 struct sigaction sa;
 extern void timer60hz(sigval);
 
+/***********************************************************************
+* the MAIN program
+***********************************************************************/
 int main(int argc, char *argv[])
 {
 	FILE *inifile = NULL;
@@ -563,11 +637,24 @@ int main(int argc, char *argv[])
         b5500_init_shares();
 
         memset(MAIN, 0, MAXMEM*sizeof(WORD48));
+
+	// P2
+        cpu = P[1];
+        memset(cpu, 0, sizeof(CPU));
+        strcpy(cpu->id, "P2");
+        cpu->acc.id = cpu->id;
+        cpu->isP1 = false;
+
+	// P1
         cpu = P[0];
         memset(cpu, 0, sizeof(CPU));
         strcpy(cpu->id, "P1");
         cpu->acc.id = cpu->id;
         cpu->isP1 = true;
+
+	// make sure P2 is not used
+	CC->P2BF = true;
+	CC->HP2F = true;
 
         // check translate tables bic2ascii and ascii2bic for consistency
         for (addr=0; addr<64; addr++) {
@@ -588,6 +675,7 @@ int main(int argc, char *argv[])
                         break;
                 case 'e':
                         dotrcins = true; /* trace execution */
+			tracefp = fopen("instrace.txt", "w");
                         break;
                 case 'z':
                         cpu->bUS14X = true; /* stop on ZPI */

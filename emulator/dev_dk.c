@@ -14,7 +14,7 @@
 *   read/write/open/lseek
 ***********************************************************************/
 
-#define COMPLAINABOUTNEVERWRITTEN 0
+#define COMPLAINABOUTNEVERWRITTEN 1
 
 #include <stdio.h>
 #include <string.h>
@@ -27,22 +27,31 @@
 #include <fcntl.h>
 #include "common.h"
 
-/*
- * notes:
- * smallest entity: B475 Disk File Storage Module
- *   4x Disks (8 sides) of 50 Tracks of 24000 characters = 9,600,000 characters or 40,000 segments
- * next entity: B471 Disk File Electronics Unit
- *   controls upto 5x B475 = 48,000,000 characters or 200,000 segments
- * top entity: B5470 Disk File Control Unit
- *   controls upto 10x B471 = 480,000,000 characters or 2,000,000 segments
- * system max: 2x B5470 = 960,000,000 characters or 4,000,000 segments
- *
- * DKA and DKB therefore each provide access to 2,000,000 segments
- *
- * we emulate using 256 bytes per segment, the physical disk space required is 512,000,000 bytes
- * (each for DKA and DKB)
- * 
- */
+/***********************************************************************
+* notes:
+* a segment: 30 words of 48 bits or 8 BIC/BCL characters
+* smallest entity: B475 Disk File Storage Module
+*   4x Disks (8 sides) of 50 Tracks of 24000 characters = 9,600,000
+*   characters or 40,000 segments
+* next entity: B471 Disk File Electronics Unit
+*   controls upto 5x B475 = 48,000,000 characters or 200,000 segments
+* top entity: B5470 Disk File Control Unit
+*   controls upto 10x B471 = 480,000,000 characters or 2,000,000 segments
+* system max: 2x B5470 = 960,000,000 characters or 4,000,000 segments
+*
+* DKA and DKB therefore each provide access to 2,000,000 segments
+*
+* we convert each segment into 240 ASCII characters before storing it
+* we emulate using 256 bytes per segment
+* the maximum (at 10 ESU with 5 disks each) physical disk space required
+* is 512,000,000 bytes (each for DKA and DKB)
+*
+* we use the remaining 16 bytes per segment for trapping access errors
+* by placing the EU, DISKFILEADDR, CHECKSUM there (all in ASCII):
+* 0123456789ABCDEF
+* _ssss_e_dddddd_\n
+* 
+***********************************************************************/
 #define DFCU_PER_SYSTEM	2
 #define	DFEU_PER_DFCU	10
 #define	DFSM_PER_DFEU	5
@@ -53,10 +62,11 @@
 
 #define NAMELEN 100
 #define	DBUFLEN	260
+#define	DATALEN 240
 
-/*
- * for each supported disk drive
- */
+/***********************************************************************
+* for each supported disk drive
+***********************************************************************/
 struct dk {
 	char	filename[NAMELEN];
 	int	df;	// we do not use stdio here AND we assume we will never get 0 as the handle
@@ -68,20 +78,24 @@ struct dk {
 	char	*dbufp;
 } dk[DFCU_PER_SYSTEM];
 
-/*
- * optional open file to write debugging traces into
- */
+/***********************************************************************
+* optional file to write debugging traces into
+***********************************************************************/
 static FILE *trace = NULL;
+
+/***********************************************************************
+* currently selected unit or NULL in command interpreter
+***********************************************************************/
 static struct dk *dkx = NULL;
 
-/*
- * set to dka/dkb
- */
+/***********************************************************************
+* set to dka/dkb
+***********************************************************************/
 int set_dk(const char *v, void *data) {dkx = dk+(int)data; return 0; }
 
-/*
- * specify or close the trace file
- */
+/***********************************************************************
+* specify or close the trace file
+***********************************************************************/
 int set_dktrace(const char *v, void *) {
 	// if open, close existing trace file
 	if (trace) {
@@ -97,9 +111,9 @@ int set_dktrace(const char *v, void *) {
 	return 0; // OK
 }
 
-/*
- * specify rwtrace on or off
- */
+/***********************************************************************
+* specify rwtrace on or off
+***********************************************************************/
 int set_dkrwtrace(const char *v, void *) {
 	if (!dkx) {
 		printf("dk not specified\n");
@@ -116,9 +130,9 @@ int set_dkrwtrace(const char *v, void *) {
 	return 0; // OK
 }
 
-/*
- * set number of simulated eus for a DFCU
- */
+/***********************************************************************
+* set number of simulated eus for a DFCU
+***********************************************************************/
 int set_dkeus(const char *v, void *) {
 	char *p;
 	if (!dkx) {
@@ -133,9 +147,9 @@ int set_dkeus(const char *v, void *) {
 	return 0; // OK
 }
 
-/*
- * specify or close the file for emulation
- */
+/***********************************************************************
+* specify or close the file for emulation
+***********************************************************************/
 int set_dkfile(const char *v, void *) {
 	if (!dkx) {
 		printf("dk not specified\n");
@@ -170,9 +184,9 @@ int set_dkfile(const char *v, void *) {
 	return 0; // OK
 }
 
-/*
- * command table
- */
+/***********************************************************************
+* command table
+***********************************************************************/
 const command_t dk_commands[] = {
 	{"dka",		set_dk,	(void *) 0},
 	{"dkb", 	set_dk, (void *) 1},
@@ -183,265 +197,301 @@ const command_t dk_commands[] = {
 	{NULL,		NULL},
 };
 
-/*
- * Initialize command from argv scanner or special SPO input
- */
+/***********************************************************************
+* Initialize command from argv scanner or special SPO input
+***********************************************************************/
 int dk_init(const char *option) {
 	dkx = NULL; // require specification of a drive
 	return command_parser(dk_commands, option);
 }
 
-/*
- * query ready status
- */
+/***********************************************************************
+* query ready status
+***********************************************************************/
 BIT dk_ready(unsigned index) {
 	if (index < DFCU_PER_SYSTEM)
 		return dk[index].ready;
 	return false;
 }
 
-/*
- * read or write, check or inquire
- */
+/***********************************************************************
+* read or write, check or inquire
+***********************************************************************/
 WORD48 dk_access(WORD48 iocw) {
-        unsigned unitdes, count, segcnt, words;
-        // prepare result with unit and read flag
-        WORD48 result = iocw & (MASK_IODUNIT | MASK_IODREAD);
-        ACCESSOR acc;
-        int i, j, k, retry;
+	unsigned unitdes, count, segcnt, words;
+	// prepare result with unit and read flag
+	WORD48 result = iocw & (MASK_IODUNIT | MASK_IODREAD);
+	ACCESSOR acc;
+	int i, j, k, retry;
 	int eu, diskfileaddr;
 	off_t seekval;
 	ssize_t cnt;
 	struct dk *dkx;
 
-        unitdes = (iocw & MASK_IODUNIT) >> SHFT_IODUNIT;
-        count = (iocw & MASK_WCNT) >> SHFT_WCNT;
-        segcnt = (iocw & MASK_IODSEGCNT) >> SHFT_IODSEGCNT;
-        acc.addr = (iocw & MASK_ADDR) >> SHFT_ADDR;
-        // number of words to do
-        words = (iocw & MASK_IODUSEWC) ? count : segcnt * 30;
+	unitdes = (iocw & MASK_IODUNIT) >> SHFT_IODUNIT;
+	count = (iocw & MASK_WCNT) >> SHFT_WCNT;
+	segcnt = (iocw & MASK_IODSEGCNT) >> SHFT_IODSEGCNT;
+	acc.addr = (iocw & MASK_ADDR) >> SHFT_ADDR;
+	// number of words to do
+	words = (iocw & MASK_IODUSEWC) ? count : segcnt * 30;
 
-        acc.id = unit[unitdes][0].name;
-        acc.MAIL = false;
+	acc.id = unit[unitdes][0].name;
+	acc.MAIL = false;
 	dkx = dk + unit[unitdes][0].index;
 
-        if (!dkx->ready) {
-                result |= MASK_IORNRDY | (acc.addr << SHFT_ADDR);
-                goto retresult;
-        }
+	if (!dkx->ready) {
+		result |= MASK_IORNRDY | (acc.addr << SHFT_ADDR);
+		goto retresult;
+	}
 
-        // fetch first word from core with disk address
-        fetch(&acc);
-        diskfileaddr = 0;
-        eu = (acc.word >> 36) & 0xf;
-        for (i=5; i>=0; i--) {
-                unsigned char ch = (acc.word >> 6*i) & 0xf;
-                if (ch > 9) {
-                          printf("*** FATAL: disk file address has value > 9 ***\n");
-                          exit(2);
-                }
-                diskfileaddr *= 10;
-                diskfileaddr += ch;
-        }
+	// fetch first word from core with disk address
+	fetch(&acc);
+	diskfileaddr = 0;
+	eu = (acc.word >> 36) & 0xf;
+	for (i=5; i>=0; i--) {
+		unsigned char ch = (acc.word >> 6*i) & 0xf;
+		if (ch > 9) {
+			printf("*** FATAL: disk file address has value > 9 ***\n");
+			exit(2);
+		}
+		diskfileaddr *= 10;
+		diskfileaddr += ch;
+	}
 
 	// proceed to first data word
 	acc.addr++;
 
-        if (trace) {
-                fprintf(trace, "%08u UNIT=%u IOCW=%016llo, EU:DFA=%d:%06d", instr_count, unitdes, iocw, eu, diskfileaddr);
-        }
+	if (trace) {
+		fprintf(trace, "%08u UNIT=%u IOCW=%016llo, EU:DFA=%d:%06d", instr_count, unitdes, iocw, eu, diskfileaddr);
+	}
 
-        if (eu < 0 || eu >= dkx->eus || diskfileaddr < 0 || diskfileaddr >= SEGS_PER_DFEU) {
-                // not supported
-                if (trace)
-                        fprintf(trace, " NOT SUPPORTED\n");
+	if (eu < 0 || eu >= dkx->eus || diskfileaddr < 0 || diskfileaddr >= SEGS_PER_DFEU) {
+		// not supported
+		if (trace)
+			fprintf(trace, " NOT SUPPORTED\n");
 		if (dkx->rwtrace)
 			putchar('?');
-                result |= MASK_IORNRDY | MASK_IORD21;
-        } else if (iocw & MASK_IODMI) {
-                // special case when memory inhibit
-                dkx->readcheck = true;
-                if (trace)
-                        fprintf(trace, " READ CHECK SEGMENTS=%02u\n", segcnt);
+		result |= MASK_IORNRDY | MASK_IORD21;
+	} else if (iocw & MASK_IODMI) {
+		// special case when memory inhibit
+		dkx->readcheck = true;
+		if (trace)
+			fprintf(trace, " READ CHECK SEGMENTS=%02u\n", segcnt);
 		if (dkx->rwtrace)
 			putchar('c');
-        } else if (words == 0) {
-                // special case when words=0
-                if (trace)
-                        fprintf(trace, " INTERROGATE\n");
+	} else if (words == 0) {
+		// special case when words=0
+		if (trace)
+			fprintf(trace, " INTERROGATE\n");
 		if (dkx->rwtrace)
 			putchar('i');
-        } else if (iocw & MASK_IODREAD) {
-                // regular read
-                if (trace)
-                        fprintf(trace, " READ WORDS=%02u\n", words);
+	} else if (iocw & MASK_IODREAD) {
+		// regular read
+		if (trace)
+			fprintf(trace, " READ WORDS=%02u\n", words);
 		if (dkx->rwtrace)
 			putchar('r');
 
-                // read until word count exhausted
-                while (words > 0) {
-                        // get the physical record
-                        seekval = (eu*SEGS_PER_DFEU+diskfileaddr)*256;
-                        // on read problems retry...
+		// read until word count exhausted
+		while (words > 0) {
+			unsigned sum;
+			unsigned xsum;
+			int xeu, xdiskfileaddr;
+			BIT check = true;
+
+			// get the physical record
+			seekval = (eu*SEGS_PER_DFEU+diskfileaddr)*256;
+			// on read problems retry...
 			retry = 0;
-		readagain:
-                        if (lseek(dkx->df, seekval, SEEK_SET) != seekval) {
-                                printf("*** DISKIO READ SEEK ERROR %d DFA=%d:%06d ***\n", errno, eu, diskfileaddr);
+			readagain:
+			if (lseek(dkx->df, seekval, SEEK_SET) != seekval) {
+				printf("*** DISKIO READ SEEK ERROR %d DFA=%d:%06d ***\n", errno, eu, diskfileaddr);
 				// report not ready
 				result |= MASK_IORNRDY;
 				goto retresult;
 			}
-                        cnt = read(dkx->df, dkx->dbuf, 256);
+			cnt = read(dkx->df, dkx->dbuf, 256);
 			if (cnt == 0) {
 				// read past current end
 #if COMPLAINABOUTNEVERWRITTEN
-                                printf("*** DISKIO READ PAST EOF DFA=%d:%06d ***\n", eu, diskfileaddr);
+				printf("*** DISKIO READ PAST EOF DFA=%d:%06d ***\n", eu, diskfileaddr);
 #endif
 				goto pasteof;
 			}
-                        if (cnt != 256) {
-                                printf("*** DISKIO READ ERROR %d DFA=%d:%06d RETRYING... ***\n", errno, eu, diskfileaddr);
+			if (cnt != 256) {
+				printf("*** DISKIO READ ERROR %d DFA=%d:%06d RETRYING... ***\n", errno, eu, diskfileaddr);
 				++retry;
 				if (retry < 10)
 					goto readagain;
 				// report not ready
-		                result |= MASK_IORNRDY;
+				result |= MASK_IORNRDY;
 				goto retresult;
 			}
 			// put and end of string
 			dkx->dbuf[256] = 0;
 
 			// if the signature is missing or wrong, this record has never been written
-			if (strncmp(dkx->dbuf, "DADDR(", 6) != 0 ||
-				(dkx->dbuf[6]-'0') != eu ||
-				dkx->dbuf[7] != ':' ||
-				strtol(dkx->dbuf+8, NULL, 10) != diskfileaddr ||
-				dkx->dbuf[14] != ')') {
+			dkx->dbufp = dkx->dbuf + DATALEN;
+			if (sscanf(dkx->dbufp, "_%04x_%01d_%06d_\n", &xsum, &xeu, &xdiskfileaddr) != 3) {
 #if COMPLAINABOUTNEVERWRITTEN
 				printf("*** DISKIO READ OF RECORD NEVER WRITTEN DFA=%d:%06d ***\n", eu, diskfileaddr);
-				printf("Segment:'%s'\n", dkx->dbuf);
+				//printf("Segment:'%s'\n", dkx->dbuf);
 #endif
-                        pasteof:
-				// return a ZERO filled segment
-				memset(dkx->dbuf, 0, 256);
+		pasteof:
+				// return a '0' filled segment
+				memset(dkx->dbuf, '0', 256);
 				dkx->dbuf[255] = '\n';
-                        }
-			// set pointer past signature
-                        dkx->dbufp = dkx->dbuf + 15;
+				check = false;
+			}
+			// set pointer back to segment data
+			dkx->dbufp = dkx->dbuf;
+			sum = 0;
 
-                        // always handle chunks of 30 words
-                        for (i=0; i<3; i++) {
-                                if (trace)
-                                        fprintf(trace, "\t%05o %d:%06d", acc.addr, eu, diskfileaddr);
-                                for (j=0; j<10; j++) {
-                                        if (trace)
-                                                fprintf(trace, " %-8.8s", dkx->dbufp);
-                                        // store until word count exhausted
-                                        if (words > 0) {
+			// always handle chunks of 30 words
+			for (i=0; i<3; i++) {
+				if (trace)
+					fprintf(trace, "\t%05o %d:%06d", acc.addr, eu, diskfileaddr);
+				for (j=0; j<10; j++) {
+					if (trace)
+						fprintf(trace, " %-8.8s", dkx->dbufp);
+					// store until word count exhausted
+					if (words > 0) {
 						acc.word = 0LL;
 						for (k=0; k<8; k++) {
-							if (*dkx->dbufp >= ' ') {
-								acc.word = (acc.word << 6) | translatetable_ascii2bic[*dkx->dbufp & 0x7f];
-								dkx->dbufp++;
-							} else {
-								acc.word = (acc.word << 6); // blank
-							}
+							acc.word = (acc.word << 6) | translatetable_ascii2bic[*dkx->dbufp & 0x7f];
+							sum += *dkx->dbufp;
+							dkx->dbufp++;
 						}
-                                                store(&acc);
-                                                acc.addr++;
-                                                words--;
-                                        }
-                                }
-                                if (trace)
-                                        fprintf(trace, "\n");
-                        }
-                        // next record address
-                        diskfileaddr++;
-                }
-        } else {
-                // regular write
-                if (trace)
-                        fprintf(trace, " WRITE WORDS=%02u\n", words);
+						store(&acc);
+						acc.addr++;
+						words--;
+					} else {
+						for (k=0; k<8; k++) {
+							sum += *dkx->dbufp;
+							dkx->dbufp++;
+						}
+					}
+				}
+				if (trace)
+					fprintf(trace, "\n");
+			} // chunk of 30 words
+
+			// sanity check - should never fail
+			if (dkx->dbufp != dkx->dbuf+DATALEN) {
+				printf("*** DISKIO READ SANITY CHECK(1) FAILED ***\n");
+				exit(2);
+			}
+
+			if (check) {
+				// check checksum
+				if (sum != xsum) {
+					printf("*** DISKIO READ CHECKSUM MISMATCH ***\n");
+				}
+
+				// check eu:diskfileaddr
+				if (eu != xeu || diskfileaddr != xdiskfileaddr) {
+					printf("*** DISKIO READ EU:DISKFILEADDR MISMATCH ***\n");
+				}
+			}
+
+			// next record address
+			diskfileaddr++;
+		} // while words
+	} else {
+		// regular write
+		if (trace)
+			fprintf(trace, " WRITE WORDS=%02u\n", words);
 		if (dkx->rwtrace)
 			putchar('w');
 
-                // keep writing records until word count is exhausted
-                while (words > 0) {
-                        // prepare buffer pointer and write header
-                        dkx->dbufp = dkx->dbuf;
-                        dkx->dbufp += sprintf(dkx->dbufp, "DADDR(%d:%06d)", eu, diskfileaddr);
-
-                        // always handle chunks of 30 words
-                        for (i=0; i<3; i++) {
-                                if (trace)
-                                        fprintf(trace, "\t%05o %d:%06d", acc.addr, eu, diskfileaddr);
-                                for (j=0; j<10; j++) {
-                                        if (words > 0) {
-                                                // if word count NOT exhausted, write next word
-                                                fetch(&acc);
-                                                acc.addr++;
+		// keep writing records until word count is exhausted
+		while (words > 0) {
+			// prepare buffer pointer and checksum
+			unsigned sum = 0;
+			dkx->dbufp = dkx->dbuf;
+			// always handle chunks of 30 words
+			for (i=0; i<3; i++) {
+				if (trace)
+					fprintf(trace, "\t%05o %d:%06d", acc.addr, eu, diskfileaddr);
+				for (j=0; j<10; j++) {
+					if (words > 0) {
+						// if word count NOT exhausted, write next word
+						fetch(&acc);
+						acc.addr++;
 						for (k=0; k<8; k++) {
-							dkx->dbufp[7-k] = translatetable_bic2ascii[acc.word & 0x3f];
+							unsigned ch = translatetable_bic2ascii[acc.word & 0x3f];
+							dkx->dbufp[7-k] = ch;
 							acc.word >>= 6;
+							sum += ch;
 						}
-                                                words--;
-                                        } else {
-                                                // if word count exhausted, write zeros
-						for (k=0; k<8; k++)
+						words--;
+					} else {
+						// if word count exhausted, write zeros
+						for (k=0; k<8; k++) {
 							dkx->dbufp[7-k] = '0';
-                                        }
+							sum += '0';
+						}
+					}
 					dkx->dbufp += 8;
-                                        if (trace)
-                                                fprintf(trace, " %-8.8s", dkx->dbufp-8);
-                                }
-                                if (trace)
-                                        fprintf(trace, "\n");
-                        }
+					if (trace)
+						fprintf(trace, " %-8.8s", dkx->dbufp-8);
+				}
+				if (trace)
+					fprintf(trace, "\n");
+			} // chunk of 30 words
 
-                        // mark end of record
-                        dkx->dbufp += sprintf(dkx->dbufp, "\n");
+			// sanity check - should never fail
+			if (dkx->dbufp != dkx->dbuf+DATALEN) {
+				printf("*** DISKIO WRITE SANITY CHECK(1) FAILED ***\n");
+				exit(2);
+			}
 
-                        // sanity check - should never fail
-                        if (dkx->dbufp != dkx->dbuf+256) {
-                                printf("*** DISKIO WRITE SANITY CHECK FAILED ***\n");
-                                exit(2);
-                        }
+			// write header
+			dkx->dbufp = dkx->dbuf + DATALEN;
+			dkx->dbufp += sprintf(dkx->dbufp, "_%04x_%01d_%06d_\n",
+				sum, eu, diskfileaddr);
 
-                        // write record to physical file
-                        seekval = (eu*SEGS_PER_DFEU+diskfileaddr)*256;
+			// sanity check - should never fail
+			if (dkx->dbufp != dkx->dbuf+256) {
+				printf("*** DISKIO WRITE SANITY CHECK(2) FAILED ***\n");
+				exit(2);
+			}
+
+			// write record to physical file
+			seekval = (eu*SEGS_PER_DFEU+diskfileaddr)*256;
 			retry = 0;
-		writeagain:
-                        if (lseek(dkx->df, seekval, SEEK_SET) != seekval) {
-                                printf("*** DISKIO WRITE SEEK ERROR %d DFA=%d:%06d ***\n", errno, eu, diskfileaddr);
+			writeagain:
+			if (lseek(dkx->df, seekval, SEEK_SET) != seekval) {
+				printf("*** DISKIO WRITE SEEK ERROR %d DFA=%d:%06d ***\n", errno, eu, diskfileaddr);
 				// report not ready
 				result |= MASK_IORNRDY;
 				goto retresult;
 			}
-                        if (write(dkx->df, dkx->dbuf, 256) != 256) {
-                                printf("*** DISKIO WRITE ERROR %d DFA=%d:%06d RETRYING... ***\n", errno, eu, diskfileaddr);
+			if (write(dkx->df, dkx->dbuf, 256) != 256) {
+				printf("*** DISKIO WRITE ERROR %d DFA=%d:%06d RETRYING... ***\n", errno, eu, diskfileaddr);
 				++retry;
 				if (retry < 10)
 					goto writeagain;
 				// report not ready
-		                result |= MASK_IORNRDY;
+				result |= MASK_IORNRDY;
 				goto retresult;
 			}
-                        // next record address
-                        diskfileaddr++;
-                }
 
-        }
+			// next record address
+			diskfileaddr++;
+		} // while words
+	}
 retresult:
-        result |= (acc.addr << SHFT_ADDR);
-        if (iocw & MASK_IODUSEWC)
-                result |= ((WORD48)words << SHFT_WCNT);
+	result |= (acc.addr << SHFT_ADDR);
+	if (iocw & MASK_IODUSEWC)
+		result |= ((WORD48)words << SHFT_WCNT);
 
 	if (trace)
 		fflush(trace);
 	if (dkx->rwtrace)
 		fflush(stdout);
 
-        return result;
+	return result;
 }
 
 

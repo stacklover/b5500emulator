@@ -73,10 +73,10 @@ void causeSyllableIrq(CPU *cpu, WORD8 irq, const char *reason) {
 		irq, reason, cpu->rI);
 }
 
-/*
- * table of IRQs
- * indexed by cell address - 020
- */
+/***********************************************************************
+* table of IRQs
+* indexed by cell address - 020
+***********************************************************************/
 IRQ irq[48] = {
 	// general interrupts
         /*20*/ {"NA20"},
@@ -131,13 +131,13 @@ IRQ irq[48] = {
         /*77*/ {"NA77"},
 };
 
-/*
- * Called by all modules to signal that an interrupt has occurred and
- * to invoke the interrupt prioritization mechanism. This will result in
- * an updated vector address in the IAR. Can also be called to reprioritize
- * any remaining interrupts after an interrupt is handled. If no interrupt
- * condition exists, CC->IAR is set to zero
- */
+/***********************************************************************
+* Called by all modules to signal that an interrupt has occurred and
+* to invoke the interrupt prioritization mechanism. This will result in
+* an updated vector address in the IAR. Can also be called to reprioritize
+* any remaining interrupts after an interrupt is handled. If no interrupt
+* condition exists, CC->IAR is set to zero
+***********************************************************************/
 void signalInterrupt(const char *id, const char *cause) {
 	// use a temporary variable to ensure a monolithic store at the end
 	ADDR15 temp = 0;
@@ -179,11 +179,11 @@ void signalInterrupt(const char *id, const char *cause) {
 		instr_count, id, cause, P[0]->rI, P[1]->rI);
 }
 
-/*
- * Resets an interrupt based on the current setting of CC->IAR, then
- * re-prioritices any remaining interrupts, leaving the new vector address
- * in CC->IAR
- */
+/***********************************************************************
+* Resets an interrupt based on the current setting of CC->IAR, then
+* re-prioritices any remaining interrupts, leaving the new vector address
+* in CC->IAR
+***********************************************************************/
 void clearInterrupt(ADDR15 iar) {
         if (iar) {
                 // current active IRQ
@@ -282,11 +282,10 @@ void clearInterrupt(ADDR15 iar) {
         signalInterrupt("CC", "AGAIN");
 };
 
-/*
- * handle 60Hz timer
- *
- * warning: this can be called from another thread or even interrupt context
- */
+/***********************************************************************
+* handle 60Hz timer
+* warning: this can be called from another thread or even interrupt context
+***********************************************************************/
 void timer60hz(union sigval sv) {
 	WORD6 temp = CC->TM;
 	temp = (temp+1) & 077;
@@ -299,21 +298,20 @@ void timer60hz(union sigval sv) {
 	}
 }
 
-/*
- * Called by P1 to initiate P2. Assumes that an INCW has been stored at
- * memory location @10. If P2 is busy or not present, sets the P2 busy
- * interrupt. Otherwise, loads the INCW into P2's A register and initiates
- * the processor
- */
+/***********************************************************************
+* Called by P1 to initiate P2. Assumes that an INCW has been stored at
+* memory location @10. If P2 is busy or not present, sets the P2 busy
+* interrupt. Otherwise, loads the INCW into P2's A register and initiates
+* the processor
+***********************************************************************/
 void initiateP2(CPU *cpu)
 {
 	if (traceirq != NULL) {
 		prepMessage(cpu);
 		fprintf(traceirq, "initiateP2 - ");
 	}
-	// always cause P2 busy IRQ (for now)
 
-	if (true /* P2BF || !P2 */) {
+	if (CC->P2BF) {
 		if (traceirq != NULL)
 			fprintf(traceirq, "busy or not available\n");
 		CC->CCI12F = true;
@@ -321,25 +319,29 @@ void initiateP2(CPU *cpu)
 	} else {
 		if (traceirq != NULL)
 			fprintf(traceirq, "done\n");
-		//P2BF = 1;
+		//P2BF = true;
 		//ccLatch |= 0x10;
 		//HP2F = 0;
 		//initiateAsP2();
 	}
 }
 
+/***********************************************************************
+* Called by P1 to stop P2
+***********************************************************************/
 void haltP2(CPU *cpu)
 {
 	if (traceirq != NULL) {
 		prepMessage(cpu);
 		printf("haltP2");
 	}
+	CC->HP2F = true;
 }
 
-/*
- * table of I/O units
- * indexed by unit designator and read bit of I/O descriptor
- */
+/***********************************************************************
+* table of I/O units
+* indexed by unit designator and read bit of I/O descriptor
+***********************************************************************/
 UNIT unit[32][2] = {
 	/*NO     NAME RDYBIT INDEX READYF    WRITEF    NULL     NAME RDYBIT INDEX READYF    READF     BOOTF */
         /*00*/ {{NULL, 0, 0},                                  {NULL, 0, 0}},
@@ -376,9 +378,9 @@ UNIT unit[32][2] = {
         /*31*/ {{"MTT", 47-32, 15, mt_ready, mt_access, NULL}, {"MTT", 47-32, 15, mt_ready, mt_access, NULL}},
 };
 
-/*
- * the IIO operation is executed here
- */
+/***********************************************************************
+* the IIO operation is executed here
+***********************************************************************/
 void initiateIO(CPU *cpu) {
         ACCESSOR acc;
         WORD48 iocw;
@@ -439,15 +441,15 @@ void initiateIO(CPU *cpu) {
         signalInterrupt("IO", "COMPLETE");
 }
 
-/*
- * check which units are ready
- */
+/***********************************************************************
+* check which units are ready
+***********************************************************************/
 WORD48 interrogateUnitStatus(CPU *cpu) {
 	int i, j;
 	WORD48 unitsready = 0LL;
 
-#if 0
-        // TODO: simulate timer - this should NOT be done this way - fix it
+#if SIMULATEDTIMER
+        // simulate timer
         static int td = 0;
         if (++td > 200) {
 		union sigval sv;
@@ -465,9 +467,9 @@ WORD48 interrogateUnitStatus(CPU *cpu) {
         return unitsready;
 }
 
-/*
- * interrogate the next free I/O channel
- */
+/***********************************************************************
+* interrogate the next free I/O channel
+***********************************************************************/
 WORD48 interrogateIOChannel(CPU *cpu) {
         WORD48 result = 0;
 
@@ -477,10 +479,10 @@ WORD48 interrogateIOChannel(CPU *cpu) {
         return result;
 }
 
-/*
- * Called by a requestor module passing accessor object "acc" to fetch a
- * word from memory.
- */
+/***********************************************************************
+* Called by a requestor module passing accessor object "acc" to fetch a
+* word from memory.
+***********************************************************************/
 void fetch(ACCESSOR *acc)
 {
         BIT watched = dotrcmem;
@@ -504,10 +506,10 @@ void fetch(ACCESSOR *acc)
         }
 }
 
-/*
- * Called by requestor module passing accessor object "acc" to store a
- * word into memory.
- */
+/***********************************************************************
+* Called by requestor module passing accessor object "acc" to store a
+* word into memory.
+***********************************************************************/
 void store(ACCESSOR *acc)
 {
         BIT watched = dotrcmem;
@@ -529,6 +531,5 @@ void store(ACCESSOR *acc)
                                 acc->addr, acc->word, acc->id);
         }
 }
-
 
 

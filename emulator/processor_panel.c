@@ -31,6 +31,7 @@ int main(int argc, char	*argv[])
 	while (1) {
 		printf("\033[H");
 		b5500_pdp_text(P[0]);
+		printf("IAR=%02o\n", CC->IAR);
 		//sleep(1);
 	}
 	return 0;

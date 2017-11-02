@@ -886,6 +886,8 @@ void storeInterrupt(CPU *cpu, int forced, int test) {
 #ifdef NOSIMH
 	// TODO add P2 specific stuff here
         if (!cpu->isP1) {
+		cpu->bHLTF = true;
+		cpu->bTROF = false;
 #else
         if (cpu_index) {
            P2_run = 0;          /* Clear run flag */ // TODO inform Richard
@@ -898,61 +900,6 @@ void storeInterrupt(CPU *cpu, int forced, int test) {
         }
     }
 }
-
-#ifndef NOSIMH
-/* Check if in idle loop.
-   assume that current instruction is ITI */
-/* Typical idle loop for MCP is:
-
-  -1   ITI                               0211
-  +0   TUS                               2431
-  +1   OPDC  address1                    xxx2
-  +2   LOR                               0215
-  +3   OPDC  address2                    xxx2
-  +4   NEQ                               0425
-  +5   LITC  010          LITC 1         0040   0004
-  +6   BBC                LBC            0131   2131
-
-*/
-
-int check_idle() {
-    static uint16  loop_data[7] = {
-          WMOP_TUS, WMOP_OPDC, WMOP_LOR, WMOP_OPDC,
-          WMOP_NEQ, WMOP_LITC, WMOP_BBC };
-    static uint16  loop_mask[7] = {
-          07777,    00003,     07777,     00003,
-          07777,    07733,     05777};
-    t_uint64     data;
-    uint16       addr = C;
-    int          l = (3 - L) * 12;
-    uint16       word;
-    int          i;
-
-    /* Quick check to see if not correct location */
-    if (idle_addr != 0 && idle_addr != addr)
-       return 0;
-    /* If address same, then idle loop */
-    if (idle_addr == addr)
-       return 1;
-
-    /* Not set, see if this could be loop */
-    data = M[addr];
-    for (i = 0; i < 7; i++) {
-        word = (uint16)(data >> l) & 07777;
-        if ((word & loop_mask[i]) != loop_data[i])
-            return 0;
-        if (l == 0) {
-            addr++;
-            l = 3 * 12;
-            data = M[addr];
-        } else {
-            l -= 12;
-        }
-    }
-    idle_addr = C;
-    return 1;
-}
-#endif /* NOSIMH */
 
 
 /* Math helper routines. */
@@ -1930,141 +1877,38 @@ void relativeAddr(CPU *cpu, int store) {
     M = (base + addr) & CORE;
 }
 
-t_stat
-sim_instr(CPU *cpu)
-{
-    t_stat              reason;
-    t_uint64            temp = 0LL;
-    uint16              atemp;
-    uint8               opcode;
-    uint8               field;
-    int                 bit_a;
-    int                 bit_b;
-    int                 f;
-    int                 i;
-    int                 j;
+/***********************************************************************
+* emulate ONE instrruction
+***********************************************************************/
+void sim_instr(CPU *cpu) {
+	t_stat              reason;
+	t_uint64            temp = 0LL;
+	uint16              atemp;
+	uint8               opcode;
+	uint8               field;
+	int                 bit_a;
+	int                 bit_b;
+	int                 f;
+	int                 i;
+	int                 j;
 
-    reason = 0;
-#ifndef NOSIMH
-    hltf[0] = 0;
-    hltf[1] = 0;
-    P1_run = 1;
-#endif
+	reason = 0;
+	/* when TROF cleared, check for pending interupts */
+	if (TROF == 0 && NCSF && (CC->IAR != 0 || HLTF)) {
+		/* Force a SFI */
+		storeInterrupt(cpu, 1, 0);
+	}
 
-#ifdef NOSIMH
-        /* check for pending interupts */
-        if (cpu->isP1) {
-            if (TROF == 0 && NCSF && (CC->IAR != 0 || HLTF))
-                /* Force a SFI */
-                storeInterrupt(cpu, 1,0);
-        } else {
-            if (TROF == 0 && NCSF && CC->IAR != 0)
-                /* Force a SFI */
-                storeInterrupt(cpu, 1,0);
-        }
-#else
-    while (reason == 0) {       /* loop until halted */
-        if (P1_run == 0)
-            return SCPE_STOP;
-        while (loading) {
-            sim_interval = -1;
-            reason = sim_process_event();
-            if (reason != SCPE_OK) {
-                 break; /* process */
-            }
-        }
-        if (sim_interval <= 0) {        /* event queue? */
-            reason = sim_process_event();
-            if (reason != SCPE_OK) {
-                 break; /* process */
-            }
-        }
+	/* when TROF cleared, fetch next instruction */
+	if (TROF == 0)
+		next_prog(cpu);
 
-        if (sim_brk_summ) {
-            if(sim_brk_test((C << 3) | L, SWMASK('E'))) {
-                reason = SCPE_STOP;
-                break;
-            }
-
-            if (sim_brk_test((c_reg[0] << 3) | l_reg[0],
-                         SWMASK('A'))) {
-                reason = SCPE_STOP;
-                break;
-            }
-
-            if (sim_brk_test((c_reg[1] << 3) | l_reg[1],
-                         SWMASK('B'))) {
-                reason = SCPE_STOP;
-                break;
-            }
-        }
-
-        /* Toggle between two CPU's. */
-        if (cpu_index == 0 && P2_run == 1) {
-            cpu_index = 1;
-            /* Check if interrupt pending. */
-            if (TROF == 0 && NCSF && ((Q != 0) || HLTF))
-                /* Force a SFI */
-                storeInterrupt(cpu, 1,0);
-        } else {
-            cpu_index = 0;
-
-            /* Check if interrupt pending. */
-            if (TROF == 0 && NCSF && ((Q != 0) ||
-                                 (IAR != 0)))
-                /* Force a SFI */
-                storeInterrupt(cpu, 1,0);
-        }
-#endif /* NOSIMH */
-
-        if (TROF == 0)
-            next_prog(cpu);
-
-crf_loop:
         opcode = T & 077;
         field = (T >> 6) & 077;
         TROF = 0;
 
-#ifdef NOSIMH
+	/* trace it */
 	sim_traceinstr(cpu);	
-#else
-        if (hst_lnt) {  /* history enabled? */
-            /* Ignore idle loop when recording history */
-                /* DCMCP XIII */
-            /* if ((C & 077774) != 01140) { */
-                /* DCMCP XV */
-            /* if ((C & 077774) != 01254) { */
-                /* TSMCP XV */
-            /* if ((C & 077774) != 01324) { */
-            hst_p = (hst_p + 1);        /* next entry */
-            if (hst_p >= hst_lnt) {
-                    hst_p = 0;
-            }
-            hst[hst_p].c = (C) | HIST_PC;
-            hst[hst_p].op = T;
-            hst[hst_p].s = S;
-            hst[hst_p].f = F;
-            hst[hst_p].r = R;
-            hst[hst_p].ma = M;
-            hst[hst_p].a_reg = A;
-            hst[hst_p].b_reg = B;
-            hst[hst_p].x_reg = X;
-            hst[hst_p].gh = GH;
-            hst[hst_p].kv = KV;
-            hst[hst_p].l = L;
-            hst[hst_p].q = Q;
-            hst[hst_p].cpu = cpu_index;
-            hst[hst_p].iar = IAR;
-            hst[hst_p].flags = ((AROF)? F_AROF : 0) | \
-                               ((BROF)? F_BROF : 0) | \
-                               ((CWMF)? F_CWMF : 0) | \
-                               ((NCSF)? F_NCSF : 0) | \
-                               ((SALF)? F_SALF : 0) | \
-                               ((MSFF)? F_MSFF : 0) | \
-                               ((VARF)? F_VARF : 0);
-             /* }  */
-        }
-#endif /* NOSIMH */
 
         /* Check if Character or Word Mode */
         if (CWMF) {
@@ -2472,8 +2316,10 @@ crf_loop:
                     T &= 077;
                     T |= field << 6;
                 }
-                /* Goto crf_loop */
-                goto crf_loop;
+		/* set TROF, next time sim_exec is called this opcode will be excuted */
+		TROF = true;
+                /* goto crf_loop; */
+		break;
 
             case CMOP_JNC:      /* Jump Out Of Loop Conditional */
                 if (TFFF)
@@ -3042,73 +2888,21 @@ control:
                         break;
 
                 case VARIANT(WMOP_ITI): /* Interrogate interrupt */
-                        if (NCSF)       /* Nop in normal state */
-                            break;
-#ifdef NOSIMH
+			if (NCSF)       /* Nop in normal state */
+				break;
 			// my ITI
 			{
 				ADDR15 temp = CC->IAR;
 				if (temp) {
-					C = temp;
 					clearInterrupt(temp);
-				} else
-					break;
+					C = temp;
+					L = 0;
+					S = 0100;
+					CWMF = 0;
+					PROF = 0;
+				}
 			}
-#else
-                        if (q_reg[0] & MEM_PARITY) {
-                            C = PARITY_ERR;
-                            q_reg[0] &= ~MEM_PARITY;
-                        } else if (q_reg[0] & INVALID_ADDR) {
-                            C = INVADR_ERR;
-                            q_reg[0] &= ~INVALID_ADDR;
-                        } else if (IAR) {
-                            uint16  x;
-                            C = INTER_TIME;
-                            for(x = 1; (IAR & x) == 0; x <<= 1)
-                                C++;
-                            /* Release the channel after we got it */
-                            if (C >= IO1_FINISH && C <= IO4_FINISH)
-                                chan_release(C - IO1_FINISH);
-                            IAR &= ~x;
-                        } else if ((q_reg[0] & 0170) != 0) {
-                            C = 060 + (q_reg[0] >> 3);
-                            q_reg[0] &= 07;
-                        } else if (q_reg[0] & STK_OVERFL) {
-                            C = STK_OVR_LOC;
-                            q_reg[0] &= ~STK_OVERFL;
-                        } else if (P2_run == 0 && q_reg[1] != 0) {
-                            if (q_reg[1] & MEM_PARITY) {
-                                C = PARITY_ERR2;
-                                q_reg[1] &= ~MEM_PARITY;
-                            } else if (q_reg[1] & INVALID_ADDR) {
-                                C = INVADR_ERR2;
-                                q_reg[1] &= ~INVALID_ADDR;
-                            } else if ((q_reg[1] & 0170) != 0) {
-                                C = 040 + (q_reg[1] >> 3);
-                                q_reg[1] &= 07;
-                            } else if (q_reg[1] & STK_OVERFL) {
-                                C = STK_OVR_LOC2;
-                                q_reg[1] &= ~STK_OVERFL;
-                            }
-                        } else {
-                             /* Could be an idle loop, if P2 running, continue */
-                             if (P2_run)
-                                 break;
-                             if (sim_idle_enab) {
-                             /* Check if possible idle loop */
-                                 if (check_idle())
-                                    sim_idle (TMR_RTC, FALSE);
-                             }
-                             break;
-                        }
-                        sim_debug(DEBUG_DETAIL, &cpu_dev, "IAR=%05o Q=%03o\n\r",
-                                         IAR,Q);
-#endif /* NOSIMH */
-                        L = 0;
-                        S = 0100;
-                        CWMF = 0;
-                        PROF = 0;
-                        break;
+			break;
 
                 case VARIANT(WMOP_IOR): /* I/O Release */
                         if (NCSF)       /* Nop in normal state */
@@ -3180,7 +2974,10 @@ control:
                         if (NCSF)
                            break;
 #ifdef NOSIMH
-	// TODO: add own ZP1 handling here
+			if (cpu->bUS14X) {
+				cpu->bHLTF = true;
+				cpu->bTROF = false;
+			}
 #else
                         if (!HLTF)
                            break;
@@ -3196,7 +2993,7 @@ control:
                         if (NCSF)
                            break;
 #ifdef NOSIMH
-	// TODO: add my HP2 handling
+			haltP2(cpu);
 #else
                         /* If CPU 2 is not running, or disabled nop */
                         if (P2_run == 0 || (cpu_unit[1].flags & UNIT_DIS)) {
@@ -3214,7 +3011,7 @@ control:
                            break;
                         A_valid(cpu);      /* Load ICW */
 #ifdef NOSIMH
-	// TODO: add my debug
+			// TODO: add my debug
 #else
                         sim_debug(DEBUG_DETAIL, &cpu_dev, "INIT P1\n\r");
 #endif /* NOSIMH */
@@ -3228,7 +3025,7 @@ control:
                         save_tos(cpu);
                         /* If CPU is operating, or disabled, return busy */
 #ifdef NOSIMH
-	// TODO: add my IP2 handling
+			initiateP2(cpu);
 #else
                         if (P2_run != 0 || (cpu_unit[1].flags & UNIT_DIS)) {
                             IAR |= IRQ_11;      /* Set CPU 2 Busy */
@@ -3267,7 +3064,7 @@ control:
                            It is currently only used in diagnostics. */
                         /* Halt execution if this instruction attempted */
 #ifdef NOSIMH
-	// TODO: add my failure message
+			// TODO: add my failure message
 #else                        reason = SCPE_NOFNC;
 #endif /* NOSIMH */
                         break;
@@ -3897,11 +3694,6 @@ control:
              }
           }
         }
-#ifndef NOSIMH
-    }                           /* end while */
-/* Simulation halted */
-#endif
-    return reason;
 }
 
 #ifdef NOSIMH
