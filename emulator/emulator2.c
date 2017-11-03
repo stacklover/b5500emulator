@@ -26,6 +26,13 @@
 #include <time.h>
 #include "common.h"
 
+#ifdef USECAN
+#include <linux/can.h>
+#include <linux/can/raw.h>
+#include <linux/can/error.h> 
+#include "canlib.h"
+#endif
+
 #define MAXLINELENGTH   (264)   /* maximum line length for all devices - must be multiple of 8 */
 
 /* debug flags: turn these on for various dumps and traces */
@@ -542,6 +549,77 @@ runagain:
                 goto runagain;
 }
 
+#ifdef USECAN
+/***********************************************************************
+* CANbus data
+***********************************************************************/
+int canfd = -1;
+pthread_t canbus_thread;
+int canready[128];
+
+/***********************************************************************
+* CANbus thread
+***********************************************************************/
+void *canbus_function(void *p) {
+	struct can_frame frame;
+	struct timeval tv;
+	int i;
+loop:
+	// poll CANbus
+	i = can_read(canfd, frame, &tv);
+	if (i >= 0) {
+		unsigned mask = 0;
+		unsigned val;
+		int ms_stamp = (tv.tv_sec * 1000) + (tv.tv_usec / 1000);
+#if CAN_TRACE
+		printf("@%u: %08X: %X", ms_stamp, frame.can_id, frame.can_dlc);
+		for (int j=0; j<frame.can_dlc; j++)
+			printf(" %02X", frame.data[j]);
+		printf("\n");
+#endif
+		// analyze the received frame and react upon it
+		unsigned id = frame.can_id & NODEID_MASK;
+		unsigned cob = frame.can_id & COB_MASK;
+
+		if (cob == MSGID_ERRCONT(0)) {
+			// common code for all stations
+			if (frame.can_dlc == 1 && frame.data[0] == NMT_STATE_PRE_OPERATIONAL) {
+				// station reports pre-operational: start it
+				canready[id] = 0;
+				frame.can_id = MSGID_NMT;
+				frame.can_dlc = 2;
+				frame.data[0] = NMT_CMD_START;
+				frame.data[1] = id;
+				can_write(canfd, frame);
+			} else if (frame.can_dlc == 1 && frame.data[0] == NMT_STATE_OPERATIONAL) {
+				// station reports operational: actions if not yet seen
+				if (canready[id] == 0) {
+					canready[id] = 1;
+					if (id < 32)
+						printf("can bus: unit %s went ready\n", unit[id][1]);
+					else
+						printf("can bus: unit %d went ready\n", id);
+				}
+			}
+		}
+	}
+	goto loop;
+	return NULL;
+}
+
+/***********************************************************************
+* initialise CANBUS
+***********************************************************************/
+void canbus_init(const char *busname)
+{
+	canfd = can_open(busname);
+	if (canfd >= 0) {
+		// thread for CANbus
+		pthread_create(&canbus_thread, 0, canbus_function, 0);
+	}
+}
+#endif
+
 /***********************************************************************
 * command parser
 ***********************************************************************/
@@ -701,6 +779,11 @@ int main(int argc, char *argv[])
                         exit(2);
                 }
         }
+
+#ifdef USECAN
+	// init canbus
+	canbus_init("can1");
+#endif
 
 	// handle init file first
         if (inifile) {

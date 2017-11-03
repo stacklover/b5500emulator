@@ -1881,7 +1881,6 @@ void relativeAddr(CPU *cpu, int store) {
 * emulate ONE instrruction
 ***********************************************************************/
 void sim_instr(CPU *cpu) {
-	t_stat              reason;
 	t_uint64            temp = 0LL;
 	uint16              atemp;
 	uint8               opcode;
@@ -1892,7 +1891,6 @@ void sim_instr(CPU *cpu) {
 	int                 i;
 	int                 j;
 
-	reason = 0;
 	/* when TROF cleared, check for pending interupts */
 	if (TROF == 0 && NCSF && (CC->IAR != 0 || HLTF)) {
 		/* Force a SFI */
@@ -3542,7 +3540,7 @@ control:
                         A = MANT ^ A;
                         do {
                             M = CF(B);
-                            memory_cycle(cpu, 5);
+                            memory_cycle(cpu, 5); /* B=[M] */
                             temp = (B & MANT) + (A & MANT);
                         } while ((temp & EXPO) == 0);
                         A = FLAG | PRESENT | toC(M);

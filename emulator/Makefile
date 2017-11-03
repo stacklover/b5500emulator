@@ -59,6 +59,9 @@ OBJEMULATOR2 =	$(ODIR)/emulator2.o $(ODIR)/init_shares.o \
 		$(ODIR)/dev_dk.o \
 		$(ODIR)/translatetables.o \
 		$(ODIR)/instr_table.o
+ifeq ($(USECAN),1)
+OBJEMULATOR2 +=	$(ODIR)/canlib.o
+endif
 
 OBJASMNRUN =	$(ODIR)/asm-n-run.o \
 		$(ODIR)/pdp_text.o $(ODIR)/init_shares.o \
@@ -78,13 +81,16 @@ OBJSPTEST =	$(ODIR)/sptest.o \
 		$(ODIR)/translatetables.o \
 		$(ODIR)/instr_table.o
 
-INC =		common.h b5500_defs.h
+INC =		common.h b5500_defs.h canlib.h
 
 CFLAGS		= -D_LARGEFILE64_SOURCE	-D_FILE_OFFSET_BITS=64 -pipe -Os \
 		  -D_THREAD_SAFE -D_REENTRANT -DNOSIMH -Wall
+ifeq ($(USECAN),1)
+CFLAGS		+= -DUSECAN=1
+endif
 
-LFLAGS		= -lrt #-lfltk_images -lfltk	-lpng -lz -ljpeg  -lXext -lXft \
-		  #-lfontconfig	-lXinerama -lpthread -ldl -lm -lX11
+LFLAGS		= -lrt -lpthread #-lfltk_images -lfltk	-lpng -lz -ljpeg  -lXext -lXft \
+		  #-lfontconfig	-lXinerama -ldl -lm -lX11
 
 all: $(ALL)
 

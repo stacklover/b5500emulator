@@ -14,5 +14,5 @@ export CC=arm-linux-gcc
 export CXX=arm-linux-g++
 
 cd emulator
-make ODIR=arm9
+make USECAN=1 ODIR=arm9
 
