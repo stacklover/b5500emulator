@@ -110,6 +110,8 @@
 #include "b5500_defs.h"
 #include <math.h>
 #include <time.h>
+#include <stdio.h>
+extern FILE *tracefp;
 
 t_uint64 bit_mask[64] = {
         00000000000000001LL,
@@ -3537,13 +3539,19 @@ control:
 
                 case VARIANT(WMOP_LLL): /* Link List Look-up */
                         AB_valid(cpu);
+			if (dotrcins)
+				fprintf(tracefp, "*\tLLL A=%016llo B=%016llo\n", A, B);
                         A = MANT ^ A;
                         do {
                             M = CF(B);
                             memory_cycle(cpu, 5); /* B=[M] */
+				if (dotrcins)
+					fprintf(tracefp, "*\t    A=%016llo B=%016llo\n", A, B);
                             temp = (B & MANT) + (A & MANT);
                         } while ((temp & EXPO) == 0);
                         A = FLAG | PRESENT | toC(M);
+			if (dotrcins)
+				fprintf(tracefp, "*\t    A=%016llo END\n", A);
                         break;
 
                 case VARIANT(WMOP_CMN): /* Enter Character Mode In Line */

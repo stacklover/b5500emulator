@@ -53,9 +53,9 @@ int can_open(const char *busname)
 		return -1;
 	}
 
-	// set to non blocking
+	// TODO: do not set to non blocking
 	i = fcntl(sock, F_GETFL, 0);
-	fcntl(sock, F_SETFL, i | O_NONBLOCK);
+	fcntl(sock, F_SETFL, i /*| O_NONBLOCK*/);
 
 	// find interface number for name
 	strncpy(ifr.ifr_name, busname, sizeof(ifr.ifr_name));

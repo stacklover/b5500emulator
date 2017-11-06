@@ -558,14 +558,14 @@ pthread_t canbus_thread;
 int canready[128];
 
 /***********************************************************************
-* CANbus thread
+* CANbus read thread
 ***********************************************************************/
 void *canbus_function(void *p) {
 	struct can_frame frame;
 	struct timeval tv;
 	int i;
 loop:
-	// poll CANbus
+	// read CANbus - this will block until something is there to read or an error occurs
 	i = can_read(canfd, frame, &tv);
 	if (i >= 0) {
 		unsigned mask = 0;
@@ -596,12 +596,15 @@ loop:
 				if (canready[id] == 0) {
 					canready[id] = 1;
 					if (id < 32)
-						printf("can bus: unit %s went ready\n", unit[id][1]);
+						printf("can bus: unit %s went ready\n", unit[id][1].name);
 					else
 						printf("can bus: unit %d went ready\n", id);
 				}
 			}
 		}
+	} else {
+		// error?
+		printf("can bus: read returned %d \n", i);
 	}
 	goto loop;
 	return NULL;
