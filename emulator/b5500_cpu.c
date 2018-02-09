@@ -307,6 +307,12 @@ BIT memory_cycle(CPU *cpu, uint8 E) {
                 MAIN[addr] = B;
             else
                 MAIN[addr] = A;
+// catch changes to @305
+if (addr == 0305) {
+	extern void trap305(CPU *cpu);
+	trap305(cpu);	
+}
+// catch changes to @305
         } else {
 	    /* read from memory */
             if (E == 6) {

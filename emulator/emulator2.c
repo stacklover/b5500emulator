@@ -346,7 +346,7 @@ char *lcw2string(WORD48 w)
 /***********************************************************************
 * do a complete core momory dump in readable text form
 ***********************************************************************/
-void memdump(void) {
+void memdump(CPU *cpu) {
         WORD48 w;
         ADDR15 memaddr = 0;
         char buf[132];
@@ -356,6 +356,22 @@ void memdump(void) {
                 perror("coredump.txt");
                 exit(2);
         }
+
+	if (cpu) {
+		fprintf(mfp, "\tA=%016llo(%u) GH=%02o Y=%02o M=%05o F=%05o N=%d NCSF=%u T=%04o\n",
+			cpu->rA, cpu->bAROF,
+			cpu->rGH,
+			(WORD6)cpu->rY, cpu->rM,
+			cpu->rF,
+			cpu->rN, cpu->bNCSF, cpu->rT);
+		fprintf(mfp, "\tB=%016llo(%u) KV=%02o Z=%02o S=%05o R=%05o MSFF=%u SALF=%u\n",
+			cpu->rB, cpu->bBROF,
+			cpu->rKV,
+			cpu->rZ, cpu->rS,
+			cpu->rR,
+			cpu->bMSFF, cpu->bSALF);
+	}
+
         do {
                 int i, j;
                 bufp = buf;
@@ -456,7 +472,7 @@ void run(CPU *cpu)
 		}
 		if (iar_count == 110000) {
 			// do a memory dump and exit
-			memdump();
+			memdump(cpu);
 			stop(cpu);
 		}
 	} else {
@@ -601,6 +617,8 @@ loop:
 						printf("can bus: unit %d went ready\n", id);
 				}
 			}
+		} else if (cob == MSGID_TPDO4(0)) {
+			// TPDO4: received data
 		}
 	} else {
 		// error?
@@ -608,6 +626,29 @@ loop:
 	}
 	goto loop;
 	return NULL;
+}
+
+/***********************************************************************
+* send string to CANBUS (0 terminated)
+***********************************************************************/
+int can_send_string(unsigned id, const char *data)
+{
+	// possible at all?
+	if (canfd >= 0 && canready[id] > 0) {
+		const char *p = data;
+		struct can_frame frame;
+		frame.can_id = MSGID_RPDO4(id);
+		while (*p) {
+			frame.can_dlc = 1;
+			frame.data[0] = 0x80;
+			while (*p && frame.can_dlc <= 7) {
+				frame.data[frame.can_dlc] = *p++;
+				frame.can_dlc++;
+			}
+			can_write(canfd, frame);
+			usleep(300000);
+		}
+	}
 }
 
 /***********************************************************************
@@ -869,6 +910,14 @@ int main(int argc, char *argv[])
 	}
 #endif
 
+#ifdef USECAN
+	// wait for SPO to become ready
+	while (!canready[30]) {
+		printf("Waiting for SPO to become ready.\n");
+		sleep(1);
+	}
+#endif
+
         addr = 020; // boot addr
         if (CC->CLS) {
                 // binary read first CRA card to <addr>
@@ -883,3 +932,40 @@ int main(int argc, char *argv[])
 
         return 0;
 }
+
+void trap305(CPU *cpu) {
+	char buf[200];
+	ADDR15 c = cpu->rC;
+	WORD2 l = cpu->rL;
+        unsigned bestmatch = 0;
+        unsigned index;
+        ADDR15 addr, bestaddr = 0;
+
+	if (l > 0)
+		l--;
+	else {
+		c--;
+		l = 3;
+	}
+
+        // search PRT
+        for (index = 0200; index<=0725; index++) {
+                if ((MAIN[index] & (MASK_FLAG | MASK_CODE | MASK_PBIT)) == (MASK_FLAG | MASK_CODE | MASK_PBIT)) {
+                        // present program descriptor
+                        addr = MAIN[index] & MASK_ADDR;
+                        if (addr <= c && bestaddr < addr) {
+                                bestmatch = index;
+                                bestaddr = addr;
+                        }
+                }
+        }
+        if (bestmatch > 0)
+                sprintf(buf, "%05o:%o (PRT[%3o]+%04o) @305 changed: @%016llo",
+			c, l, bestmatch, ((c - bestaddr) << 2) + l, MAIN[0305]);
+        else
+                sprintf(buf, "%05o:%o @305 changed: @%016llo",
+			c, l, MAIN[0305]);
+
+	spo_debug_write(buf);
+}
+

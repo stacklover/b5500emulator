@@ -56,7 +56,8 @@ time_t	stamp;
 #if AUTOEXEC
 unsigned autoexec = false;
 const char *auto_cmd = "cra file=cards/DCMCP-PATCH-COMPILE.card";
-const char *auto_trigger = "ESPOL/DISK= 2 EOJ";
+const char *auto_trigger1 = "ESPOL/DISK= ";
+const char *auto_trigger2 = " EOJ";
 #endif
 
 /***********************************************************************
@@ -202,10 +203,18 @@ loop:	fetch(&acc);
 	acc.addr++;
 	goto loop;
 
-done:	*spooutp++ = 0;
-	printf ("%s\n", spooutbuf);
+done:	*spooutp++ = '\r';
+	*spooutp++ = '\n';
+	*spooutp++ = 0;
+	printf ("%s", spooutbuf);
+
+#ifdef USECAN
+	// send message to "real SPO"
+	can_send_string(30, spooutbuf);
+#endif
+
 #if AUTOEXEC
-	if (autoexec > 0 && strstr(spooutbuf, auto_trigger)) {
+	if (autoexec > 0 && strstr(spooutbuf, auto_trigger1) && strstr(spooutbuf, auto_trigger2)) {
 		printf("***** AUTOEXEC #%d *****\n", autoexec++);
 		time(&stamp);
 		handle_option(auto_cmd);
@@ -265,6 +274,24 @@ WORD48 spo_read(WORD48 iocw) {
 	spoinbuf[0] = 0;
 
 	return (iocw & (MASK_IODUNIT | MASK_IODREAD)) | acc.addr;
+}
+
+/***********************************************************************
+* write a debug line to SPO
+***********************************************************************/
+void spo_debug_write(const char *msg) {
+	char *spooutp = spooutbuf;
+#if TIMESTAMP
+	time_t now;
+	struct tm tm;
+	time(&now);
+	// subtract stamp
+	now -= stamp;
+	gmtime_r(&now, &tm);
+	spooutp += sprintf(spooutp, "%02d:%02u:%02u ", tm.tm_hour, tm.tm_min, tm.tm_sec);
+#endif
+	*spooutp++ = 0;
+	printf ("%s~%s\n", spooutbuf, msg);
 }
 
 
