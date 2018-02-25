@@ -29,7 +29,7 @@
 /*
  * for each supported tape drive
  */
-struct mt {
+static struct mt {
 	char	filename[NAMELEN];
 	FILE	*fp;
 	BIT	ready;
@@ -48,12 +48,12 @@ static struct mt *mtx = NULL;
 /*
  * set to mta..mtt
  */
-int set_mt(const char *v, void *data) {mtx = mt+(int)data; return 0; }
+static int set_mt(const char *v, void *data) {mtx = mt+(int)data; return 0; }
 
 /*
  * specify or close the trace file
  */
-int set_mttrace(const char *v, void *) {
+static int set_mttrace(const char *v, void *) {
 	// if open, close existing trace file
 	if (trace) {
 		fclose(trace);
@@ -71,7 +71,7 @@ int set_mttrace(const char *v, void *) {
 /*
  * specify or close the file for emulation
  */
-int set_mtfile(const char *v, void *) {
+static int set_mtfile(const char *v, void *) {
 	if (!mtx) {
 		printf("mt not specified\n");
 		return 2; // FATAL
@@ -106,7 +106,7 @@ int set_mtfile(const char *v, void *) {
 /*
  * command table
  */
-const command_t mt_commands[] = {
+static const command_t mt_commands[] = {
 	{"mta",		set_mt,	(void *) 0},
 	{"mtb", 	set_mt, (void *) 1},
 	{"mtc",		set_mt, (void *) 2},

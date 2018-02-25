@@ -113,7 +113,7 @@
 #include <stdio.h>
 extern FILE *tracefp;
 
-t_uint64 bit_mask[64] = {
+const t_uint64 bit_mask[64] = {
         00000000000000001LL,
         00000000000000002LL,
         00000000000000004LL,
@@ -165,7 +165,7 @@ t_uint64 bit_mask[64] = {
         0
 };
 
-uint8 bit_number[64] = {
+const uint8 bit_number[64] = {
     /*  00  01  02  03  04  05  06  07 */
         47, 46, 45, 44, 43, 42, 42, 42, /* 00 */
         41, 40, 39, 38, 37, 36, 36, 36, /* 10 */
@@ -177,7 +177,7 @@ uint8 bit_number[64] = {
          5,  4,  3,  2,  1,  0,  0,  0, /* 70 */
 };
 
-uint8 rank[64] = {
+const uint8 rank[64] = {
      /* 00  01  02  03  04  05  06  07 */
         53, 54, 55, 56, 57, 58, 59, 60,  /* 00 */
       /* 8   9   #   @   ?   :   >  ge  */
@@ -279,62 +279,60 @@ uint8 rank[64] = {
 * 16      Fetch
 ***********************************************************************/
 BIT memory_cycle(CPU *cpu, uint8 E) {
-        ADDR15 addr = 0;
+	ADDR15 addr = 0;
 
 	cpu->rE = E;		/* for display */
 	/* which register holds the address ? */
-        if (E & 020)    addr = C;
-        else if (E & 4) addr = M;
-        else if (E & 2) addr = S;
+	if (E & 020)    addr = C;
+	else if (E & 4) addr = M;
+	else if (E & 2) addr = S;
 	/* sanity check - should never happen to be true */
-        if (addr >= MAXMEM) {
-	   causeMemoryIrq(cpu, IRQ_INVA, "addr >= MAXMEM");
-           return true;
-        }
+	if (addr >= MAXMEM) {
+		causeMemoryIrq(cpu, IRQ_INVA, "addr >= MAXMEM");
+		return true;
+	}
 	/* in normal state, addresses below 01000 are not accessible */
-        if (NCSF && addr < 01000) {
-	   causeMemoryIrq(cpu, IRQ_INVA, "NCSF && addr < 01000");
-           return true;
-        }
+	if (NCSF && addr < 01000) {
+		causeMemoryIrq(cpu, IRQ_INVA, "NCSF && addr < 01000");
+		return true;
+	}
 	/* now do the memory access */
-        if (E & 020) {
-	    /* fetch from code */
-            P = MAIN[addr];
-            PROF = true;
-        } else if (E & 010) {
-	    /* write to memory */
-            if (E & 1)
-                MAIN[addr] = B;
-            else
-                MAIN[addr] = A;
-// catch changes to @305
-if (addr == 0305) {
-	extern void trap305(CPU *cpu);
-	trap305(cpu);	
-}
-// catch changes to @305
-        } else {
-	    /* read from memory */
-            if (E == 6) {
-                B = MAIN[addr];
-                M = FF(B);
-            } else if (E & 1) {
-                B = MAIN[addr];
-                BROF = true;
-            } else {
-                A = MAIN[addr];
-                AROF = true;
-            }
-        }
-        return false;
+	if (E & 020) {
+		/* fetch from code */
+		P = MAIN[addr];
+		PROF = true;
+	} else if (E & 010) {
+		/* write to memory */
+		if (E & 1)
+			MAIN[addr] = B;
+		else
+			MAIN[addr] = A;
+#if DEBUG305
+		if (addr == 0305)
+			trap305(cpu);	
+#endif
+	} else {
+		/* read from memory */
+		if (E == 6) {
+			B = MAIN[addr];
+			M = FF(B);
+		} else if (E & 1) {
+			B = MAIN[addr];
+			BROF = true;
+		} else {
+			A = MAIN[addr];
+			AROF = true;
+		}
+	}
+	return false;
 }
 
 /* Set registers based on MSCW */
 void set_via_MSCW(CPU *cpu, t_uint64 word) {
-        F = FF(word);
-        R = RF(word);
-        MSFF = (word & SMSFF) != 0;
-        SALF = (word & SSALF) != 0;
+	F = FF(word);
+	R = RF(word);
+	MSFF = (word & SMSFF) != 0;
+	SALF = (word & SSALF) != 0;
 }
 
 /* Set registers based on RCW.
@@ -342,167 +340,143 @@ void set_via_MSCW(CPU *cpu, t_uint64 word) {
    if no_bits is non-zero don't set GH and KV,
    return BROF flag  */
 int  set_via_RCW(CPU *cpu, t_uint64 word, int no_set_lc, int no_bits) {
-        if (!no_set_lc) {
-            L = LF(word);
-            C = CF(word);
-            PROF = 0;
-        }
-        F = FF(word);
-        if (!no_bits) {
-            uint16 t;
-            t = (uint16)((word & RGH) >> RGH_V);
-            GH = ((t << 3) & 070) | ((t >> 8) & 07);
-            t = (uint16)((word & RKV) >> RKV_V);
-            KV = ((t << 3) & 070) | ((t >> 8) & 07);
-        }
-        return (word & PRESENT) != 0;
+	if (!no_set_lc) {
+		L = LF(word);
+		C = CF(word);
+		PROF = 0;
+	}
+	F = FF(word);
+	if (!no_bits) {
+		uint16 t;
+		t = (uint16)((word & RGH) >> RGH_V);
+		GH = ((t << 3) & 070) | ((t >> 8) & 07);
+		t = (uint16)((word & RKV) >> RKV_V);
+		KV = ((t << 3) & 070) | ((t >> 8) & 07);
+	}
+	return (word & PRESENT) != 0;
 }
 
 /* Set the stack pointer from INCW */
 void set_via_INCW(CPU *cpu, t_uint64 word) {
-        S = CF(word);
-        CWMF = (word & SCWMF) != 0;
+	S = CF(word);
+	CWMF = (word & SCWMF) != 0;
 }
 
 /* Set registers from ICW */
 void set_via_ICW(CPU *cpu, t_uint64 word) {
-        M = CF(word);
-        MSFF = (word & SMSFF) != 0;
-        SALF = (word & SSALF) != 0;
-        VARF = (word & SVARF) != 0;
-        R = RF(word);
+	M = CF(word);
+	MSFF = (word & SMSFF) != 0;
+	SALF = (word & SSALF) != 0;
+	VARF = (word & SVARF) != 0;
+	R = RF(word);
 }
 
 /* Make sure that B is empty */
 void B_empty(CPU *cpu) {
-    if (BROF) {
-        next_addr(S);
-        if (NCSF && (S & 077700) == R) {
-#ifdef NOSIMH
-	   causeMemoryIrq(cpu, IRQ_STKO, "S >= R");
-#else
-           Q |= STK_OVERFL; /* Stack fault */
-#endif
-           return;
-        }
-        memory_cycle(cpu, 013);      /* Save B */
-        BROF = 0;
-    }
+	if (BROF) {
+		next_addr(S);
+		if (NCSF && (S & 077700) == R) {
+			causeMemoryIrq(cpu, IRQ_STKO, "S >= R");
+			return;
+		}
+		memory_cycle(cpu, 013);      /* Save B */
+		BROF = 0;
+	}
 }
 
 /* Make sure A is empty, push to B if not */
 void A_empty(CPU *cpu) {
-    if (AROF) {
-        B_empty(cpu);
-        B = A;
-        AROF = 0;
-        BROF = 1;
-     }
+	if (AROF) {
+		B_empty(cpu);
+		B = A;
+		AROF = 0;
+		BROF = 1;
+	}
 }
 
 /* Make sure both A and B are empty */
 void AB_empty(CPU *cpu) {
-    B_empty(cpu);
-    if (AROF) {
-        next_addr(S);
-        if (NCSF && (S & 077700) == R) {
-#ifdef NOSIMH
-	   causeMemoryIrq(cpu, IRQ_STKO, "S >= R");
-#else
-           Q |= STK_OVERFL; /* Stack fault */
-#endif
-           return;
-        }
-        memory_cycle(cpu, 012);      /* Save A */
-        AROF = 0;
-    }
+	B_empty(cpu);
+	if (AROF) {
+		next_addr(S);
+		if (NCSF && (S & 077700) == R) {
+			causeMemoryIrq(cpu, IRQ_STKO, "S >= R");
+			return;
+		}
+		memory_cycle(cpu, 012);      /* Save A */
+		AROF = 0;
+	}
 }
 
 /* Make sure that A is valid, copy from B or memory */
 void A_valid(CPU *cpu) {
-    if (!AROF) {
-        if (BROF) {             /* Transfer B to A */
-            A = B;
-            AROF = 1;
-            BROF = 0;
-        } else {
-            if (NCSF && (S & 077700) == R) {
-#ifdef NOSIMH
-	       causeMemoryIrq(cpu, IRQ_STKO, "S >= R");
-#else
-               Q |= STK_OVERFL; /* Stack fault */
-#endif
-               return;
-            }
-            memory_cycle(cpu, 2);    /* Read A */
-            prev_addr(S);
-        }
-    }
+	if (!AROF) {
+		if (BROF) {             /* Transfer B to A */
+			A = B;
+			AROF = 1;
+			BROF = 0;
+		} else {
+			if (NCSF && (S & 077700) == R) {
+				causeMemoryIrq(cpu, IRQ_STKO, "S >= R");
+				return;
+			}
+			memory_cycle(cpu, 2);    /* Read A */
+			prev_addr(S);
+		}
+	}
 }
 
 /* Make sure both A and B are valid */
 void AB_valid(CPU *cpu) {
-    A_valid(cpu);
-    if (!BROF) {
-        if (NCSF && (S & 077700) == R) {
-#ifdef NOSIMH
-	    causeMemoryIrq(cpu, IRQ_STKO, "S >= R");
-#else
-            Q |= STK_OVERFL; /* Stack fault */
-#endif
-            return;
-        }
-        memory_cycle(cpu, 3);        /* Read B */
-        prev_addr(S);
-    }
+	A_valid(cpu);
+	if (!BROF) {
+		if (NCSF && (S & 077700) == R) {
+			causeMemoryIrq(cpu, IRQ_STKO, "S >= R");
+			return;
+		}
+		memory_cycle(cpu, 3);        /* Read B */
+		prev_addr(S);
+	}
 }
 
 /* Make sure A is empty and B is valid */
 void B_valid(CPU *cpu) {
-    A_empty(cpu);
-    if (!BROF) {
-        if (NCSF && (S & 077700) == R) {
-#ifdef NOSIMH
-	    causeMemoryIrq(cpu, IRQ_STKO, "S >= R");
-#else
-            Q |= STK_OVERFL; /* Stack fault */
-#endif
-            return;
-        }
-        memory_cycle(cpu, 3);        /* Read B */
-        prev_addr(S);
-    }
+	A_empty(cpu);
+	if (!BROF) {
+		if (NCSF && (S & 077700) == R) {
+			causeMemoryIrq(cpu, IRQ_STKO, "S >= R");
+			return;
+		}
+		memory_cycle(cpu, 3);        /* Read B */
+		prev_addr(S);
+	}
 }
 
 /* Make sure B is valid, don't care about A */
 void B_valid_and_A(CPU *cpu) {
-    if (!BROF) {
-        if (NCSF && (S & 077700) == R) {
-#ifdef NOSIMH
-	    causeMemoryIrq(cpu, IRQ_STKO, "S >= R");
-#else
-            Q |= STK_OVERFL; /* Stack fault */
-#endif
-            return;
-        }
-        memory_cycle(cpu, 3);        /* Read B */
-        prev_addr(S);
-    }
+	if (!BROF) {
+		if (NCSF && (S & 077700) == R) {
+			causeMemoryIrq(cpu, IRQ_STKO, "S >= R");
+			return;
+		}
+		memory_cycle(cpu, 3);        /* Read B */
+		prev_addr(S);
+	}
 }
 
-/* Saves the top word on the stack into MA */
+/* Saves the top word on the stack into M */
 void save_tos(CPU *cpu) {
-    if (AROF) {
-        memory_cycle(cpu, 014);      /* Store A in M */
-        AROF = 0;
-    } else if (BROF) {
-        memory_cycle(cpu, 015);      /* Store B in M */
-        BROF = 0;
-    } else {                    /* Fetch B then Store */
-        A_valid(cpu);              /* Use A register since it is quicker */
-        memory_cycle(cpu, 014);
-        AROF = 0;
-    }
+	if (AROF) {
+		memory_cycle(cpu, 014);		/* Store A in M */
+		AROF = 0;
+	} else if (BROF) {
+		memory_cycle(cpu, 015);		/* Store B in M */
+		BROF = 0;
+	} else {				/* Fetch B then Store */
+		A_valid(cpu);			/* Use A register since it is quicker */
+		memory_cycle(cpu, 014);
+		AROF = 0;
+	}
 }
 
 /* Enter a subroutine, flag true for descriptor, false for opdc */
@@ -547,369 +521,352 @@ void enterSubr(CPU *cpu, int flag) {
 
 /* Make B register into an integer, return 1 if failed */
 int mkint(CPU *cpu) {
-        int     exp_b;
-        int     last_digit;
-        int     f = 0;
+	int     exp_b;
+	int     last_digit;
+	int     f = 0;
 
-        /* Extract exponent */
-        exp_b = (B & EXPO) >> EXPO_V;
-        if (exp_b == 0)
-           return 0;
-        if (B & ESIGN)
-           exp_b = -exp_b;
-        if (B & MSIGN)
-           f = 1;
-        B &= MANT;
-        /* Adjust if exponent less then zero */
-        last_digit = 0;
-        if (exp_b < 0) {
-            while (exp_b < 0 && B != 0) {
-                last_digit = B & 7;
-                B >>= 3;
-                exp_b++;
-            }
-            if (exp_b != 0) {
-                B = 0;
-                return 0;
-            }
-            if (f ? (last_digit > 4) : (last_digit >= 4))
-                B++;
-        } else {
-            /* Now handle when exponent plus */
-            while(exp_b > 0) {
-                if ((B & NORM) != 0)
-                    return 1;
-                B <<= 3;
-                exp_b--;
-            }
-        }
-        if (f && B != 0)
-            B |= MSIGN;
-        return 0;
+	/* Extract exponent */
+	exp_b = (B & EXPO) >> EXPO_V;
+	if (exp_b == 0)
+		return 0;
+	if (B & ESIGN)
+		exp_b = -exp_b;
+	if (B & MSIGN)
+		f = 1;
+	B &= MANT;
+	/* Adjust if exponent less then zero */
+	last_digit = 0;
+	if (exp_b < 0) {
+		while (exp_b < 0 && B != 0) {
+			last_digit = B & 7;
+			B >>= 3;
+			exp_b++;
+		}
+		if (exp_b != 0) {
+			B = 0;
+			return 0;
+		}
+		if (f ? (last_digit > 4) : (last_digit >= 4))
+			B++;
+	} else {
+		/* Now handle when exponent plus */
+		while(exp_b > 0) {
+			if ((B & NORM) != 0)
+				return 1;
+			B <<= 3;
+			exp_b--;
+		}
+	}
+	if (f && B != 0)
+		B |= MSIGN;
+	return 0;
 }
 
 /* Compute an index word return true if failed. */
 int indexWord(CPU *cpu) {
-    if (A & WCOUNT) {
-        B_valid_and_A(cpu);
-        if (mkint(cpu)) {
-             if (NCSF)
-#ifdef NOSIMH
-		 causeSyllableIrq(cpu, IRQ_INTO, "indexWord");
-#else
-                 Q |= INT_OVER;
-#endif
-             return 1;
-        }
-        if (B & MSIGN && (B & MANT) != 0) {
-            if (NCSF)
-#ifdef NOSIMH
-		causeSyllableIrq(cpu, IRQ_INDEX, "indexWord");
-#else
-                Q |= INDEX_ERROR;
-#endif
-            return 1;
-        }
-        if ((B & 01777) >= ((A & WCOUNT) >> WCOUNT_V)) {
-            if (NCSF)
-#ifdef NOSIMH
-		causeSyllableIrq(cpu, IRQ_INDEX, "indexWord");
-#else
-                Q |= INDEX_ERROR;
-#endif
-            return 1;
-        }
-        M = (A + (B & 01777)) & CORE;
-        A &= ~(WCOUNT|CORE);
-        A |= M;
-        BROF = 0;
-    } else {
-        M = CF(A);
-    }
-    return 0;
+	if (A & WCOUNT) {
+		B_valid_and_A(cpu);
+		if (mkint(cpu)) {
+			if (NCSF)
+				causeSyllableIrq(cpu, IRQ_INTO, "indexWord");
+			return 1;
+		}
+		if (B & MSIGN && (B & MANT) != 0) {
+			if (NCSF)
+				causeSyllableIrq(cpu, IRQ_INDEX, "indexWord");
+			return 1;
+		}
+		if ((B & 01777) >= ((A & WCOUNT) >> WCOUNT_V)) {
+			if (NCSF)
+				causeSyllableIrq(cpu, IRQ_INDEX, "indexWord");
+			return 1;
+		}
+		M = (A + (B & 01777)) & CORE;
+		A &= ~(WCOUNT|CORE);
+		A |= M;
+		BROF = 0;
+	} else {
+		M = CF(A);
+	}
+	return 0;
 }
 
-
 /* Character mode helper routines */
 
 /* Adjust source bit pointers to point to char */
 void adjust_source(CPU *cpu) {
-    if (GH & 07) {
-        GH &= 070;
-        GH += 010;
-        if (GH > 077) {
-            AROF = 0;
-            GH = 0;
-            next_addr(M);
-        }
-    }
+	if (GH & 07) {
+		GH &= 070;
+		GH += 010;
+		if (GH > 077) {
+			AROF = 0;
+			GH = 0;
+			next_addr(M);
+		}
+	}
 }
 
 /* Adjust destination bit pointers to point to char */
 void adjust_dest(CPU *cpu) {
-    if (KV & 07) {
-        KV &= 070;
-        KV += 010;
-        if (KV > 075) {
-        if (BROF)
-           memory_cycle(cpu, 013);
-        BROF = 0;
-        KV = 0;
-        next_addr(S);
-        }
-    }
+	if (KV & 07) {
+		KV &= 070;
+		KV += 010;
+		if (KV > 075) {
+			if (BROF)
+				memory_cycle(cpu, 013);
+			BROF = 0;
+			KV = 0;
+			next_addr(S);
+		}
+	}
 }
 
 /* Advance to next destination bit/char */
 void next_dest(CPU *cpu, int bit) {
-    if (bit)
-       KV += 1;
-    else
-       KV |= 7;
-    if ((KV & 07) > 5) {
-       KV &= 070;
-       KV += 010;
-    }
-    if (KV > 075) {
-       if (BROF)
-          memory_cycle(cpu, 013);
-       BROF = 0;
-       KV = 0;
-       next_addr(S);
-    }
+	if (bit)
+		KV += 1;
+	else
+		KV |= 7;
+	if ((KV & 07) > 5) {
+		KV &= 070;
+		KV += 010;
+	}
+	if (KV > 075) {
+		if (BROF)
+			memory_cycle(cpu, 013);
+		BROF = 0;
+		KV = 0;
+		next_addr(S);
+	}
 }
 
 /* Advance to previous destination bit/char */
 void prev_dest(CPU *cpu, int bit) {
-    if (bit) {
-       if ((KV & 07) == 0) {
-          if (KV == 0) {
-             if (BROF)
-                memory_cycle(cpu, 013);
-             BROF = 0;
-         prev_addr(S);
-         KV = 076;
-          } else {
-         KV = ((KV - 010) & 070) | 06;
-          }
-       }
-       KV -= 1;
-    } else {
-       KV &= 070;
-       if (KV == 0) {
-          if (BROF)
-             memory_cycle(cpu, 013);
-          BROF = 0;
-          prev_addr(S);
-          KV = 070;
-       } else
-          KV -= 010;
-    }
+	if (bit) {
+		if ((KV & 07) == 0) {
+			if (KV == 0) {
+				if (BROF)
+					memory_cycle(cpu, 013);
+				BROF = 0;
+				prev_addr(S);
+				KV = 076;
+			} else {
+				KV = ((KV - 010) & 070) | 06;
+			}
+		}
+		KV -= 1;
+	} else {
+		KV &= 070;
+		if (KV == 0) {
+			if (BROF)
+				memory_cycle(cpu, 013);
+			BROF = 0;
+			prev_addr(S);
+			KV = 070;
+		} else
+			KV -= 010;
+	}
 }
 
 /* Make sure destination have valid data */
 void fill_dest(CPU *cpu) {
-    if (BROF == 0) {
-       memory_cycle(cpu, 3);
-       BROF = 1;
-    }
+	if (BROF == 0) {
+		memory_cycle(cpu, 3);
+		BROF = 1;
+	}
 }
 
 /* Advance source to next bit/char */
 void next_src(CPU *cpu, int bit) {
-    if (bit)
-       GH += 1;
-    else
-       GH |= 7;
-    if ((GH & 07) > 5) {
-       GH &= 070;
-       GH += 010;
-    }
-    if (GH > 075) {
-       AROF = 0;
-       GH = 0;
-       next_addr(M);
-    }
+	if (bit)
+		GH += 1;
+	else
+		GH |= 7;
+	if ((GH & 07) > 5) {
+		GH &= 070;
+		GH += 010;
+	}
+	if (GH > 075) {
+		AROF = 0;
+		GH = 0;
+		next_addr(M);
+	}
 }
 
 /* Advance source to previous bit/char */
 void prev_src(CPU *cpu, int bit) {
-    if (bit) {
-       if ((GH & 07) == 0) {
-          if (GH == 0) {
-             AROF = 0;
-         prev_addr(M);
-         GH = 076;
-          } else {
-         GH = ((GH - 010) & 070) | 06;
-          }
-       }
-       GH -= 1;
-    } else {
-       GH &= 070;
-       if (GH == 0) {
-          AROF = 0;
-          prev_addr(M);
-          GH = 070;
-       } else
-          GH -= 010;
-    }
+	if (bit) {
+		if ((GH & 07) == 0) {
+			if (GH == 0) {
+				AROF = 0;
+				prev_addr(M);
+				GH = 076;
+			} else {
+				GH = ((GH - 010) & 070) | 06;
+			}
+		}
+		GH -= 1;
+	} else {
+		GH &= 070;
+		if (GH == 0) {
+			AROF = 0;
+			prev_addr(M);
+			GH = 070;
+		} else
+			GH -= 010;
+	}
 }
 
 /* Make sure source has valid data */
 void fill_src(CPU *cpu) {
-    if (AROF == 0) {
-       memory_cycle(cpu, 4);
-       AROF = 1;
-    }
+	if (AROF == 0) {
+		memory_cycle(cpu, 4);
+		AROF = 1;
+	}
 }
 
-
 /* Helper routines for managing processor */
 
 /* Fetch next program sylable */
 void next_prog(CPU *cpu) {
-    if (!PROF)
-        memory_cycle(cpu, 020);
-    T = (P >> ((3 - L) * 12)) & 07777;
-    if ( L++ == 3) {
-       C++;
-       L = 0;
-       PROF = 0;
-    }
-    TROF = 1;
+	if (!PROF)
+		memory_cycle(cpu, 020);
+	T = (P >> ((3 - L) * 12)) & 07777;
+	if ( L++ == 3) {
+		C++;
+		L = 0;
+		PROF = 0;
+	}
+	TROF = 1;
 }
 
 /* Initiate a processor, A must contain the ICW */
 void initiate(CPU *cpu) {
-    int brflg, arflg, temp;
+	int brflg, arflg, temp;
 
-    set_via_INCW(cpu, A);    /* Set up Stack */
-    AROF = 0;
-    memory_cycle(cpu, 3);    /* Fetch IRCW from stack */
-    prev_addr(S);
-    brflg = set_via_RCW(cpu, B, 0, 0);
-    memory_cycle(cpu, 3);    /* Fetch ICW from stack */
-    prev_addr(S);
-    set_via_ICW(cpu, B);
-    BROF = 0;           /* Note memory_cycle set this */
-    if (CWMF) {
-        memory_cycle(cpu, 3);        /* Fetch LCW from stack */
-        prev_addr(S);
-        arflg = (B & PRESENT) != 0;
-        X = B & MANT;
-        if (brflg) {
-            memory_cycle(cpu, 3);    /* Load B via S */
-            prev_addr(S);
-        }
-        if (arflg)  {
-            memory_cycle(cpu, 2);    /* Load A via S */
-            prev_addr(S);
-        }
-        AROF = arflg;
-        BROF = brflg;
-        temp = S;
-        S = FF(X);
-        X = replF(X, temp);
-    }
-    NCSF = 1;
-    PROF = 0;
-    TROF = 0;
+	set_via_INCW(cpu, A);    /* Set up Stack */
+	AROF = 0;
+	memory_cycle(cpu, 3);    /* Fetch IRCW from stack */
+	prev_addr(S);
+	brflg = set_via_RCW(cpu, B, 0, 0);
+	memory_cycle(cpu, 3);    /* Fetch ICW from stack */
+	prev_addr(S);
+	set_via_ICW(cpu, B);
+	BROF = 0;           /* Note memory_cycle set this */
+	if (CWMF) {
+		memory_cycle(cpu, 3);        /* Fetch LCW from stack */
+		prev_addr(S);
+		arflg = (B & PRESENT) != 0;
+		X = B & MANT;
+		if (brflg) {
+			memory_cycle(cpu, 3);    /* Load B via S */
+			prev_addr(S);
+		}
+		if (arflg)  {
+			memory_cycle(cpu, 2);    /* Load A via S */
+			prev_addr(S);
+		}
+		AROF = arflg;
+		BROF = brflg;
+		temp = S;
+		S = FF(X);
+		X = replF(X, temp);
+	}
+	NCSF = 1;
+	PROF = 0;
+	TROF = 0;
 }
 
 /* Save processor state in case of error or halt */
 void storeInterrupt(CPU *cpu, int forced, int test) {
-    int         f;
-    t_uint64    temp;
+	int         f;
+	t_uint64    temp;
 
-    if (forced || test)
-        NCSF = 0;
-    f = BROF;
-    if (CWMF) {
-        int i = AROF;
-        temp = S;
-        S = FF(X);
-        X = replF(X, temp);
-        if (AROF || test) {     /* Push A First */
-             next_addr(S);
-             memory_cycle(cpu, 10);
-        }
-        if (BROF || test) {     /* Push B second */
-             next_addr(S);
-             memory_cycle(cpu, 11);
-        }
-        /* Make ILCW */
-        B = X | ((i)? PRESENT : 0) | FLAG | DFLAG;
-        next_addr(S);     /* Save B */
-        memory_cycle(cpu, 11);
-    } else {
-        if (BROF || test) {     /* Push B First */
-             next_addr(S);
-             memory_cycle(cpu, 11);
-        }
-        if (AROF || test) {     /* Push A Second */
-             next_addr(S);
-             memory_cycle(cpu, 10);
-        }
-    }
-    AROF = 0;
-    B = ICW;            /* Set ICW into B */
-    next_addr(S); /* Save B */
-    memory_cycle(cpu, 11);
-    B = RCW(f);         /* Save IRCW */
-    next_addr(S); /* Save B */
-    memory_cycle(cpu, 11);
-    if (CWMF) {
-        /* Get the correct value of R */
-        M = F;
-        memory_cycle(cpu, 6);        /* Load B via M, Indirect */
-        memory_cycle(cpu, 5);        /* Load B via M */
-        R = RF(B);
-        B = FLAG|DFLAG|SCWMF|toC(S);
-    } else {
-        B = FLAG|DFLAG|toC(S);
-    }
-#ifndef NOSIMH
-    B |= ((t_uint64)Q) << 35;	// TODO: why are the IRQ flags stored here?
-#endif
-    M = R | 010;
-    memory_cycle(cpu, 015);  /* Store B in M */
-    R = 0;
-    BROF = 0;
-    MSFF = 0;
-    SALF = 0;
-    F = S;
-    if (forced || test)
-        CWMF = 0;
-    PROF = 0;
-    if (test) {
-        M = 0;
-        memory_cycle(cpu, 5);        /* Load location 0 to B. */
-        BROF = 0;
-        C = CF(B);
-        L = 0;
-        KV = 0;
-        GH = 0;
-    } else if (forced) {
+	if (forced || test)
+		NCSF = 0;
+	f = BROF;
+	if (CWMF) {
+		int i = AROF;
+		temp = S;
+		S = FF(X);
+		X = replF(X, temp);
+		if (AROF || test) {     /* Push A First */
+			next_addr(S);
+			memory_cycle(cpu, 10);
+		}
+		if (BROF || test) {     /* Push B second */
+			next_addr(S);
+			memory_cycle(cpu, 11);
+		}
+		/* Make ILCW */
+		B = X | ((i)? PRESENT : 0) | FLAG | DFLAG;
+		next_addr(S);     /* Save B */
+		memory_cycle(cpu, 11);
+	} else {
+		if (BROF || test) {     /* Push B First */
+			next_addr(S);
+			memory_cycle(cpu, 11);
+		}
+		if (AROF || test) {     /* Push A Second */
+			next_addr(S);
+			memory_cycle(cpu, 10);
+		}
+	}
+	AROF = 0;
+	B = ICW;            /* Set ICW into B */
+	next_addr(S); /* Save B */
+	memory_cycle(cpu, 11);
+	B = RCW(f);         /* Save IRCW */
+	next_addr(S); /* Save B */
+	memory_cycle(cpu, 11);
+	if (CWMF) {
+		/* Get the correct value of R */
+		M = F;
+		memory_cycle(cpu, 6);        /* Load B via M, Indirect */
+		memory_cycle(cpu, 5);        /* Load B via M */
+		R = RF(B);
+		B = FLAG|DFLAG|SCWMF|toC(S);
+	} else {
+		B = FLAG|DFLAG|toC(S);
+	}
+	//B |= ((t_uint64)Q) << 35;	// TODO: why are the IRQ flags stored here?
+	M = R | 010;
+	memory_cycle(cpu, 015);  /* Store B in M */
+	R = 0;
+	BROF = 0;
+	MSFF = 0;
+	SALF = 0;
+	F = S;
+	if (forced || test)
+		CWMF = 0;
+	PROF = 0;
+	if (test) {
+		M = 0;
+		memory_cycle(cpu, 5);        /* Load location 0 to B. */
+		BROF = 0;
+		C = CF(B);
+		L = 0;
+		KV = 0;
+		GH = 0;
+	} else if (forced) {
 #ifdef NOSIMH
-	// TODO add P2 specific stuff here
-        if (!cpu->isP1) {
-		cpu->bHLTF = true;
-		cpu->bTROF = false;
+		// TODO add P2 specific stuff here
+		if (!cpu->isP1) {
+			cpu->bHLTF = true;
+			cpu->bTROF = false;
 #else
-        if (cpu_index) {
-           P2_run = 0;          /* Clear run flag */ // TODO inform Richard
-           hltf[1] = 0;
-           cpu_index = 0;
+		if (cpu_index) {
+			P2_run = 0;          /* Clear run flag */ // TODO inform Richard
+			hltf[1] = 0;
+			cpu_index = 0;
 #endif /* NOSIMH */
-        } else {
-           T = WMOP_ITI;
-           TROF = 1;
-        }
-    }
+		} else {
+			T = WMOP_ITI;
+			TROF = 1;
+		}
+	}
 }
 
-
 /* Math helper routines. */
 
 /* Compare A and B,

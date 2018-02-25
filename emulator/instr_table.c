@@ -13,6 +13,7 @@
 *   overhaul of file names
 ***********************************************************************/
 
+#include <stdio.h>
 #include "common.h"
 
 const INSTRUCTION instruction_table[] =	{

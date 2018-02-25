@@ -47,34 +47,35 @@
 /***********************************************************************
 * the SPO
 ***********************************************************************/
-char	filename[NAMELEN];
-FILE	*fp = stdin;
-BIT	ready;
-char	spoinbuf[BUFLEN];
-char	spooutbuf[BUFLEN];
-time_t	stamp;
+static char	filename[NAMELEN];
+static FILE	*fp = stdin;
+static BIT	ready;
+static char	spoinbuf[BUFLEN];
+static char	spooutbuf[BUFLEN];
+static time_t	stamp;
 #if AUTOEXEC
-unsigned autoexec = false;
-const char *auto_cmd = "cra file=cards/DCMCP-PATCH-COMPILE.card";
-const char *auto_trigger1 = "ESPOL/DISK= ";
-const char *auto_trigger2 = " EOJ";
+static unsigned autoexec = false;
+static const char *auto_cmd = "CRA FILE=CARDS/DCMCP-PATCH-COMPILE.CARD";
+static const char *auto_trigger1 = "ESPOL/DISK= ";
+static const char *auto_trigger2 = " EOJ";
 #endif
-
-/***********************************************************************
-* set spo (no function)
-***********************************************************************/
-int set_spo(const char *, void *) {return 0; }
+#ifdef USECAN
+static unsigned canspo = false;
+#endif
+#ifdef TIMESTAMP
+static unsigned timestamp = false;
+#endif
 
 /***********************************************************************
 * specify load type
 ***********************************************************************/
-int set_spoload(const char *v, void *) {
-	if (strcmp(v, "disk") == 0) {
+static int set_spoload(const char *v, void *) {
+	if (strcasecmp(v, "DISK") == 0) {
 		CC->CLS = false;
-	} else if (strcmp(v, "card") == 0) {
+	} else if (strcasecmp(v, "CARD") == 0) {
 		CC->CLS = true;
 	} else {
-		printf("unknown load type\n");
+		printf("$UNKNOWN LOAD TYPE\n");
 		return 2; // FATAL
 	}
 	return 0; // OK
@@ -83,26 +84,71 @@ int set_spoload(const char *v, void *) {
 /***********************************************************************
 * specify autoexec on/off
 ***********************************************************************/
-int set_autoexec(const char *v, void *) {
-	if (strcmp(v, "on") == 0) {
+static int set_autoexec(const char *v, void *) {
+	if (strcasecmp(v, "ON") == 0) {
 		autoexec = true;
-	} else if (strcmp(v, "off") == 0) {
+	} else if (strcasecmp(v, "OFF") == 0) {
 		autoexec = false;
 	} else {
-		printf("specify on or off\n");
+		printf("$SPECIFY ON OR OFF\n");
 		return 2; // FATAL
 	}
 	return 0; // OK
 }
 
+#ifdef USECAN
+/***********************************************************************
+* specify canspo on/off
+***********************************************************************/
+static int set_canspo(const char *v, void *) {
+	if (strcasecmp(v, "ON") == 0) {
+		canspo = true;
+		// wait for SPO to become ready
+		while (!can_ready(30)) {
+			printf("$WAITING FOR SPO READY\n");
+			sleep(1);
+		}
+	} else if (strcasecmp(v, "OFF") == 0) {
+		canspo = false;
+	} else {
+		printf("$SPECIFY ON OR OFF\n");
+		return 2; // FATAL
+	}
+	return 0; // OK
+}
+#endif
+
+#ifdef TIMESTAMP
+/***********************************************************************
+* specify timestamp on/off
+***********************************************************************/
+static int set_timestamp(const char *v, void *) {
+	if (strcasecmp(v, "ON") == 0) {
+		timestamp = true;
+	} else if (strcasecmp(v, "OFF") == 0) {
+		timestamp = false;
+	} else {
+		printf("$SPECIFY ON OR OFF\n");
+		return 2; // FATAL
+	}
+	return 0; // OK
+}
+#endif
+
 /***********************************************************************
 * command table
 ***********************************************************************/
-const command_t spo_commands[] = {
-	{"spo", set_spo},
-	{"load", set_spoload},
+static const command_t spo_commands[] = {
+	{"SPO", NULL},
+	{"LOAD", set_spoload},
 #if AUTOEXEC
-	{"autoexec", set_autoexec},
+	{"AUTOEXEC", set_autoexec},
+#endif
+#ifdef USECAN
+	{"CAN", set_canspo},
+#endif
+#ifdef TIMESTAMP
+	{"TIMESTAMP", set_timestamp},
 #endif
 	{NULL, NULL},
 };
@@ -123,10 +169,11 @@ int spo_init(const char *option) {
 * on every call, the operating system is polled for input (select)
 * if input is present, it is read into a buffer
 * if the buffer contains the "#" escape, the line is handled in the
-* emulator, otherwise the "INPUT REQUEST" interuppt is caused
+* emulator, otherwise the "INPUT REQUEST" interupt is caused
 ***********************************************************************/
 BIT spo_ready(unsigned index) {
         struct timeval tv = {0, 0};
+	char *spoinp = NULL;
 
 	// initialize SPO if not ready
 	if (!ready)
@@ -137,34 +184,41 @@ BIT spo_ready(unsigned index) {
         FD_ZERO(&fds);
         FD_SET(0, &fds);
         if (select(1, &fds, NULL, NULL, &tv)) {
-		char *spoinp = fgets(spoinbuf, sizeof spoinbuf, stdin); // no buffer overrun possible
-		// any input ?
-		if (spoinp != NULL) {
-			// remove trailing control codes
-			spoinp = spoinbuf + strlen(spoinbuf);
-			while (spoinp >= spoinbuf && *spoinp <= ' ')
-				*spoinp-- = 0;
-			spoinp = spoinbuf;
-			// divert input starting with '#' to our scanner
-			if (*spoinp == '#') {
-				int res = handle_option(spoinp+1);
-				if (res == 0)
-					printf("#ok\n");
-				else
-					printf("#error %d\n", res);
-				// mark the input buffer empty again
-				spoinbuf[0] = 0;
-				// remember when this input was
-				time(&stamp);
+		spoinp = fgets(spoinbuf, sizeof spoinbuf, stdin); // no buffer overrun possible
+	}
+#ifdef USECAN
+	else {
+		// check whether a complete line has been received from the CANbus SPO
+		spoinp = can_receive_string(30, spoinbuf, sizeof spoinbuf);
+	}
+#endif
 
-			} else {
-				// signal input request
-				CC->CCI05F = true;
-				signalInterrupt("SPO", "INPUT REQUEST");
-				// the input line is read later, once the IRQ is handled by the MCP
-			}
+	// any input ?
+	if (spoinp != NULL) {
+		// remove trailing control codes
+		spoinp = spoinbuf + strlen(spoinbuf);
+		while (spoinp >= spoinbuf && *spoinp <= ' ')
+			*spoinp-- = 0;
+		spoinp = spoinbuf;
+		// divert input starting with '$' to our scanner
+		if (*spoinp == '$') {
+			int res = handle_option(spoinp+1);
+			if (res == 0)
+				printf("$OK\n");
+			else
+				printf("$ERROR %d\n", res);
+			// mark the input buffer empty again
+			spoinbuf[0] = 0;
+			// remember when this input was
+			time(&stamp);
+
+		} else {
+			// signal input request
+			CC->CCI05F = true;
+			signalInterrupt("SPO", "INPUT REQUEST");
+			// the input line is read later, once the IRQ is handled by the MCP
 		}
-        }
+	}
 
 	// finally return always ready
 	return ready;
@@ -177,6 +231,9 @@ WORD48 spo_write(WORD48 iocw) {
 	int count;
 	ACCESSOR acc;
 	char *spooutp = spooutbuf;
+#ifdef USECAN
+	char *spooutp2;
+#endif
 #if TIMESTAMP
 	time_t now;
 	struct tm tm;
@@ -184,7 +241,11 @@ WORD48 spo_write(WORD48 iocw) {
 	// subtract stamp
 	now -= stamp;
 	gmtime_r(&now, &tm);
-	spooutp += sprintf(spooutp, "%02d:%02u:%02u ", tm.tm_hour, tm.tm_min, tm.tm_sec);
+	if (timestamp)
+		spooutp += sprintf(spooutp, "%02d:%02u:%02u ", tm.tm_hour, tm.tm_min, tm.tm_sec);
+#endif
+#ifdef USECAN
+	spooutp2 = spooutp;
 #endif
 	acc.id = "SPO";
 	acc.MAIL = false;
@@ -210,12 +271,13 @@ done:	*spooutp++ = '\r';
 
 #ifdef USECAN
 	// send message to "real SPO"
-	can_send_string(30, spooutbuf);
+	if (canspo)
+		can_send_string(30, spooutp2);
 #endif
 
 #if AUTOEXEC
 	if (autoexec > 0 && strstr(spooutbuf, auto_trigger1) && strstr(spooutbuf, auto_trigger2)) {
-		printf("***** AUTOEXEC #%d *****\n", autoexec++);
+		printf("$ ***** AUTOEXEC #%d *****\n", autoexec++);
 		time(&stamp);
 		handle_option(auto_cmd);
 	}
@@ -288,7 +350,8 @@ void spo_debug_write(const char *msg) {
 	// subtract stamp
 	now -= stamp;
 	gmtime_r(&now, &tm);
-	spooutp += sprintf(spooutp, "%02d:%02u:%02u ", tm.tm_hour, tm.tm_min, tm.tm_sec);
+	if (timestamp)
+		spooutp += sprintf(spooutp, "%02d:%02u:%02u ", tm.tm_hour, tm.tm_min, tm.tm_sec);
 #endif
 	*spooutp++ = 0;
 	printf ("%s~%s\n", spooutbuf, msg);

@@ -57,10 +57,11 @@ OBJEMULATOR2 =	$(ODIR)/emulator2.o $(ODIR)/init_shares.o \
 		$(ODIR)/dev_mt.o \
 		$(ODIR)/dev_lp.o \
 		$(ODIR)/dev_dk.o \
+		$(ODIR)/dev_dcc.o \
 		$(ODIR)/translatetables.o \
 		$(ODIR)/instr_table.o
 ifeq ($(USECAN),1)
-OBJEMULATOR2 +=	$(ODIR)/canlib.o
+OBJEMULATOR2 +=	$(ODIR)/canbus.o $(ODIR)/canlib.o
 endif
 
 OBJASMNRUN =	$(ODIR)/asm-n-run.o \

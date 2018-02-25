@@ -67,13 +67,13 @@
 /***********************************************************************
 * for each supported disk drive
 ***********************************************************************/
-struct dk {
+static struct dk {
 	char	filename[NAMELEN];
 	int	df;	// we do not use stdio here AND we assume we will never get 0 as the handle
 	BIT	ready;
 	BIT	readcheck;
 	BIT	rwtrace;
-	int	eus;
+	unsigned eus;
 	char	dbuf[DBUFLEN];
 	char	*dbufp;
 } dk[DFCU_PER_SYSTEM];
@@ -91,12 +91,12 @@ static struct dk *dkx = NULL;
 /***********************************************************************
 * set to dka/dkb
 ***********************************************************************/
-int set_dk(const char *v, void *data) {dkx = dk+(int)data; return 0; }
+static int set_dk(const char *v, void *data) {dkx = dk+(int)data; return 0; }
 
 /***********************************************************************
 * specify or close the trace file
 ***********************************************************************/
-int set_dktrace(const char *v, void *) {
+static int set_dktrace(const char *v, void *) {
 	// if open, close existing trace file
 	if (trace) {
 		fclose(trace);
@@ -114,7 +114,7 @@ int set_dktrace(const char *v, void *) {
 /***********************************************************************
 * specify rwtrace on or off
 ***********************************************************************/
-int set_dkrwtrace(const char *v, void *) {
+static int set_dkrwtrace(const char *v, void *) {
 	if (!dkx) {
 		printf("dk not specified\n");
 		return 2; // FATAL
@@ -133,15 +133,15 @@ int set_dkrwtrace(const char *v, void *) {
 /***********************************************************************
 * set number of simulated eus for a DFCU
 ***********************************************************************/
-int set_dkeus(const char *v, void *) {
+static int set_dkeus(const char *v, void *) {
 	char *p;
 	if (!dkx) {
 		printf("dk not specified\n");
 		return 2; // FATAL
 	}
-	dkx->eus = strtol(v, &p, 10);
-	if (*p) {
-		printf("num numeric data\n");
+	dkx->eus = strtoul(v, &p, 10);
+	if (*p || dkx->eus > 10) {
+		printf("non numeric or illegal data\n");
 		return 2; // FATAL
 	}
 	return 0; // OK
@@ -150,7 +150,7 @@ int set_dkeus(const char *v, void *) {
 /***********************************************************************
 * specify or close the file for emulation
 ***********************************************************************/
-int set_dkfile(const char *v, void *) {
+static int set_dkfile(const char *v, void *) {
 	if (!dkx) {
 		printf("dk not specified\n");
 		return 2; // FATAL
@@ -187,7 +187,7 @@ int set_dkfile(const char *v, void *) {
 /***********************************************************************
 * command table
 ***********************************************************************/
-const command_t dk_commands[] = {
+static const command_t dk_commands[] = {
 	{"dka",		set_dk,	(void *) 0},
 	{"dkb", 	set_dk, (void *) 1},
 	{"rwtrace",	set_dkrwtrace},
@@ -223,7 +223,7 @@ WORD48 dk_access(WORD48 iocw) {
 	WORD48 result = iocw & (MASK_IODUNIT | MASK_IODREAD);
 	ACCESSOR acc;
 	int i, j, k, retry;
-	int eu, diskfileaddr;
+	unsigned eu = 0, diskfileaddr = 0;
 	off_t seekval;
 	ssize_t cnt;
 	struct dk *dkx;
@@ -240,13 +240,12 @@ WORD48 dk_access(WORD48 iocw) {
 	dkx = dk + unit[unitdes][0].index;
 
 	if (!dkx->ready) {
-		result |= MASK_IORNRDY | (acc.addr << SHFT_ADDR);
+		result |= MASK_IORNRDY;
 		goto retresult;
 	}
 
 	// fetch first word from core with disk address
 	fetch(&acc);
-	diskfileaddr = 0;
 	eu = (acc.word >> 36) & 0xf;
 	for (i=5; i>=0; i--) {
 		unsigned char ch = (acc.word >> 6*i) & 0xf;
@@ -259,34 +258,44 @@ WORD48 dk_access(WORD48 iocw) {
 	}
 
 	// proceed to first data word
-	acc.addr++;
+	INCADDR(acc.addr);
 
 	if (trace) {
-		fprintf(trace, "%08u UNIT=%u IOCW=%016llo, EU:DFA=%d:%06d", instr_count, unitdes, iocw, eu, diskfileaddr);
+		fprintf(trace, "%08u UNIT=%u IOCW=%016llo, EU:DFA=%u:%06u", instr_count, unitdes, iocw, eu, diskfileaddr);
 	}
 
-	if (eu < 0 || eu >= dkx->eus || diskfileaddr < 0 || diskfileaddr >= SEGS_PER_DFEU) {
+	// legal access?
+	if (eu >= dkx->eus || diskfileaddr >= SEGS_PER_DFEU) {
 		// not supported
 		if (trace)
 			fprintf(trace, " NOT SUPPORTED\n");
 		if (dkx->rwtrace)
 			putchar('?');
-		result |= MASK_IORNRDY | MASK_IORD21;
-	} else if (iocw & MASK_IODMI) {
-		// special case when memory inhibit
+		result |= MASK_IORD21;
+		goto retresult;
+	}
+
+	// special case when memory inhibit
+	if (iocw & MASK_IODMI) {
 		dkx->readcheck = true;
 		if (trace)
 			fprintf(trace, " READ CHECK SEGMENTS=%02u\n", segcnt);
 		if (dkx->rwtrace)
 			putchar('c');
-	} else if (words == 0) {
-		// special case when words=0
+		goto retresult;
+	}
+
+	// special case when words=0
+	if (words == 0) {
 		if (trace)
 			fprintf(trace, " INTERROGATE\n");
 		if (dkx->rwtrace)
 			putchar('i');
-	} else if (iocw & MASK_IODREAD) {
-		// regular read
+		goto retresult;
+	}
+
+	// regular read
+	if (iocw & MASK_IODREAD) {
 		if (trace)
 			fprintf(trace, " READ WORDS=%02u\n", words);
 		if (dkx->rwtrace)
@@ -296,7 +305,7 @@ WORD48 dk_access(WORD48 iocw) {
 		while (words > 0) {
 			unsigned sum;
 			unsigned xsum;
-			int xeu, xdiskfileaddr;
+			unsigned xeu, xdiskfileaddr;
 			BIT check = true;
 
 			// get the physical record
@@ -305,7 +314,7 @@ WORD48 dk_access(WORD48 iocw) {
 			retry = 0;
 			readagain:
 			if (lseek(dkx->df, seekval, SEEK_SET) != seekval) {
-				printf("*** DISKIO READ SEEK ERROR %d DFA=%d:%06d ***\n", errno, eu, diskfileaddr);
+				printf("*** DISKIO READ SEEK ERROR %d DFA=%u:%06u ***\n", errno, eu, diskfileaddr);
 				// report not ready
 				result |= MASK_IORNRDY;
 				goto retresult;
@@ -314,12 +323,12 @@ WORD48 dk_access(WORD48 iocw) {
 			if (cnt == 0) {
 				// read past current end
 #if COMPLAINABOUTNEVERWRITTEN
-				printf("*** DISKIO READ PAST EOF DFA=%d:%06d ***\n", eu, diskfileaddr);
+				printf("*** DISKIO READ PAST EOF DFA=%u:%06u ***\n", eu, diskfileaddr);
 #endif
 				goto pasteof;
 			}
 			if (cnt != 256) {
-				printf("*** DISKIO READ ERROR %d DFA=%d:%06d RETRYING... ***\n", errno, eu, diskfileaddr);
+				printf("*** DISKIO READ ERROR %d DFA=%u:%06u RETRYING... ***\n", errno, eu, diskfileaddr);
 				++retry;
 				if (retry < 10)
 					goto readagain;
@@ -332,9 +341,9 @@ WORD48 dk_access(WORD48 iocw) {
 
 			// if the signature is missing or wrong, this record has never been written
 			dkx->dbufp = dkx->dbuf + DATALEN;
-			if (sscanf(dkx->dbufp, "_%04x_%01d_%06d_\n", &xsum, &xeu, &xdiskfileaddr) != 3) {
+			if (sscanf(dkx->dbufp, "_%04x_%01u_%06u_\n", &xsum, &xeu, &xdiskfileaddr) != 3) {
 #if COMPLAINABOUTNEVERWRITTEN
-				printf("*** DISKIO READ OF RECORD NEVER WRITTEN DFA=%d:%06d ***\n", eu, diskfileaddr);
+				printf("*** DISKIO READ OF RECORD NEVER WRITTEN DFA=%u:%06u ***\n", eu, diskfileaddr);
 				//printf("Segment:'%s'\n", dkx->dbuf);
 #endif
 		pasteof:
@@ -350,7 +359,7 @@ WORD48 dk_access(WORD48 iocw) {
 			// always handle chunks of 30 words
 			for (i=0; i<3; i++) {
 				if (trace)
-					fprintf(trace, "\t%05o %d:%06d", acc.addr, eu, diskfileaddr);
+					fprintf(trace, "\t%05o %u:%06u", acc.addr, eu, diskfileaddr);
 				for (j=0; j<10; j++) {
 					if (trace)
 						fprintf(trace, " %-8.8s", dkx->dbufp);
@@ -363,7 +372,7 @@ WORD48 dk_access(WORD48 iocw) {
 							dkx->dbufp++;
 						}
 						store(&acc);
-						acc.addr++;
+						INCADDR(acc.addr);
 						words--;
 					} else {
 						for (k=0; k<8; k++) {
@@ -397,8 +406,11 @@ WORD48 dk_access(WORD48 iocw) {
 			// next record address
 			diskfileaddr++;
 		} // while words
-	} else {
-		// regular write
+		goto retresult;
+	}
+
+	// what remains: regular write
+	{
 		if (trace)
 			fprintf(trace, " WRITE WORDS=%02u\n", words);
 		if (dkx->rwtrace)
@@ -412,12 +424,12 @@ WORD48 dk_access(WORD48 iocw) {
 			// always handle chunks of 30 words
 			for (i=0; i<3; i++) {
 				if (trace)
-					fprintf(trace, "\t%05o %d:%06d", acc.addr, eu, diskfileaddr);
+					fprintf(trace, "\t%05o %u:%06u", acc.addr, eu, diskfileaddr);
 				for (j=0; j<10; j++) {
 					if (words > 0) {
 						// if word count NOT exhausted, write next word
 						fetch(&acc);
-						acc.addr++;
+						INCADDR(acc.addr);
 						for (k=0; k<8; k++) {
 							unsigned ch = translatetable_bic2ascii[acc.word & 0x3f];
 							dkx->dbufp[7-k] = ch;
@@ -448,7 +460,7 @@ WORD48 dk_access(WORD48 iocw) {
 
 			// write header
 			dkx->dbufp = dkx->dbuf + DATALEN;
-			dkx->dbufp += sprintf(dkx->dbufp, "_%04x_%01d_%06d_\n",
+			dkx->dbufp += sprintf(dkx->dbufp, "_%04x_%01u_%06u_\n",
 				sum, eu, diskfileaddr);
 
 			// sanity check - should never fail
@@ -462,13 +474,13 @@ WORD48 dk_access(WORD48 iocw) {
 			retry = 0;
 			writeagain:
 			if (lseek(dkx->df, seekval, SEEK_SET) != seekval) {
-				printf("*** DISKIO WRITE SEEK ERROR %d DFA=%d:%06d ***\n", errno, eu, diskfileaddr);
+				printf("*** DISKIO WRITE SEEK ERROR %d DFA=%u:%06u ***\n", errno, eu, diskfileaddr);
 				// report not ready
 				result |= MASK_IORNRDY;
 				goto retresult;
 			}
 			if (write(dkx->df, dkx->dbuf, 256) != 256) {
-				printf("*** DISKIO WRITE ERROR %d DFA=%d:%06d RETRYING... ***\n", errno, eu, diskfileaddr);
+				printf("*** DISKIO WRITE ERROR %d DFA=%u:%06u RETRYING... ***\n", errno, eu, diskfileaddr);
 				++retry;
 				if (retry < 10)
 					goto writeagain;
@@ -480,16 +492,26 @@ WORD48 dk_access(WORD48 iocw) {
 			// next record address
 			diskfileaddr++;
 		} // while words
+		goto retresult;
 	}
+
 retresult:
-	result |= (acc.addr << SHFT_ADDR);
+	result |= (acc.addr << SHFT_ADDR) & MASK_ADDR;
 	if (iocw & MASK_IODUSEWC)
-		result |= ((WORD48)words << SHFT_WCNT);
+		result |= ((WORD48)words << SHFT_WCNT) & MASK_WCNT;
 
 	if (trace)
 		fflush(trace);
 	if (dkx->rwtrace)
 		fflush(stdout);
+
+	// trace/debug when any error has been set
+	if (result & 037700000LL) {
+		printf("DK "); print_iocw(stdout, iocw);
+		printf(" EU:DFA=%u:%06u ", eu, diskfileaddr);
+		print_ior(stdout, result);
+		printf("\n");
+	}
 
 	return result;
 }

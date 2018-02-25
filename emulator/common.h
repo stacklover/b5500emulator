@@ -23,6 +23,11 @@
 #define COMMON_H
 
 /*
+ * some compile time switches
+ */
+#define DEBUG305	0	// debug write accesses to Memory[0305]
+
+/*
  * first, we define some types representing the typical register
  * widths of the B5500.
  *
@@ -40,6 +45,7 @@ typedef unsigned char BIT;              // a single bit
 typedef unsigned char WORD2;            // 2 bits
 typedef unsigned char WORD3;            // 3 bits
 typedef unsigned char WORD4;            // 4 bits
+typedef unsigned char WORD5;            // 5 bits
 typedef unsigned char WORD6;            // 6 bits
 typedef unsigned char WORD8;            // 8 bits
 typedef unsigned short ADDR9;           // 9 bits higher part of memory address
@@ -57,6 +63,7 @@ typedef unsigned long long WORD48;      // 48 bits machine word
 #define MASK_WORD2  03
 #define MASK_WORD3  07
 #define MASK_WORD4  017
+#define MASK_WORD5  037
 #define MASK_WORD6  077
 #define MASK_WORD8  0377
 #define MASK_WORD12 07777
@@ -102,9 +109,6 @@ typedef struct central_control {
 // operator panel
 	BIT		CLS;	// CARD LOAD SELECT
 // some helper variables
-        WORD48          interruptMask;
-        WORD48          interruptLatch;
-        WORD4           iouMask;
 } CENTRAL_CONTROL;
 
 /*
@@ -224,13 +228,15 @@ typedef struct irq {
 #define SHM_CC          (('C'<<24)|('C'<<16)|('_'<<8)|'_')  // shared data of Central Control
 #define MSG_CPUA        (('C'<<24)|('P'<<16)|('U'<<8)|'A')  // messages to cpu A
 #define MSG_CPUB        (('C'<<24)|('P'<<16)|('U'<<8)|'B')  // messages to cpu B
-#define MSG_CC          (('C'<<24)|('C'<<16)|('_'<<8)|'_')  // messages to central control
+#define MSG_IOCU        (('I'<<24)|('O'<<16)|('C'<<8)|'U')  // messages to I/O control unit(s)
 
 /*
  * macros for memory handling
  */
 #define MAXMEM          32768
 #define MASKMEM         077777
+#define	INCADDR(XX)	(XX)=((XX)+1)&MASKMEM
+#define	DECADDR(XX)	(XX)=((XX)-1)&MASKMEM
 
 /*
  * Message types
@@ -248,12 +254,15 @@ typedef struct irq {
 extern WORD48 *MAIN;
 extern CPU *P[2];
 extern CENTRAL_CONTROL *CC;
+extern int	msg_cpu[2],	// messages to P1 and P2
+		msg_iocu;	// messages to IOCU(s)
 
 /*
  * special memory locations (absolute addresses)
  */
 #define AA_IODESC       00010   // IOCW is stored here by IIO operator
                                 // also used to store IP2 value
+#define	AA_STARTLOC	00020	// where processor 1 commences operation
 #define AA_IRQSTACK     00100   // stack is set here for IRQ processing
 #define AA_USERMEM      01000   // user memory starts here
 
@@ -441,11 +450,15 @@ extern CENTRAL_CONTROL *CC;
 
 /*
  * I/O descriptor or IO-Unit "D" register:
- * --- UUU UUW WWW WWW WWW m-- bdw r-- sss sss AAA AAA AAA AAA AAA
+ * --- UUU UUW WWW WWW WWW m-- bdw r-- sss sss AAA AAA AAA AAA AAA (General)
+ * --- UUU UU0 TTT TGB BBB m-- b-- r-- --- --- AAA AAA AAA AAA AAA (Datacomm)
  * octet numbers         FEDCBA9876543210
  */
 #define MASK_IODUNIT    00760000000000000LL // U: unit designation
-#define MASK_IODMI      00000004000000000LL // m: memory inhibit
+#define MASK_IODTUN     00007400000000000LL // T: terminal unit number
+#define MASK_IODTGM     00000200000000000LL // G: terminate on buffer full or GM
+#define MASK_IODBUF     00000170000000000LL // B: buffer number
+#define MASK_IODMI      00000004000000000LL // m: memory inhibit/interrogate
 #define MASK_IODBINARY  00000000400000000LL // b: binary mode (0=alpha)
 #define MASK_IODTAPEDIR 00000000200000000LL // d: tape direction (1=reverse)
 #define MASK_IODUSEWC   00000000100000000LL // w: use word counter
@@ -453,12 +466,13 @@ extern CENTRAL_CONTROL *CC;
 #define MASK_IODSEGCNT  00000000007700000LL // s: segment count
 #define MASK_DSKFILADR  00077777777777777LL // disk file address
 #define SHFT_IODUNIT    40
-//#define SHFT_IODRESULT  15
+#define SHFT_IODTUN     35
+#define SHFT_IODBUF     30
 #define SHFT_IODSEGCNT  15
 
 /*
  * I/O result bits
- * --m --- --- --p baz ccc --- --- --A FEP NDB AAA AAA AAA AAA AAA
+ * --- UUU UU- --p baz ccc m-- bdw reA FEP NDB AAA AAA AAA AAA AAA
  * octet numbers         FEDCBA9876543210
  */
 #define MASK_IORISMOD3  01000000000000000LL // m: TAPE - Model III
@@ -467,13 +481,15 @@ extern CENTRAL_CONTROL *CC;
 #define MASK_IORBOT     00000200000000000LL // a: TAPE - Begin of Tape
 #define MASK_IOREOT     00000100000000000LL // z: TAPE - End of Tape
 #define MASK_IORCHARS   00000070000000000LL // ccc: TAPE - Chars in last word
-#define MASK_IORMAE     00000000010000000LL // A: Memory Access Error
-#define MASK_IORD21     00000000004000000LL // F: unit specific END
-#define MASK_IORD20     00000000002000000LL // E: unit specific ERR
-#define MASK_IORD19     00000000001000000LL // P: unit specific PAR
-#define MASK_IORNRDY    00000000000400000LL // N: not ready
-#define MASK_IORDPE     00000000000200000LL // D: descriptor parity error
-#define MASK_IORBUSY    00000000000100000LL // B: busy
+#define MASK_IORD25     00000000100000000LL // !: D25 abnormal (datacomm only)
+#define MASK_IORD23     00000000020000000LL // e: D23 ending type
+#define MASK_IORMAE     00000000010000000LL // A: D22 Memory Access Error
+#define MASK_IORD21     00000000004000000LL // F: D21 unit specific END
+#define MASK_IORD20     00000000002000000LL // E: D20 unit specific ERR
+#define MASK_IORD19     00000000001000000LL // P: D19 unit specific PAR
+#define MASK_IORNRDY    00000000000400000LL // N: D18 not ready
+#define MASK_IORDPE     00000000000200000LL // D: D17 descriptor parity error
+#define MASK_IORBUSY    00000000000100000LL // B: D16 busy
 #define SHFT_IORCHARS   30
 
 /*
@@ -599,13 +615,14 @@ extern void preset(CPU *, ADDR15 runAddr);
 extern void b5500_execute_cm(CPU *);
 extern void b5500_execute_wm(CPU *);
 extern void run(CPU *);
+extern void trap305(CPU *);
 
 /* Richards simulator code */
 extern void sim_instr(CPU *);
 /* and callbacks */
 extern void sim_traceinstr(CPU *);
 
-/* devices */
+/* Supervisory Console (SPO) */
 extern int spo_init(const char *info);
 extern void spo_term(void);
 extern BIT spo_ready(unsigned index);
@@ -613,28 +630,50 @@ extern WORD48 spo_write(WORD48 iocw);
 extern WORD48 spo_read(WORD48 iocw);
 extern void spo_debug_write(const char *msg);
 
+/* Card Readers (CRx) */
 extern int cr_init(const char *info);
 extern void cr_term(void);
 extern BIT cr_ready(unsigned index);
 extern WORD48 cr_read(WORD48 iocw);
 
+/* Line Printers (LPx) */
 extern int lp_init(const char *info);
 extern void lp_term(void);
 extern BIT lp_ready(unsigned index);
 extern WORD48 lp_write(WORD48 iocw);
 
+/* Magnetic Tapes (MTx) */
 extern int mt_init(const char *info);
 extern void mt_term(void);
 extern BIT mt_ready(unsigned index);
 extern WORD48 mt_access(WORD48 iocw);
 
+/* Disk Control Units (DKx) */
 extern int dk_init(const char *info);
 extern void dk_term(void);
 extern BIT dk_ready(unsigned index);
 extern WORD48 dk_access(WORD48 iocw);
 
+/* Data Communication (DC) */
+extern int dcc_init(const char *info);
+extern void dcc_term(void);
+extern BIT dcc_ready(unsigned index);
+extern WORD48 dcc_access(WORD48 iocw);
+
+/* Central Control (CC) */
+extern int cc_init(const char *info);
+
+/* debug formatting functions */
+extern void print_iocw(FILE *fp, WORD48 iocw);
+extern void print_ior(FILE *fp, WORD48 ior);
+
+#ifdef USECAN
 /* CAN bus devices */
+extern void can_init(const char *busname);
 extern int can_send_string(unsigned id, const char *data);
+extern char *can_receive_string(unsigned id, char *data, int maxlen);
+extern int can_ready(unsigned id);
+#endif
 
 /* console and command line options */
 /*
@@ -655,7 +694,7 @@ extern const WORD8 translatetable_bic2ascii[64];
 extern const WORD6 translatetable_bcl2bic[64];
 
 /* other tables */
-extern UNIT unit[32][2];
+extern const UNIT unit[32][2];
 
 /*
  * bit and field manipulations

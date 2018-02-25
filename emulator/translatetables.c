@@ -15,7 +15,7 @@
 *   overhaul of file names
 ***********************************************************************/
 
-
+#include <stdio.h>
 #include "common.h"
 
 const WORD6 translatetable_ascii2bic[128] = { // Index by 8-bit ASCII to get 6-bit BIC (upcased, invalid=>"?")
@@ -51,7 +51,7 @@ const WORD6 translatetable_bcl2bic[64]   = { // Index by 6-bit BCL to get 6-bit 
 const char * translatetable_bic2baudot_as_ascii[64] = {
 // Index by 6-bit BIC to get 8-bit BAUDOT with ASCII representation
 // Note: ASCII # stands for BAUDOT "who are you?" symbol
-// Note: ASCII ^ stands for BAUDOR "bell" symbol
+// Note: ASCII ^ stands for BAUDOT "bell" symbol
         "0", "1", "2", "3", "4", "5", "6", "7",         // @00: 0 1 2 3 4 5 6 7
         "8", "9", "#", "^A", "?", ":", ")-", ")=",      // @10: 8 9 # @ ? : > >=
         "+", "A", "B", "C", "D", "E", "F", "G",         // @20: + A B C D E F G

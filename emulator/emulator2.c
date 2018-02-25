@@ -565,105 +565,6 @@ runagain:
                 goto runagain;
 }
 
-#ifdef USECAN
-/***********************************************************************
-* CANbus data
-***********************************************************************/
-int canfd = -1;
-pthread_t canbus_thread;
-int canready[128];
-
-/***********************************************************************
-* CANbus read thread
-***********************************************************************/
-void *canbus_function(void *p) {
-	struct can_frame frame;
-	struct timeval tv;
-	int i;
-loop:
-	// read CANbus - this will block until something is there to read or an error occurs
-	i = can_read(canfd, frame, &tv);
-	if (i >= 0) {
-		unsigned mask = 0;
-		unsigned val;
-		int ms_stamp = (tv.tv_sec * 1000) + (tv.tv_usec / 1000);
-#if CAN_TRACE
-		printf("@%u: %08X: %X", ms_stamp, frame.can_id, frame.can_dlc);
-		for (int j=0; j<frame.can_dlc; j++)
-			printf(" %02X", frame.data[j]);
-		printf("\n");
-#endif
-		// analyze the received frame and react upon it
-		unsigned id = frame.can_id & NODEID_MASK;
-		unsigned cob = frame.can_id & COB_MASK;
-
-		if (cob == MSGID_ERRCONT(0)) {
-			// common code for all stations
-			if (frame.can_dlc == 1 && frame.data[0] == NMT_STATE_PRE_OPERATIONAL) {
-				// station reports pre-operational: start it
-				canready[id] = 0;
-				frame.can_id = MSGID_NMT;
-				frame.can_dlc = 2;
-				frame.data[0] = NMT_CMD_START;
-				frame.data[1] = id;
-				can_write(canfd, frame);
-			} else if (frame.can_dlc == 1 && frame.data[0] == NMT_STATE_OPERATIONAL) {
-				// station reports operational: actions if not yet seen
-				if (canready[id] == 0) {
-					canready[id] = 1;
-					if (id < 32)
-						printf("can bus: unit %s went ready\n", unit[id][1].name);
-					else
-						printf("can bus: unit %d went ready\n", id);
-				}
-			}
-		} else if (cob == MSGID_TPDO4(0)) {
-			// TPDO4: received data
-		}
-	} else {
-		// error?
-		printf("can bus: read returned %d \n", i);
-	}
-	goto loop;
-	return NULL;
-}
-
-/***********************************************************************
-* send string to CANBUS (0 terminated)
-***********************************************************************/
-int can_send_string(unsigned id, const char *data)
-{
-	// possible at all?
-	if (canfd >= 0 && canready[id] > 0) {
-		const char *p = data;
-		struct can_frame frame;
-		frame.can_id = MSGID_RPDO4(id);
-		while (*p) {
-			frame.can_dlc = 1;
-			frame.data[0] = 0x80;
-			while (*p && frame.can_dlc <= 7) {
-				frame.data[frame.can_dlc] = *p++;
-				frame.can_dlc++;
-			}
-			can_write(canfd, frame);
-			usleep(300000);
-		}
-	}
-}
-
-/***********************************************************************
-* initialise CANBUS
-***********************************************************************/
-void canbus_init(const char *busname)
-{
-	canfd = can_open(busname);
-	if (canfd >= 0) {
-		// thread for CANbus
-		pthread_create(&canbus_thread, 0, canbus_function, 0);
-	}
-}
-#endif
-
 /***********************************************************************
 * command parser
 ***********************************************************************/
@@ -691,7 +592,7 @@ next:
 		}
 		// search table for command
 		for (tp = table; tp->cmd; tp++) {
-			if ((int)strlen(tp->cmd) == wlen && strncmp(tp->cmd, op, wlen) == 0) {
+			if ((int)strlen(tp->cmd) == wlen && strncasecmp(tp->cmd, op, wlen) == 0) {
 				// found the command, prepare parameter
 				memset(buffer, 0, sizeof buffer);
 				if (delim > equals) {
@@ -701,7 +602,11 @@ next:
 					}
 					memcpy(buffer, equals+1, delim - (equals+1));
 				}
-				res = (tp->func)(buffer, tp->data);
+				// execute command if it has a function
+				if (tp->func)
+					res = (tp->func)(buffer, tp->data);
+				else
+					res = 0;
 				if (res)
 					return res; // some error
 				op = delim;
@@ -719,18 +624,22 @@ next:
 * handle an option/command by passing it to the proper "unit"
 ***********************************************************************/
 int handle_option(const char *option) {
-	if (strncmp(option, "spo", 3) == 0) {
+	if (strncasecmp(option, "spo", 3) == 0) {
                 return spo_init(option); /* console emulation options */
-	} else if (strncmp(option, "cr", 2) == 0) {
+	} else if (strncasecmp(option, "cr", 2) == 0) {
                 return cr_init(option);  /* card reader emulation options */
-	} else if (strncmp(option, "mt", 2) == 0) {
+	} else if (strncasecmp(option, "mt", 2) == 0) {
                 return mt_init(option); /* tape emulation options */
-	} else if (strncmp(option, "dk", 2) == 0) {
+	} else if (strncasecmp(option, "dk", 2) == 0) {
                 return dk_init(option); /* disk file emulation options */
-	} else if (strncmp(option, "lp", 2) == 0) {
+	} else if (strncasecmp(option, "lp", 2) == 0) {
                 return lp_init(option); /* printer emulation options */
+	} else if (strncasecmp(option, "dcc", 3) == 0) {
+                return dcc_init(option); /* data communications emulation options */
+	} else if (strncasecmp(option, "cc", 2) == 0) {
+                return dcc_init(option); /* central control options */
 	}
-	printf("unknown device\n");
+	printf("unknown component\n");
 	return 1; // WARNING
 }
 
@@ -754,7 +663,7 @@ int main(int argc, char *argv[])
         int opt;
         ADDR15 addr;
 
-        printf("B5500 Emulator Main Thread\n");
+        printf("B5500 Emulator\n");
 
         b5500_init_shares();
 
@@ -773,6 +682,9 @@ int main(int argc, char *argv[])
         strcpy(cpu->id, "P1");
         cpu->acc.id = cpu->id;
         cpu->isP1 = true;
+
+	// clear CC
+	memset(CC, 0, sizeof(*CC));
 
 	// make sure P2 is not used
 	CC->P2BF = true;
@@ -826,8 +738,9 @@ int main(int argc, char *argv[])
 
 #ifdef USECAN
 	// init canbus
-	canbus_init("can1");
+	can_init("can1");
 #endif
+	cc_init("");
 
 	// handle init file first
         if (inifile) {
@@ -888,7 +801,6 @@ int main(int argc, char *argv[])
         if (opt)
                 exit(2);
 
-#if 1
 	// Create the timer
 	sev.sigev_notify = SIGEV_THREAD;
 	sev.sigev_notify_function = timer60hz;
@@ -897,7 +809,7 @@ int main(int argc, char *argv[])
 		perror("timer_create");
 		exit(2);
 	}
-	printf("timer ID is 0x%lx\n", (long) timerid);
+	//printf("timer ID is 0x%lx\n", (long) timerid);
 
 	// Start the timer
 	its.it_value.tv_sec = 0;
@@ -908,17 +820,8 @@ int main(int argc, char *argv[])
 		perror("timer_settime");
 		exit(2);
 	}
-#endif
 
-#ifdef USECAN
-	// wait for SPO to become ready
-	while (!canready[30]) {
-		printf("Waiting for SPO to become ready.\n");
-		sleep(1);
-	}
-#endif
-
-        addr = 020; // boot addr
+        addr = AA_STARTLOC; // start addr
         if (CC->CLS) {
                 // binary read first CRA card to <addr>
                 cr_read(0240000540000000LL | addr);
@@ -933,6 +836,8 @@ int main(int argc, char *argv[])
         return 0;
 }
 
+#if DEBUG305
+// this for MCP XIII endless loop debugging
 void trap305(CPU *cpu) {
 	char buf[200];
 	ADDR15 c = cpu->rC;
@@ -968,4 +873,5 @@ void trap305(CPU *cpu) {
 
 	spo_debug_write(buf);
 }
+#endif
 

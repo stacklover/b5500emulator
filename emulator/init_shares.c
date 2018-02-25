@@ -37,9 +37,10 @@
 static
 int	shm_main,   // main memory
 	shm_cpu[2], // P1 and P2 registers
-	shm_cc,	    // central control registers
-	msg_cpu[2], // messages	to P1 and P2
-	msg_cc;	    // messages	to CC
+	shm_cc;	    // central control registers
+
+int	msg_cpu[2], // messages	to P1 and P2
+	msg_iocu;   // messages	to IOCU(s)
 
 WORD48		*MAIN;
 CPU		*P[2];
@@ -78,9 +79,9 @@ void b5500_init_shares(void)
 		perror("msgget P2");
 		exit(2);
 	}
-	msg_cc = msgget(MSG_CC,	IPC_CREAT|0644);
-	if (msg_cc < 0)	{
-		perror("msgget CC");
+	msg_iocu = msgget(MSG_IOCU, IPC_CREAT|0644);
+	if (msg_iocu < 0)	{
+		perror("msgget IOCU");
 		exit(2);
 	}
 

@@ -1,18 +1,13 @@
 /*
  * C CANbus library
  *
- * Copyright 2016-2017 Reinhard Meyer
+ * Copyright 2016-2018 Reinhard Meyer
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
  *
- * NOTE: this certainly is the 1002nd++ graphics library. BUT looking at
- * existing libraries those are mostly much more complicated and designed
- * for larger screens with mouse or touch operation.
- * This library is designed for a small black and white (1BPP) LCD with
- * a rotary encoder as the only input device.
  */
 
 #include <stdio.h>
@@ -53,9 +48,9 @@ int can_open(const char *busname)
 		return -1;
 	}
 
-	// TODO: do not set to non blocking
-	i = fcntl(sock, F_GETFL, 0);
-	fcntl(sock, F_SETFL, i /*| O_NONBLOCK*/);
+	// do not set to non blocking - we use thread to read
+	// i = fcntl(sock, F_GETFL, 0);
+	// fcntl(sock, F_SETFL, i | O_NONBLOCK);
 
 	// find interface number for name
 	strncpy(ifr.ifr_name, busname, sizeof(ifr.ifr_name));

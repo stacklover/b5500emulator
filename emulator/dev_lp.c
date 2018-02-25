@@ -41,7 +41,7 @@
  * for each supported printer
  */
 enum pt	{pt_file=0, pt_lc10, pt_text};
-struct lp {
+static struct lp {
 	char	filename[NAMELEN];
 	FILE	*fp;
 	enum pt	type;
@@ -54,12 +54,12 @@ static struct lp *lpx = NULL;
 /*
  * set to lpa/lpb
  */
-int set_lp(const char *v, void *data) {lpx = lp+(int)data; return 0; }
+static int set_lp(const char *v, void *data) {lpx = lp+(int)data; return 0; }
 
 /*
  * specify printer type
  */
-int set_lptype(const char *v, void *) {
+static int set_lptype(const char *v, void *) {
 	if (!lpx) {
 		printf("lp not specified\n");
 		return 2; // FATAL
@@ -80,7 +80,7 @@ int set_lptype(const char *v, void *) {
 /*
  * specify or close the file for emulation
  */
-int set_lpfile(const char *v, void *) {
+static int set_lpfile(const char *v, void *) {
 	if (!lpx) {
 		printf("lp not specified\n");
 		return 2; // FATAL
@@ -115,7 +115,7 @@ int set_lpfile(const char *v, void *) {
 /*
  * command table
  */
-const command_t lp_commands[] = {
+static const command_t lp_commands[] = {
 	{"lpa",		set_lp,	(void *) 0},
 	{"lpb", 	set_lp, (void *) 1},
 	{"type",	set_lptype},

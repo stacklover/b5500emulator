@@ -28,7 +28,7 @@
 /*
  * for each supported card reader
  */
-struct cr {
+static struct cr {
 	char	filename[NAMELEN];
 	FILE	*fp;
 	BIT	ready;
@@ -45,12 +45,12 @@ static struct cr *crx = NULL;
 /*
  * set to cra/crb
  */
-int set_cr(const char *v, void *data) {crx = cr+(int)data; return 0; }
+static int set_cr(const char *v, void *data) {crx = cr+(int)data; return 0; }
 
 /*
  * specify or close the trace file
  */
-int set_crtrace(const char *v, void *) {
+static int set_crtrace(const char *v, void *) {
 	// if open, close existing trace file
 	if (trace) {
 		fclose(trace);
@@ -68,7 +68,7 @@ int set_crtrace(const char *v, void *) {
 /*
  * specify or close the file for emulation
  */
-int set_crfile(const char *v, void *) {
+static int set_crfile(const char *v, void *) {
 	if (!crx) {
 		printf("cr not specified\n");
 		return 2; // FATAL
@@ -102,7 +102,7 @@ int set_crfile(const char *v, void *) {
 /*
  * command table
  */
-const command_t cr_commands[] = {
+static const command_t cr_commands[] = {
 	{"cra",		set_cr,	(void *) 0},
 	{"crb", 	set_cr, (void *) 1},
 	{"trace",	set_crtrace},
