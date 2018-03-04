@@ -31,7 +31,9 @@ int main(int argc, char	*argv[])
 	while (1) {
 		printf("\033[H");
 		b5500_pdp_text(P[0]);
-		printf("IAR=%02o\n", CC->IAR);
+		printf("IAR=%02o TM=%02o ADxF=%o%o%o%o\n",
+			CC->IAR, CC->TM,
+			CC->AD1F, CC->AD2F, CC->AD3F, CC->AD4F);
 		//sleep(1);
 	}
 	return 0;

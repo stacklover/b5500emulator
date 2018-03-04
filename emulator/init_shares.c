@@ -42,8 +42,10 @@ int	shm_main,   // main memory
 int	msg_cpu[2], // messages	to P1 and P2
 	msg_iocu;   // messages	to IOCU(s)
 
+volatile
 WORD48		*MAIN;
 CPU		*P[2];
+volatile
 CENTRAL_CONTROL	*CC;
 
 void b5500_init_shares(void)

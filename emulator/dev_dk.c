@@ -26,6 +26,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include "common.h"
+#include "io.h"
 
 /***********************************************************************
 * notes:
@@ -217,10 +218,9 @@ BIT dk_ready(unsigned index) {
 /***********************************************************************
 * read or write, check or inquire
 ***********************************************************************/
-WORD48 dk_access(WORD48 iocw) {
-	unsigned unitdes, count, segcnt, words;
+void dk_access(IOCU *u) {
+	unsigned count, segcnt, words;
 	// prepare result with unit and read flag
-	WORD48 result = iocw & (MASK_IODUNIT | MASK_IODREAD);
 	ACCESSOR acc;
 	int i, j, k, retry;
 	unsigned eu = 0, diskfileaddr = 0;
@@ -228,19 +228,20 @@ WORD48 dk_access(WORD48 iocw) {
 	ssize_t cnt;
 	struct dk *dkx;
 
-	unitdes = (iocw & MASK_IODUNIT) >> SHFT_IODUNIT;
-	count = (iocw & MASK_WCNT) >> SHFT_WCNT;
-	segcnt = (iocw & MASK_IODSEGCNT) >> SHFT_IODSEGCNT;
-	acc.addr = (iocw & MASK_ADDR) >> SHFT_ADDR;
+	count = u->d_wc;
+	segcnt = u->d_result & 077;
+	acc.addr = u->d_addr;
 	// number of words to do
-	words = (iocw & MASK_IODUSEWC) ? count : segcnt * 30;
+	words = (u->d_control & CD_25_USEWC) ? count : segcnt * 30;
 
-	acc.id = unit[unitdes][0].name;
+	acc.id = unit[u->d_unit][0].name;
 	acc.MAIL = false;
-	dkx = dk + unit[unitdes][0].index;
+	dkx = dk + unit[u->d_unit][0].index;
+
+	u->d_result = 0;
 
 	if (!dkx->ready) {
-		result |= MASK_IORNRDY;
+		u->d_result = RD_18_NRDY;
 		goto retresult;
 	}
 
@@ -260,10 +261,6 @@ WORD48 dk_access(WORD48 iocw) {
 	// proceed to first data word
 	INCADDR(acc.addr);
 
-	if (trace) {
-		fprintf(trace, "%08u UNIT=%u IOCW=%016llo, EU:DFA=%u:%06u", instr_count, unitdes, iocw, eu, diskfileaddr);
-	}
-
 	// legal access?
 	if (eu >= dkx->eus || diskfileaddr >= SEGS_PER_DFEU) {
 		// not supported
@@ -271,12 +268,12 @@ WORD48 dk_access(WORD48 iocw) {
 			fprintf(trace, " NOT SUPPORTED\n");
 		if (dkx->rwtrace)
 			putchar('?');
-		result |= MASK_IORD21;
+		u->d_result = RD_21_END;
 		goto retresult;
 	}
 
 	// special case when memory inhibit
-	if (iocw & MASK_IODMI) {
+	if (u->d_control & CD_30_MI) {
 		dkx->readcheck = true;
 		if (trace)
 			fprintf(trace, " READ CHECK SEGMENTS=%02u\n", segcnt);
@@ -295,7 +292,7 @@ WORD48 dk_access(WORD48 iocw) {
 	}
 
 	// regular read
-	if (iocw & MASK_IODREAD) {
+	if (u->d_control & CD_24_READ) {
 		if (trace)
 			fprintf(trace, " READ WORDS=%02u\n", words);
 		if (dkx->rwtrace)
@@ -316,7 +313,7 @@ WORD48 dk_access(WORD48 iocw) {
 			if (lseek(dkx->df, seekval, SEEK_SET) != seekval) {
 				printf("*** DISKIO READ SEEK ERROR %d DFA=%u:%06u ***\n", errno, eu, diskfileaddr);
 				// report not ready
-				result |= MASK_IORNRDY;
+				u->d_result = RD_18_NRDY;
 				goto retresult;
 			}
 			cnt = read(dkx->df, dkx->dbuf, 256);
@@ -333,7 +330,7 @@ WORD48 dk_access(WORD48 iocw) {
 				if (retry < 10)
 					goto readagain;
 				// report not ready
-				result |= MASK_IORNRDY;
+				u->d_result = RD_18_NRDY;
 				goto retresult;
 			}
 			// put and end of string
@@ -476,7 +473,7 @@ WORD48 dk_access(WORD48 iocw) {
 			if (lseek(dkx->df, seekval, SEEK_SET) != seekval) {
 				printf("*** DISKIO WRITE SEEK ERROR %d DFA=%u:%06u ***\n", errno, eu, diskfileaddr);
 				// report not ready
-				result |= MASK_IORNRDY;
+				u->d_result = RD_18_NRDY;
 				goto retresult;
 			}
 			if (write(dkx->df, dkx->dbuf, 256) != 256) {
@@ -485,7 +482,7 @@ WORD48 dk_access(WORD48 iocw) {
 				if (retry < 10)
 					goto writeagain;
 				// report not ready
-				result |= MASK_IORNRDY;
+				u->d_result = RD_18_NRDY;
 				goto retresult;
 			}
 
@@ -496,24 +493,26 @@ WORD48 dk_access(WORD48 iocw) {
 	}
 
 retresult:
-	result |= (acc.addr << SHFT_ADDR) & MASK_ADDR;
-	if (iocw & MASK_IODUSEWC)
-		result |= ((WORD48)words << SHFT_WCNT) & MASK_WCNT;
+	if (u->d_control & CD_25_USEWC)
+		u->d_wc = words;
+	else
+		u->d_wc = 0;
+	u->d_addr = acc.addr;
 
 	if (trace)
 		fflush(trace);
 	if (dkx->rwtrace)
 		fflush(stdout);
 
+#if 0
 	// trace/debug when any error has been set
-	if (result & 037700000LL) {
-		printf("DK "); print_iocw(stdout, iocw);
+	if (u->d_result & 0377) {
+		printf("DK "); print_iocw(stdout, u);
 		printf(" EU:DFA=%u:%06u ", eu, diskfileaddr);
-		print_ior(stdout, result);
+		print_ior(stdout, u);
 		printf("\n");
 	}
-
-	return result;
+#endif
 }
 
 

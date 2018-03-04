@@ -11,6 +11,8 @@
 *   Factored out from emulator.c
 * 2017-10-10  R.Meyer
 *   some refactoring in the functions, added documentation
+* 2018-02-27  R.Meyer
+*   factored out I/O handling to io.c
 ***********************************************************************/
 
 #include <stdio.h>
@@ -28,46 +30,10 @@
 #include <sys/msg.h>
 #include "common.h"
 
-#define	THREADEDIO 1
-
 /*
  * optional trace files
  */
 static FILE *traceirq = NULL;
-static FILE *traceio = NULL;
-
-#if THREADEDIO
-static pthread_t io_handler;
-
-struct iomsgbuf {
-	long	iocu;	// 1..4
-	WORD48	iocw;	// original IOCW
-};
-#endif
-
-/***********************************************************************
-* Print an IO control word
-***********************************************************************/
-void print_iocw(FILE *fp, WORD48 iocw) {
-	ADDR15 addr = iocw & MASK_ADDR15;
-	ADDR15 cmd = (iocw >> 15) & MASK_ADDR15;
-	ADDR15 wc = (iocw >> 30) & MASK_ADDR10;
-	WORD5 unit = (iocw >> 40) & MASK_WORD5;
-	fprintf(fp, "UNIT=%02o WC=%05o CMD=%05o ADDR=%05o",
-		unit, wc, cmd, addr);
-}
-
-/***********************************************************************
-* Cause a memory access based IRQ
-***********************************************************************/
-void print_ior(FILE *fp, WORD48 ior) {
-	ADDR15 addr = ior & MASK_ADDR15;
-	ADDR15 stat = (ior >> 15) & MASK_ADDR15;
-	ADDR15 wc = (ior >> 30) & MASK_ADDR10;
-	WORD5 unit = (ior >> 40) & MASK_WORD5;
-	fprintf(fp, "UNIT=%02o WC=%05o STA=%05o ADDR=%05o",
-		unit, wc, stat, addr);
-}
 
 /***********************************************************************
 * Prepare a debug message
@@ -374,231 +340,12 @@ void haltP2(CPU *cpu)
 }
 
 /***********************************************************************
-* table of I/O units
-* indexed by unit designator and read bit of I/O descriptor
-***********************************************************************/
-const UNIT unit[32][2] = {
-	/*NO     NAME RDYBIT INDEX READYF    WRITEF    NULL     NAME RDYBIT INDEX READYF    READF     BOOTF */
-        /*00*/ {{NULL, 0, 0},                                  {NULL, 0, 0}},
-        /*01*/ {{"MTA", 47-47, 0, mt_ready, mt_access, NULL},  {"MTA", 47-47, 0, mt_ready, mt_access, NULL}},
-        /*02*/ {{NULL, 0, 0},                                  {NULL, 0, 0}},
-        /*03*/ {{"MTB", 47-46, 1, mt_ready, mt_access, NULL},  {"MTB", 47-46, 1, mt_ready, mt_access, NULL}},
-        /*04*/ {{"DRA", 47-31, 0},                             {"DRA", 47-31, 0}},         
-        /*05*/ {{"MTC", 47-45, 2, mt_ready, mt_access, NULL},  {"MTC", 47-45, 2, mt_ready, mt_access, NULL}},
-        /*06*/ {{"DKA", 47-29, 0, dk_ready, dk_access, NULL},  {"DKA", 47-29, 0, dk_ready, dk_access, NULL}},
-        /*07*/ {{"MTD", 47-44, 3, mt_ready, mt_access, NULL},  {"MTD", 47-44, 3, mt_ready, mt_access, NULL}},
-        /*08*/ {{"DRB", 47-30, 1},                             {"DRB", 47-30, 1}},
-        /*09*/ {{"MTE", 47-43, 4, mt_ready, mt_access, NULL},  {"MTE", 47-43, 4, mt_ready, mt_access, NULL}},
-        /*10*/ {{"CPA", 47-25, 0},                             {"CRA", 47-24, 0, cr_ready, cr_read, NULL}},
-        /*11*/ {{"MTF", 47-42, 5, mt_ready, mt_access, NULL},  {"MTF", 47-42, 5, mt_ready, mt_access, NULL}},
-        /*12*/ {{"DKB", 47-28, 1, dk_ready, dk_access, NULL},  {"DKB", 47-28, 1, dk_ready, dk_access, NULL}},
-        /*13*/ {{"MTH", 47-41, 6, mt_ready, mt_access, NULL},  {"MTH", 47-41, 6, mt_ready, mt_access, NULL}},
-        /*14*/ {{NULL, 0, 0},                                  {"CRB", 47-23, 1, cr_ready, cr_read, NULL}},
-        /*15*/ {{"MTJ", 47-40, 7, mt_ready, mt_access, NULL},  {"MTJ", 47-40, 7, mt_ready, mt_access, NULL}},
-        /*16*/ {{"DCC", 47-17, 0, dcc_ready, dcc_access, NULL},{"DCC", 47-17, 0, dcc_ready, dcc_access, NULL}},
-        /*17*/ {{"MTK", 47-39, 8, mt_ready, mt_access, NULL},  {"MTK", 47-39, 8, mt_ready, mt_access, NULL}},
-        /*18*/ {{"PPA", 47-21, 0},                             {"PRA", 47-20, 0}},
-        /*19*/ {{"MTL", 47-38, 9, mt_ready, mt_access, NULL},  {"MTL", 47-38, 9, mt_ready, mt_access, NULL}},
-        /*20*/ {{"PPB", 47-19, 1},                             {"PRB", 47-18, 1}},
-        /*21*/ {{"MTM", 47-37, 10, mt_ready, mt_access, NULL}, {"MTM", 47-37, 10, mt_ready, mt_access, NULL}},
-        /*22*/ {{"LPA", 47-27, 0, lp_ready, lp_write, NULL},   {NULL, 0, 0}},
-        /*23*/ {{"MTN", 47-36, 11, mt_ready, mt_access, NULL}, {"MTN", 47-36, 11, mt_ready, mt_access, NULL}},
-        /*24*/ {{NULL, 0, 0},                                  {NULL, 0, 0}},
-        /*25*/ {{"MTP", 47-35, 12, mt_ready, mt_access, NULL}, {"MTP", 47-35, 12, mt_ready, mt_access, NULL}},
-        /*26*/ {{"LPB", 47-26, 1, lp_ready, lp_write, NULL},   {NULL, 0, 0}},
-        /*27*/ {{"MTR", 47-34, 13, mt_ready, mt_access, NULL}, {"MTR", 47-34, 13, mt_ready, mt_access, NULL}},
-        /*28*/ {{NULL, 0, 0},                                  {NULL, 0, 0}},
-        /*29*/ {{"MTS", 47-33, 14, mt_ready, mt_access, NULL}, {"MTS", 47-33, 14, mt_ready, mt_access, NULL}},
-        /*30*/ {{"SPO", 47-22, 0, spo_ready, spo_write, NULL}, {"SPO", 47-22, 0, NULL, spo_read, NULL}},
-        /*31*/ {{"MTT", 47-32, 15, mt_ready, mt_access, NULL}, {"MTT", 47-32, 15, mt_ready, mt_access, NULL}},
-};
-
-/***********************************************************************
-* actual I/O is done here
-***********************************************************************/
-static void perform_io(int iocu, WORD48 iocw) {
-        ACCESSOR acc;
-        WORD48 result;
-        unsigned unitdes, wc;
-        ADDR15 core;
-        BIT reading;
-
-        // analyze IOCW
-        unitdes = (iocw & MASK_IODUNIT) >> SHFT_IODUNIT;
-        reading = (iocw & MASK_IODREAD) ? true : false;
-        wc = (iocw & MASK_WCNT) >> SHFT_WCNT;
-        core = (iocw & MASK_ADDR) >> SHFT_ADDR;
-
-        // elaborate traceio
-        if (traceio) {
-                fprintf(traceio, "%08u IOCW=%016llo\n", instr_count, iocw);
-                fprintf(traceio, "\tunit=%u(%s) core=%05o", unitdes, unit[unitdes][reading].name, core);
-                if (iocw & MASK_IODMI) fprintf(traceio, " inhibit");
-                if (iocw & MASK_IODBINARY) fprintf(traceio, " binary"); else fprintf(traceio, " alpha");
-                if (iocw & MASK_IODTAPEDIR)  fprintf(traceio, " reverse");
-                if (reading) fprintf(traceio, " read"); else fprintf(traceio, " write");
-                if (iocw & MASK_IODSEGCNT) fprintf(traceio, " segments=%llu", (iocw & MASK_IODSEGCNT) >> SHFT_IODSEGCNT);
-                if (iocw & MASK_IODUSEWC) fprintf(traceio, " wc=%u", wc);
-                fprintf(traceio, "\n");
-        }
-
-	// check for entry in unit table
-	if (unit[unitdes][reading].ioaccess) {
-		// handle I/O
-		result = (*unit[unitdes][reading].ioaccess)(iocw);
-	} else {
-	        // prepare result descriptor with not ready set
-	        result = iocw | MASK_IORNRDY;
-	}
-
-        if (traceio) {
-                fprintf(traceio, "\tRSLT=%016llo\n", result);
-                fflush(traceio);
-        }
-
-        // return IO RESULT
-        acc.id = "IORES";
-        acc.MAIL = false;
-       	acc.word = result;
-	switch (iocu) {
-	case 1:	acc.addr = 014;
-	        store(&acc);
-		// set I/O complete IRQ
-	        CC->CCI08F = true;
-		break;
-	case 2:	acc.addr = 015;
-	        store(&acc);
-		// set I/O complete IRQ
-	        CC->CCI09F = true;
-		break;
-	case 3:	acc.addr = 016;
-	        store(&acc);
-		// set I/O complete IRQ
-	        CC->CCI10F = true;
-		break;
-	case 4:	acc.addr = 017;
-	        store(&acc);
-		// set I/O complete IRQ
-	        CC->CCI11F = true;
-		break;
-	}
-}
-
-/***********************************************************************
-* the IIO operation is executed here
-***********************************************************************/
-void initiateIO(CPU *cpu) {
-        ACCESSOR acc;
-        WORD48 iocw;
-#if THREADEDIO
-	struct iomsgbuf msg;
-#endif
-
-        // first: get address of IOCW
-        acc.id = "IO";
-        acc.addr = 010;
-        acc.MAIL = false;
-        fetch(&acc);
-        // get IOCW itself
-        acc.addr = acc.word;
-        acc.MAIL = false;
-        fetch(&acc);
-        iocw = acc.word;
-
-#if THREADEDIO
-	// find first non busy IOCU
-	if (!CC->AD1F) {
-		msg.iocu = 1;
-		CC->AD1F = true;
-	} else if (!CC->AD2F) {
-		msg.iocu = 2;
-		CC->AD2F = true;
-	} else if (!CC->AD3F) {
-		msg.iocu = 3;
-		CC->AD3F = true;
-	} else if (!CC->AD4F) {
-		msg.iocu = 4;
-		CC->AD4F = true;
-	} else {
-		printf("initiateIO: all channels busy\n");
-		CC->CCI04F = true;
-		return;
-	}
-	msg.iocw = iocw;
-	while (msgsnd(msg_iocu, &msg, sizeof(msg), IPC_NOWAIT) < 0) {
-		perror("initiateIO");
-		if (errno == EINTR)
-			continue;
-		exit (2);
-	}
-#else
-	// channel already busy ?
-	if (CC->AD1F) {
-		printf("initiateIO: channel busy\n");
-		CC->CCI04F = true;
-		return;
-	}
-
-	// mark channel busy
-	CC->AD1F = true;
-
-	perform_io(1, iocw);
-#endif
-}
-
-/***********************************************************************
-* check which units are ready
-***********************************************************************/
-WORD48 interrogateUnitStatus(CPU *cpu) {
-	int i, j;
-	WORD48 unitsready = 0LL;
-
-	// go through all units
-	for (i=0; i<32; i++) for (j=0; j<2; j++)
-		if (unit[i][j].isready && (*unit[i][j].isready)(unit[i][j].index))
-			unitsready |= (1LL << unit[i][j].readybit);
-
-	// return the mask
-        return unitsready;
-}
-
-/***********************************************************************
-* interrogate the next free I/O channel
-***********************************************************************/
-WORD48 interrogateIOChannel(CPU *cpu) {
-        WORD48 result = 0LL;
-
-#if THREADEDIO
-	// find first not busy IOCU
-	if (!CC->AD1F)
-		result = 1LL;
-	else if (!CC->AD2F)
-		result = 2LL;
-	else if (!CC->AD3F)
-		result = 3LL;
-	else if (!CC->AD4F)
-		result = 4LL;
-#else
-        if (!CC->AD1F)
-		result = 1LL;
-#endif
-	// no channel available ?
-	if (result == 0LL) {
-		printf("interrogateIOChannel: 0\n");
-	}
-
-        return result;
-}
-
-/***********************************************************************
 * Called by a requestor module passing accessor object "acc" to fetch a
 * word from memory.
 ***********************************************************************/
 void fetch(ACCESSOR *acc)
 {
         BIT watched = dotrcmem;
-        //if (acc->addr == 0200)
-        //        watched = true;
         // For now, we assume memory parity can never happen
         if (acc->MAIL) {
                 acc->MPED = false;      // no memory parity error
@@ -624,8 +371,6 @@ void fetch(ACCESSOR *acc)
 void store(ACCESSOR *acc)
 {
         BIT watched = dotrcmem;
-        //if (acc->addr == 0200)
-        //        watched = true;
         // For now, we assume memory parity can never happen
         if (acc->MAIL) {
                 acc->MPED = false;      // no memory parity error
@@ -641,38 +386,6 @@ void store(ACCESSOR *acc)
                         printf("\t[%05o]<-%016llo OK (%s)\n",
                                 acc->addr, acc->word, acc->id);
         }
-}
-
-#if THREADEDIO
-/***********************************************************************
-* I/O handling thread
-***********************************************************************/
-static void *io_function(void *p) {
-	size_t	len;
-	struct iomsgbuf msg;
-loop:
-	len = msgrcv(msg_iocu, &msg, sizeof(msg), 0, 0);
-	if (len < 0) {
-		perror("IO THREAD");
-		if (errno == EINTR)
-			goto loop;
-		exit (2);
-	}
-	// now do the I/O
-	perform_io(msg.iocu, msg.iocw);
-	goto loop;	
-}
-#endif
-
-/***********************************************************************
-* CC init function
-***********************************************************************/
-extern int cc_init(const char *info) {
-#if THREADEDIO
-	// io handler thread
-	pthread_create(&io_handler, 0, io_function, 0);
-#endif
-	return 0;
 }
 
 

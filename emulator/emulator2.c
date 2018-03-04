@@ -25,6 +25,7 @@
 #include <signal.h>
 #include <time.h>
 #include "common.h"
+#include "io.h"
 
 #ifdef USECAN
 #include <linux/can.h>
@@ -636,8 +637,8 @@ int handle_option(const char *option) {
                 return lp_init(option); /* printer emulation options */
 	} else if (strncasecmp(option, "dcc", 3) == 0) {
                 return dcc_init(option); /* data communications emulation options */
-	} else if (strncasecmp(option, "cc", 2) == 0) {
-                return dcc_init(option); /* central control options */
+	} else if (strncasecmp(option, "io", 2) == 0) {
+                return io_init(option); /* central control options */
 	}
 	printf("unknown component\n");
 	return 1; // WARNING
@@ -667,24 +668,24 @@ int main(int argc, char *argv[])
 
         b5500_init_shares();
 
-        memset(MAIN, 0, MAXMEM*sizeof(WORD48));
+        memset((void*)MAIN, 0, MAXMEM*sizeof(WORD48));
 
 	// P2
         cpu = P[1];
-        memset(cpu, 0, sizeof(CPU));
-        strcpy(cpu->id, "P2");
+        memset((void*)cpu, 0, sizeof(CPU));
+        strcpy((char*)cpu->id, "P2");
         cpu->acc.id = cpu->id;
         cpu->isP1 = false;
 
 	// P1
         cpu = P[0];
-        memset(cpu, 0, sizeof(CPU));
-        strcpy(cpu->id, "P1");
+        memset((void*)cpu, 0, sizeof(CPU));
+        strcpy((char*)cpu->id, "P1");
         cpu->acc.id = cpu->id;
         cpu->isP1 = true;
 
 	// clear CC
-	memset(CC, 0, sizeof(*CC));
+	memset((void*)CC, 0, sizeof(*CC));
 
 	// make sure P2 is not used
 	CC->P2BF = true;
@@ -740,7 +741,7 @@ int main(int argc, char *argv[])
 	// init canbus
 	can_init("can1");
 #endif
-	cc_init("");
+	io_init("");
 
 	// handle init file first
         if (inifile) {
@@ -761,7 +762,7 @@ int main(int argc, char *argv[])
 			if (*p != '#') {
 				opt = handle_option(p);
 				if (opt)
-					exit (opt);
+					exit(opt);
 			}
                 }
 		fclose(inifile);
@@ -773,7 +774,7 @@ int main(int argc, char *argv[])
 		printf("=CL %s\n", argv[optind]);
 		opt = handle_option(argv[optind++]);
 		if (opt)
-			exit (opt);
+			exit(opt);
         }
 
         opt = openfile(&listfile, "r");
@@ -821,17 +822,13 @@ int main(int argc, char *argv[])
 		exit(2);
 	}
 
-        addr = AA_STARTLOC; // start addr
-        if (CC->CLS) {
-                // binary read first CRA card to <addr>
-                cr_read(0240000540000000LL | addr);
-        } else {
-                // load DKA disk segments 1..63 to <addr>
-		MAIN[addr-1] = 1LL;
-                dk_access(0140000047700000LL | (addr-1));
-        }
+	addr = 020;
+
+	io_ipl(addr);
 
         execute(addr);
+
+	printf("end of emulation\n");
 
         return 0;
 }

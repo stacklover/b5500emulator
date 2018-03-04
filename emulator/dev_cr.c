@@ -21,13 +21,15 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include "common.h"
+#include "io.h"
 
 #define READERS 2
 #define NAMELEN 100
 #define	CBUFLEN	164
-/*
- * for each supported card reader
- */
+
+/***********************************************************************
+* for each supported card reader
+***********************************************************************/
 static struct cr {
 	char	filename[NAMELEN];
 	FILE	*fp;
@@ -36,20 +38,20 @@ static struct cr {
 	char	*cbufp;
 } cr[READERS];
 
-/*
- * optional open file to write debugging traces into
- */
+/***********************************************************************
+* optional open file to write debugging traces into
+***********************************************************************/
 static FILE *trace = NULL;
 static struct cr *crx = NULL;
 
-/*
- * set to cra/crb
- */
+/***********************************************************************
+* set to cra/crb
+***********************************************************************/
 static int set_cr(const char *v, void *data) {crx = cr+(int)data; return 0; }
 
-/*
- * specify or close the trace file
- */
+/***********************************************************************
+* specify or close the trace file
+***********************************************************************/
 static int set_crtrace(const char *v, void *) {
 	// if open, close existing trace file
 	if (trace) {
@@ -65,9 +67,9 @@ static int set_crtrace(const char *v, void *) {
 	return 0; // OK
 }
 
-/*
- * specify or close the file for emulation
- */
+/***********************************************************************
+* specify or close the file for emulation
+***********************************************************************/
 static int set_crfile(const char *v, void *) {
 	if (!crx) {
 		printf("cr not specified\n");
@@ -99,9 +101,9 @@ static int set_crfile(const char *v, void *) {
 	return 0; // OK
 }
 
-/*
- * command table
- */
+/***********************************************************************
+* command table
+***********************************************************************/
 static const command_t cr_commands[] = {
 	{"cra",		set_cr,	(void *) 0},
 	{"crb", 	set_cr, (void *) 1},
@@ -110,51 +112,51 @@ static const command_t cr_commands[] = {
 	{NULL,		NULL},
 };
 
-/*
- * Initialize command from argv scanner or special SPO input
- */
+/***********************************************************************
+* Initialize command from argv scanner or special SPO input
+***********************************************************************/
 int cr_init(const char *option) {
 	crx = NULL; // require specification of a drive
 	return command_parser(cr_commands, option);
 }
 
-/*
- * query ready status
- */
+/***********************************************************************
+* query ready status
+***********************************************************************/
 BIT cr_ready(unsigned index) {
 	if (index < READERS)
 		return cr[index].ready;
 	return false;
 }
 
-/*
- * read a single card
- */
-WORD48 cr_read(WORD48 iocw) {
-        unsigned unitdes;
+/***********************************************************************
+* read a single card
+***********************************************************************/
+void cr_read(IOCU *u) {
         BIT mi;
 	struct cr *crx;
 	int i;
 
-        WORD48 result = iocw & (MASK_IODUNIT | MASK_IODREAD);
         ACCESSOR acc;
         int chars;
 
-        unitdes = (iocw & MASK_IODUNIT) >> SHFT_IODUNIT;
-        mi = (iocw & MASK_IODMI) ? true : false;
-        acc.addr = (iocw & MASK_ADDR) >> SHFT_ADDR;
-        if (iocw & MASK_IODBINARY)
+        mi = u->d_control & CD_30_MI ? true : false;
+        acc.addr = u->d_addr;
+
+        if (u->d_control & CD_27_BINARY)
                 chars = 160;
         else
                 chars = 80;
 
-        acc.id = unit[unitdes][1].name;
+        u->d_result = 0;
+
+        acc.id = unit[u->d_unit][1].name;
         acc.MAIL = false;
-	crx = cr + unit[unitdes][1].index;
+	crx = cr + unit[u->d_unit][1].index;
 
         if (!crx->ready) {
 notready:
-                result |= MASK_IORNRDY | (acc.addr << SHFT_ADDR);
+                u->d_result = RD_18_NRDY;
                 goto retresult;
         }
 
@@ -172,13 +174,13 @@ notready:
                 *crx->cbufp-- = 0;
         crx->cbufp = crx->cbuf;
 
-        if ((iocw & MASK_IODBINARY) && strlen(crx->cbuf) != (unsigned)chars) {
+        if ((u->d_control & CD_27_BINARY) && strlen(crx->cbuf) != (unsigned)chars) {
                 printf("*\tERROR: binary card incorrect length(%u). abort\n", strlen(crx->cbuf));
                 exit(0);
         }
 
-        if (crx->cbuf[0] == '?' && !(iocw & MASK_IODBINARY))
-                result |= MASK_IORD19;
+        if (crx->cbuf[0] == '?' && !(u->d_control & CD_27_BINARY))
+                u->d_result |= RD_19_PAR;
 
         while (chars > 0) {
 		acc.word = 0LL;
@@ -197,9 +199,9 @@ notready:
 		}
         }
 
-        result |= (acc.addr << SHFT_ADDR);
 retresult:
-        return result;
+	u->d_wc = 0;
+	u->d_addr = acc.addr;
 }
 
 

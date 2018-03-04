@@ -52,6 +52,7 @@ OBJEMULATOR =	$(ODIR)/emulator2.o $(ODIR)/init_shares.o \
 OBJEMULATOR2 =	$(ODIR)/emulator2.o $(ODIR)/init_shares.o \
 		$(ODIR)/b5500_cpu.o \
 		$(ODIR)/cc2.o \
+		$(ODIR)/io.o \
 		$(ODIR)/dev_spo.o \
 		$(ODIR)/dev_cr.o \
 		$(ODIR)/dev_mt.o \
@@ -82,7 +83,7 @@ OBJSPTEST =	$(ODIR)/sptest.o \
 		$(ODIR)/translatetables.o \
 		$(ODIR)/instr_table.o
 
-INC =		common.h b5500_defs.h canlib.h
+INC =		common.h io.h b5500_defs.h canlib.h
 
 CFLAGS		= -D_LARGEFILE64_SOURCE	-D_FILE_OFFSET_BITS=64 -pipe -Os \
 		  -D_THREAD_SAFE -D_REENTRANT -DNOSIMH -Wall

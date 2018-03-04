@@ -22,6 +22,7 @@
 #include <fcntl.h>
 #include <time.h>
 #include "common.h"
+#include "io.h"
 
 /***********************************************************************
 * analysy of possible buffer overrun situations
@@ -47,8 +48,6 @@
 /***********************************************************************
 * the SPO
 ***********************************************************************/
-static char	filename[NAMELEN];
-static FILE	*fp = stdin;
 static BIT	ready;
 static char	spoinbuf[BUFLEN];
 static char	spooutbuf[BUFLEN];
@@ -67,6 +66,19 @@ static unsigned timestamp = false;
 #endif
 
 /***********************************************************************
+* output function
+***********************************************************************/
+void spo_print(const char *buf) {
+	fputs(buf, stdout);
+
+#ifdef USECAN
+	// send message to "real SPO"
+	if (canspo)
+		can_send_string(30, buf);
+#endif
+}
+
+/***********************************************************************
 * specify load type
 ***********************************************************************/
 static int set_spoload(const char *v, void *) {
@@ -75,7 +87,7 @@ static int set_spoload(const char *v, void *) {
 	} else if (strcasecmp(v, "CARD") == 0) {
 		CC->CLS = true;
 	} else {
-		printf("$UNKNOWN LOAD TYPE\n");
+		spo_print("$UNKNOWN LOAD TYPE\r\n");
 		return 2; // FATAL
 	}
 	return 0; // OK
@@ -90,7 +102,7 @@ static int set_autoexec(const char *v, void *) {
 	} else if (strcasecmp(v, "OFF") == 0) {
 		autoexec = false;
 	} else {
-		printf("$SPECIFY ON OR OFF\n");
+		spo_print("$SPECIFY ON OR OFF\r\n");
 		return 2; // FATAL
 	}
 	return 0; // OK
@@ -102,16 +114,16 @@ static int set_autoexec(const char *v, void *) {
 ***********************************************************************/
 static int set_canspo(const char *v, void *) {
 	if (strcasecmp(v, "ON") == 0) {
-		canspo = true;
 		// wait for SPO to become ready
 		while (!can_ready(30)) {
-			printf("$WAITING FOR SPO READY\n");
+			spo_print("$WAITING FOR SPO READY\r\n");
 			sleep(1);
 		}
+		canspo = true;
 	} else if (strcasecmp(v, "OFF") == 0) {
 		canspo = false;
 	} else {
-		printf("$SPECIFY ON OR OFF\n");
+		spo_print("$SPECIFY ON OR OFF\r\n");
 		return 2; // FATAL
 	}
 	return 0; // OK
@@ -128,7 +140,7 @@ static int set_timestamp(const char *v, void *) {
 	} else if (strcasecmp(v, "OFF") == 0) {
 		timestamp = false;
 	} else {
-		printf("$SPECIFY ON OR OFF\n");
+		spo_print("$SPECIFY ON OR OFF\r\n");
 		return 2; // FATAL
 	}
 	return 0; // OK
@@ -204,18 +216,20 @@ BIT spo_ready(unsigned index) {
 		if (*spoinp == '$') {
 			int res = handle_option(spoinp+1);
 			if (res == 0)
-				printf("$OK\n");
+				sprintf(spoinbuf, "$OK\r\n");
 			else
-				printf("$ERROR %d\n", res);
+				sprintf(spoinbuf, "$ERROR %d\r\n", res);
+			spo_print(spoinbuf);
 			// mark the input buffer empty again
 			spoinbuf[0] = 0;
 			// remember when this input was
 			time(&stamp);
 
 		} else {
+			// add EOL to the end
+			strcat(spoinbuf, "\r");
 			// signal input request
 			CC->CCI05F = true;
-			signalInterrupt("SPO", "INPUT REQUEST");
 			// the input line is read later, once the IRQ is handled by the MCP
 		}
 	}
@@ -227,13 +241,9 @@ BIT spo_ready(unsigned index) {
 /***********************************************************************
 * write a single line to SPO
 ***********************************************************************/
-WORD48 spo_write(WORD48 iocw) {
+void spo_write(IOCU *u) {
 	int count;
-	ACCESSOR acc;
 	char *spooutp = spooutbuf;
-#ifdef USECAN
-	char *spooutp2;
-#endif
 #if TIMESTAMP
 	time_t now;
 	struct tm tm;
@@ -242,61 +252,53 @@ WORD48 spo_write(WORD48 iocw) {
 	now -= stamp;
 	gmtime_r(&now, &tm);
 	if (timestamp)
-		spooutp += sprintf(spooutp, "%02d:%02u:%02u ", tm.tm_hour, tm.tm_min, tm.tm_sec);
+		spooutp += sprintf(spooutp, "%02d:%02u:%02u", tm.tm_hour, tm.tm_min, tm.tm_sec);
 #endif
-#ifdef USECAN
-	spooutp2 = spooutp;
-#endif
-	acc.id = "SPO";
-	acc.MAIL = false;
-	acc.addr = iocw & MASKMEM;
 
-loop:	fetch(&acc);
+loop:
+	// read next word
+	main_read_inc(u);
+	// handle each char in this word
 	for (count=0; count<8; count++) {
+		u->ob = (u->w >> 42) & 077;
+		u->w <<= 6;
+		if (u->ob == 037)
+			goto done;
 		// prevent buffer overrun
-		if (spooutp >= spooutbuf + sizeof spooutbuf - 1)
-			goto done;
-		if (((acc.word >> 42) & 0x3f) == 037)
-			goto done;
-		*spooutp++ = translatetable_bic2ascii[(acc.word>>42) & 0x3f];
-		acc.word <<= 6;
+		if (spooutp < spooutbuf + sizeof spooutbuf - 1)
+			*spooutp++ = translatetable_bic2ascii[u->ob];
 	}
-	acc.addr++;
 	goto loop;
 
-done:	*spooutp++ = '\r';
-	*spooutp++ = '\n';
-	*spooutp++ = 0;
-	printf ("%s", spooutbuf);
+done:
+	// add final CRLF, NULL
+	*spooutp++ = '\r'; *spooutp++ = '\n'; *spooutp++ = 0;
 
-#ifdef USECAN
-	// send message to "real SPO"
-	if (canspo)
-		can_send_string(30, spooutp2);
-#endif
+	// print
+	spo_print(spooutbuf);
 
 #if AUTOEXEC
+	// check for end of job and reload card deck if so
 	if (autoexec > 0 && strstr(spooutbuf, auto_trigger1) && strstr(spooutbuf, auto_trigger2)) {
-		printf("$ ***** AUTOEXEC #%d *****\n", autoexec++);
+		sprintf(spooutbuf, "$ ***** AUTOEXEC #%d *****\r\n", autoexec++);
+		spo_print(spooutbuf);
 		time(&stamp);
 		handle_option(auto_cmd);
 	}
 #endif
-	return (iocw & (MASK_IODUNIT | MASK_IODREAD)) | acc.addr;
+
+	// trivial all good result
+	u->d_wc = 0;
+	u->d_result = 0;
 }
 
 /***********************************************************************
 * read a single line from the SPO input buffer
 ***********************************************************************/
-WORD48 spo_read(WORD48 iocw) {
+void spo_read(IOCU *u) {
 	int count;
-	ACCESSOR acc;
-	BIT gmset = false;		// remember if we have stored a GM already
 	char *spoinp = spoinbuf;
-
-	acc.id = "SPO";
-	acc.MAIL = false;
-	acc.addr = iocw & MASKMEM;
+	BIT gmset = false;
 
 	// convert until EOL or any other control char found
 	// there should also be a limitation of the number of words
@@ -304,38 +306,32 @@ WORD48 spo_read(WORD48 iocw) {
 	// with a buflen of 80 (chars) we should be safe
 
 	// do while words (8 characters) while we have more data
-	while (*spoinp >= ' ') {
-		acc.word = 0;
+	while (*spoinp >= ' ' || !gmset) {
 		for (count=0; count<8; count++) {
-			acc.word <<= 6;
 			// note that spoinp stays on the invalid char
 			// causing the rest of the word to be filled with
 			// GM
 			if (*spoinp >= ' ') {
 				// printable char
-				acc.word |= translatetable_ascii2bic[*spoinp++ & 0x7f];
+				u->ib = translatetable_ascii2bic[*spoinp++ & 0x7f];
 			} else {
 				// EOL or other char, fill word with GM
-				acc.word |= 037;
+				u->ib = 037;
 				gmset = true;
 			}
+			u->w <<= 6;
+			u->w |= u->ib;
 		}
 		// store the complete word
-		store(&acc);
-		acc.addr++;
+		main_write_inc(u);
 	}
 
-	// store one word with GM, if no GM was entered
-	if (!gmset) {
-		acc.word = 03737373737373737LL;
-		store(&acc);
-		acc.addr++;
-	}
-
-	// mark the input buffer empty
+	// mark the input buffer empty again
 	spoinbuf[0] = 0;
 
-	return (iocw & (MASK_IODUNIT | MASK_IODREAD)) | acc.addr;
+	// trivial all good result
+	u->d_wc = 0;
+	u->d_result = 0;
 }
 
 /***********************************************************************
@@ -353,8 +349,10 @@ void spo_debug_write(const char *msg) {
 	if (timestamp)
 		spooutp += sprintf(spooutp, "%02d:%02u:%02u ", tm.tm_hour, tm.tm_min, tm.tm_sec);
 #endif
-	*spooutp++ = 0;
-	printf ("%s~%s\n", spooutbuf, msg);
+	spooutp += sprintf(spooutp, "%s\r\n", msg);
+
+	// print it
+	spo_print(spooutbuf);
 }
 
 

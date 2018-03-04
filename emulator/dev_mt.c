@@ -21,14 +21,15 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include "common.h"
+#include "io.h"
 
 #define TAPES 16
 #define NAMELEN 100
 #define	TBUFLEN	164
 
-/*
- * for each supported tape drive
- */
+/***********************************************************************
+* for each supported tape drive
+***********************************************************************/
 static struct mt {
 	char	filename[NAMELEN];
 	FILE	*fp;
@@ -39,20 +40,20 @@ static struct mt {
 	BIT	eof;
 } mt[TAPES];
 
-/*
- * optional open file to write debugging traces into
- */
+/***********************************************************************
+* optional open file to write debugging traces into
+***********************************************************************/
 static FILE *trace = NULL;
 static struct mt *mtx = NULL;
 
-/*
- * set to mta..mtt
- */
+/***********************************************************************
+* set to mta..mtt
+***********************************************************************/
 static int set_mt(const char *v, void *data) {mtx = mt+(int)data; return 0; }
 
-/*
- * specify or close the trace file
- */
+/***********************************************************************
+* specify or close the trace file
+***********************************************************************/
 static int set_mttrace(const char *v, void *) {
 	// if open, close existing trace file
 	if (trace) {
@@ -68,9 +69,9 @@ static int set_mttrace(const char *v, void *) {
 	return 0; // OK
 }
 
-/*
- * specify or close the file for emulation
- */
+/***********************************************************************
+* specify or close the file for emulation
+***********************************************************************/
 static int set_mtfile(const char *v, void *) {
 	if (!mtx) {
 		printf("mt not specified\n");
@@ -103,9 +104,9 @@ static int set_mtfile(const char *v, void *) {
 	return 0; // OK
 }
 
-/*
- * command table
- */
+/***********************************************************************
+* command table
+***********************************************************************/
 static const command_t mt_commands[] = {
 	{"mta",		set_mt,	(void *) 0},
 	{"mtb", 	set_mt, (void *) 1},
@@ -128,31 +129,30 @@ static const command_t mt_commands[] = {
 	{NULL,		NULL},
 };
 
-/*
- * Initialize command from argv scanner or special SPO input
- */
+/***********************************************************************
+* Initialize command from argv scanner or special SPO input
+***********************************************************************/
 int mt_init(const char *option) {
 	mtx = NULL; // require specification of a drive
 	return command_parser(mt_commands, option);
 }
 
-/*
- * query ready status
- */
+/***********************************************************************
+* query ready status
+***********************************************************************/
 BIT mt_ready(unsigned index) {
 	if (index < TAPES)
 		return mt[index].ready;
 	return false;
 }
 
-/*
- * read or write a tape record or rewind
- */
-WORD48 mt_access(WORD48 iocw) {
-        unsigned unitdes, count, words;
+/***********************************************************************
+* read or write a tape record or rewind
+***********************************************************************/
+void mt_access(IOCU *u) {
+        unsigned words;
         BIT mi, binary, tapedir, usewc, read;
-        // prepare result with unit and read flag and MOD III DESC bit
-        WORD48 result = (iocw & (MASK_IODUNIT | MASK_IODREAD)) | MASK_IORISMOD3;
+
         ACCESSOR acc;
         int i, cp=42;
         BIT first;
@@ -161,30 +161,24 @@ WORD48 mt_access(WORD48 iocw) {
         int lp;
 	struct mt *mtx;
 
-        unitdes = (iocw & MASK_IODUNIT) >> SHFT_IODUNIT;
-        count = (iocw & MASK_WCNT) >> SHFT_WCNT;
-        mi = (iocw & MASK_IODMI) ? true : false;
-        binary = (iocw & MASK_IODBINARY) ? true : false;
-        tapedir = (iocw & MASK_IODTAPEDIR) ? true : false;
-        usewc = (iocw & MASK_IODUSEWC) ? true : false;
-        read = (iocw & MASK_IODREAD) ? true : false;
-        acc.addr = (iocw & MASK_ADDR) >> SHFT_ADDR;
+        mi = (u->d_control & CD_30_MI) ? true : false;
+        binary = (u->d_control & CD_27_BINARY) ? true : false;
+        tapedir = (u->d_control & CD_26_DIR) ? true : false;
+        usewc = (u->d_control & CD_25_USEWC) ? true : false;
+        read = (u->d_control & CD_24_READ) ? true : false;
+        acc.addr = u->d_addr;
         // number of words to do
-        words = (usewc) ? count : 1024;
+        words = (usewc) ? u->d_wc : 1024;
 
-        acc.id = unit[unitdes][0].name;
+        acc.id = unit[u->d_unit][0].name;
         acc.MAIL = false;
-	mtx = mt + unit[unitdes][0].index;
+	mtx = mt + unit[u->d_unit][0].index;
+
+        u->d_result = 0;
 
         if (!mtx->ready) {
-                result |= MASK_IORNRDY | (acc.addr << SHFT_ADDR);
+                u->d_result = RD_18_NRDY;
                 goto retresult;
-        }
-
-        if (trace) {
-                fprintf(trace, "%08u %s IOCW=%016llo WC=%u MI=%u BIN=%u REV=%u USEWC=%u READ=%u CORE=%05o",
-                instr_count, unit[unitdes][read].name, iocw,
-                count, mi, binary, tapedir, usewc, read, acc.addr);
         }
 
         // now analyze valid combinations
@@ -211,7 +205,7 @@ WORD48 mt_access(WORD48 iocw) {
                 // oh crap - we really ought to read backwards here
                 // return read error
                 printf("*\tREAD BACKWARDS NOT POSSIBLE\n");
-                result |= MASK_IORD20;
+                u->d_result = RD_20_ERR;
                 goto retresult;
         }
         if (!mi && !tapedir && read) {
@@ -231,8 +225,9 @@ WORD48 mt_access(WORD48 iocw) {
                                 mtx->eof = true;
                                 if (trace)
                                         fprintf(trace, " EOT\n");
-                                result |= (acc.addr << SHFT_ADDR) | MASK_IOREOT;
-                                goto retresult;
+				u->d_wc = WD_34_EOT;
+                                u->d_result = 0;
+                                goto retresult2;
                         }
                         // check for record end
                         if (i & 0x80) {
@@ -241,7 +236,7 @@ WORD48 mt_access(WORD48 iocw) {
                                         // tape mark
                                         if (trace)
                                                 fprintf(trace, "' MARK\n");
-                                        result |= (acc.addr << SHFT_ADDR) | MASK_IORD21;
+                                        u->d_result = RD_21_END;
                                         goto retresult;
                                 }
                                 // ignore on first char
@@ -252,7 +247,7 @@ WORD48 mt_access(WORD48 iocw) {
                                 // the first char must have bit 7 set
                                 if (first) {
                                         printf("*\ttape not positioned at record begin\n");
-                                        result |= (acc.addr << SHFT_ADDR) | MASK_IORD20;
+                                        u->d_result = RD_20_ERR;
                                         goto retresult;
                                 }
                         }
@@ -310,27 +305,23 @@ recend:         // record end reached
                 // return no ring status
                 if (trace)
                         fprintf(trace, " WRITE BUT NO WRITE RING\n");
-                result |= MASK_IORD20 | MASK_IORMAE;
+                u->d_result = RD_20_ERR | RD_22_MAE;
                 goto retresult;
         }
         // what's left...
-        printf("*\ttape operation not implemented %016llo\n", iocw);
+        printf("*\ttape operation not implemented %016llo\n", u->w);
         // return good result
         if (trace)
                 fprintf(trace, " tape operation not implemented\n");
 
 retresult:
-        if (iocw & MASK_IODUSEWC)
-                result |= (WORD48)words << SHFT_WCNT;
-
-        result |= (acc.addr << SHFT_ADDR) | ((WORD48)((42-cp)/6) << SHFT_IORCHARS);
-
-        if (trace) {
-                fprintf(trace, "\tIO RESULT=%016llo\n\n", result);
-                fflush(trace);
-        }
-
-        return result;
+        if (usewc)
+                u->d_wc = words;
+	else
+		u->d_wc = 0;
+retresult2:
+	u->d_wc = (42-cp)/6;
+	u->d_addr = acc.addr;
 }
 
 

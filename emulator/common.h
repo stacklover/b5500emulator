@@ -17,6 +17,8 @@
 *   Added comments and some cosmetic changes
 * 2017-09-30  R.Meyer
 *   overhaul of file names
+* 2018-03-01  R.Meyer
+*   factored out iocu.h
 ***********************************************************************/
 
 #ifndef COMMON_H
@@ -47,8 +49,10 @@ typedef unsigned char WORD3;            // 3 bits
 typedef unsigned char WORD4;            // 4 bits
 typedef unsigned char WORD5;            // 5 bits
 typedef unsigned char WORD6;            // 6 bits
+typedef unsigned char WORD7;            // 7 bits
 typedef unsigned char WORD8;            // 8 bits
 typedef unsigned short ADDR9;           // 9 bits higher part of memory address
+typedef unsigned short WORD10;          // 10 bits word count
 typedef unsigned short WORD12;          // 12 bits instruction register
 typedef unsigned short ADDR15;          // 15 bits memory address
 typedef unsigned long WORD21;           // 21 bits
@@ -65,7 +69,9 @@ typedef unsigned long long WORD48;      // 48 bits machine word
 #define MASK_WORD4  017
 #define MASK_WORD5  037
 #define MASK_WORD6  077
+#define MASK_WORD7  0177
 #define MASK_WORD8  0377
+#define MASK_WORD10 01777
 #define MASK_WORD12 07777
 #define MASK_WORD21 07777777
 #define MASK_WORD39 07777777777777LL
@@ -199,19 +205,6 @@ typedef struct cpu {
 } CPU;
 
 /*
- * structure defining physical units (emulated or real)
- */
-typedef struct unit {
-        const char      *name;          // printable unit name
-        const unsigned  readybit;       // B5500 bit number of ready status bit in TUS
-	const unsigned	index;		// enumeration of several units of same type
-        // handling functions (not yet used, may need reconsideration)
-        BIT             (*isready)(unsigned);     // function to check for ready
-        WORD48          (*ioaccess)(WORD48);      // function to actually perform IO
-        BIT             (*load)(void);            // function to load from this unit
-} UNIT;
-
-/*
  * structure defining interrupts
  */
 typedef struct irq {
@@ -251,11 +244,10 @@ typedef struct irq {
 /*
  * global (IPC) memory areas
  */
-extern WORD48 *MAIN;
-extern CPU *P[2];
-extern CENTRAL_CONTROL *CC;
-extern int	msg_cpu[2],	// messages to P1 and P2
-		msg_iocu;	// messages to IOCU(s)
+extern volatile WORD48 *MAIN;
+extern CPU	*P[2];
+extern volatile CENTRAL_CONTROL *CC;
+extern int	msg_cpu[2];	// messages to P1 and P2
 
 /*
  * special memory locations (absolute addresses)
@@ -449,50 +441,6 @@ extern int	msg_cpu[2],	// messages to P1 and P2
 #define SHFT_INCWrS     0
 
 /*
- * I/O descriptor or IO-Unit "D" register:
- * --- UUU UUW WWW WWW WWW m-- bdw r-- sss sss AAA AAA AAA AAA AAA (General)
- * --- UUU UU0 TTT TGB BBB m-- b-- r-- --- --- AAA AAA AAA AAA AAA (Datacomm)
- * octet numbers         FEDCBA9876543210
- */
-#define MASK_IODUNIT    00760000000000000LL // U: unit designation
-#define MASK_IODTUN     00007400000000000LL // T: terminal unit number
-#define MASK_IODTGM     00000200000000000LL // G: terminate on buffer full or GM
-#define MASK_IODBUF     00000170000000000LL // B: buffer number
-#define MASK_IODMI      00000004000000000LL // m: memory inhibit/interrogate
-#define MASK_IODBINARY  00000000400000000LL // b: binary mode (0=alpha)
-#define MASK_IODTAPEDIR 00000000200000000LL // d: tape direction (1=reverse)
-#define MASK_IODUSEWC   00000000100000000LL // w: use word counter
-#define MASK_IODREAD    00000000040000000LL // r: read mode (0=write)
-#define MASK_IODSEGCNT  00000000007700000LL // s: segment count
-#define MASK_DSKFILADR  00077777777777777LL // disk file address
-#define SHFT_IODUNIT    40
-#define SHFT_IODTUN     35
-#define SHFT_IODBUF     30
-#define SHFT_IODSEGCNT  15
-
-/*
- * I/O result bits
- * --- UUU UU- --p baz ccc m-- bdw reA FEP NDB AAA AAA AAA AAA AAA
- * octet numbers         FEDCBA9876543210
- */
-#define MASK_IORISMOD3  01000000000000000LL // m: TAPE - Model III
-#define MASK_IORMEMPAR  00001000000000000LL // p: TAPE - Mem. Parity
-#define MASK_IORBLANK   00000400000000000LL // b: TAPE - Blank Tape
-#define MASK_IORBOT     00000200000000000LL // a: TAPE - Begin of Tape
-#define MASK_IOREOT     00000100000000000LL // z: TAPE - End of Tape
-#define MASK_IORCHARS   00000070000000000LL // ccc: TAPE - Chars in last word
-#define MASK_IORD25     00000000100000000LL // !: D25 abnormal (datacomm only)
-#define MASK_IORD23     00000000020000000LL // e: D23 ending type
-#define MASK_IORMAE     00000000010000000LL // A: D22 Memory Access Error
-#define MASK_IORD21     00000000004000000LL // F: D21 unit specific END
-#define MASK_IORD20     00000000002000000LL // E: D20 unit specific ERR
-#define MASK_IORD19     00000000001000000LL // P: D19 unit specific PAR
-#define MASK_IORNRDY    00000000000400000LL // N: D18 not ready
-#define MASK_IORDPE     00000000000200000LL // D: D17 descriptor parity error
-#define MASK_IORBUSY    00000000000100000LL // B: D16 busy
-#define SHFT_IORCHARS   30
-
-/*
  * For all single precision operations we use the 64 bits of the host
  * machine's "unsigned long long" (typedef WORD48) to hold the
  * mantissa as follows:
@@ -622,59 +570,6 @@ extern void sim_instr(CPU *);
 /* and callbacks */
 extern void sim_traceinstr(CPU *);
 
-/* Supervisory Console (SPO) */
-extern int spo_init(const char *info);
-extern void spo_term(void);
-extern BIT spo_ready(unsigned index);
-extern WORD48 spo_write(WORD48 iocw);
-extern WORD48 spo_read(WORD48 iocw);
-extern void spo_debug_write(const char *msg);
-
-/* Card Readers (CRx) */
-extern int cr_init(const char *info);
-extern void cr_term(void);
-extern BIT cr_ready(unsigned index);
-extern WORD48 cr_read(WORD48 iocw);
-
-/* Line Printers (LPx) */
-extern int lp_init(const char *info);
-extern void lp_term(void);
-extern BIT lp_ready(unsigned index);
-extern WORD48 lp_write(WORD48 iocw);
-
-/* Magnetic Tapes (MTx) */
-extern int mt_init(const char *info);
-extern void mt_term(void);
-extern BIT mt_ready(unsigned index);
-extern WORD48 mt_access(WORD48 iocw);
-
-/* Disk Control Units (DKx) */
-extern int dk_init(const char *info);
-extern void dk_term(void);
-extern BIT dk_ready(unsigned index);
-extern WORD48 dk_access(WORD48 iocw);
-
-/* Data Communication (DC) */
-extern int dcc_init(const char *info);
-extern void dcc_term(void);
-extern BIT dcc_ready(unsigned index);
-extern WORD48 dcc_access(WORD48 iocw);
-
-/* Central Control (CC) */
-extern int cc_init(const char *info);
-
-/* debug formatting functions */
-extern void print_iocw(FILE *fp, WORD48 iocw);
-extern void print_ior(FILE *fp, WORD48 ior);
-
-#ifdef USECAN
-/* CAN bus devices */
-extern void can_init(const char *busname);
-extern int can_send_string(unsigned id, const char *data);
-extern char *can_receive_string(unsigned id, char *data, int maxlen);
-extern int can_ready(unsigned id);
-#endif
-
 /* console and command line options */
 /*
  * command analyzing structure
@@ -692,9 +587,6 @@ extern int handle_option(const char *option);
 extern const WORD6 translatetable_ascii2bic[128];
 extern const WORD8 translatetable_bic2ascii[64];
 extern const WORD6 translatetable_bcl2bic[64];
-
-/* other tables */
-extern const UNIT unit[32][2];
 
 /*
  * bit and field manipulations
