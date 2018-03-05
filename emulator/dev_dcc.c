@@ -118,9 +118,10 @@ static BIT ready;
 static TERMINAL_T terminal[NUMTERM];	// we waste indices 0..15 here
 
 // telnet
-static int listen_socket;
+static int listen_socket = -1;
 static BIT dtrace = false;
 static BIT ctrace = true;
+static BIT telnet = false;
 
 /***********************************************************************
 * Socket Close
@@ -152,7 +153,7 @@ static int socket_read(TERMINAL_T *t, char *buf, int len) {
 		int cnt = read(t->socket, buf, len);
 		if (cnt < 0) {
 			if (errno == EAGAIN)
-				return 0;
+				return -1;
 			if (dtrace)
 				perror("read failed - closing");
 			socket_close(t);
@@ -171,7 +172,7 @@ static int socket_write(TERMINAL_T *t, const char *buf, int len) {
 		int cnt = write(t->socket, buf, len);
 		if (cnt < 0) {
 			if (errno == EAGAIN)
-				return 0;
+				return -1;
 			if (dtrace)
 				perror("write failed - closing");
 			socket_close(t);
@@ -213,6 +214,21 @@ static int set_dtrace(const char *v, void *) {
 }
 
 /***********************************************************************
+* specify telnet on/off
+***********************************************************************/
+static int set_telnet(const char *v, void *) {
+	if (strcasecmp(v, "ON") == 0) {
+		telnet = true;
+	} else if (strcasecmp(v, "OFF") == 0) {
+		telnet = false;
+	} else {
+		spo_print("$SPECIFY ON OR OFF\r\n");
+		return 2; // FATAL
+	}
+	return 0; // OK
+}
+
+/***********************************************************************
 * get status
 ***********************************************************************/
 static int get_status(const char *v, void *) {
@@ -242,6 +258,7 @@ static int get_status(const char *v, void *) {
 ***********************************************************************/
 static const command_t dcc_commands[] = {
 	{"DCC", NULL},
+	{"TELNET", set_telnet},
 	{"CTRACE", set_ctrace},
 	{"DTRACE", set_dtrace},
 	{"STATUS", get_status},
@@ -287,30 +304,6 @@ int dcc_init(const char *option) {
 	if (!ready) {
 		// ignore all SIGPIPEs
 		signal(SIGPIPE, SIG_IGN);
-		// start telnet server
-		struct sockaddr_in addr;
-		listen_socket = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
-		if (listen_socket < 0) {
-			perror("telnet socket");
-			return errno;
-		}
-		bzero((char*)&addr, sizeof(addr));
-		addr.sin_family = AF_INET;
-		addr.sin_addr.s_addr = INADDR_ANY;
-		addr.sin_port = htons(23);
-		if (bind(listen_socket, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
-			// perror("telnet bind");
-			close(listen_socket);
-			listen_socket = -1;
-			return errno;
-		}
-		if (listen(listen_socket, 16)) {
-			perror("telnet listen");
-			close(listen_socket);
-			listen_socket = -1;
-			return errno;
-		}
-		printf("TELNET server listen socket %d\n", listen_socket);
 	}
 	ready = true;
 	return command_parser(dcc_commands, option);
@@ -321,7 +314,7 @@ int dcc_init(const char *option) {
 ***********************************************************************/
 static const char *msg = "\r\nB5500 TIME SHARING - BUSY\r\nPLEASE CALL BACK LATER\r\n";
 static void dcc_test_incoming(void) {
-	int socket, cnt, i;
+	int newsocket, cnt, i;
 	struct sockaddr_in addr;
 	socklen_t addrlen = sizeof(addr);
 	unsigned port = 0;
@@ -329,27 +322,79 @@ static void dcc_test_incoming(void) {
 	char host[50];
 	char buf[BUFLEN2];
 	TERMINAL_T *t;
+	int optval;
+	socklen_t optlen = sizeof(optval);
 
+	// does TELNET need to be started?
+	if (telnet && listen_socket <= 2) {
+		// create socket for listening
+		struct sockaddr_in addr;
+		listen_socket = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
+		if (listen_socket < 0) {
+			perror("telnet socket");
+			return;
+		}
+		// set REUSEADDR option
+		optval = 1;
+		optlen = sizeof(optval);
+		if (setsockopt(listen_socket, SOL_SOCKET, SO_REUSEADDR, &optval, optlen) < 0) {
+			perror("setsockopt(SO_REUSEADDR)");
+		}
+		// bind it to port 23
+		bzero((char*)&addr, sizeof(addr));
+		addr.sin_family = AF_INET;
+		addr.sin_addr.s_addr = INADDR_ANY;
+		addr.sin_port = htons(23);
+		if (bind(listen_socket, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+			// perror("telnet bind");
+			close(listen_socket);
+			listen_socket = -1;
+			return;
+		}
+		// start the listening
+		if (listen(listen_socket, 4)) {
+			perror("telnet listen");
+			close(listen_socket);
+			listen_socket = -1;
+			return;
+		}
+		printf("TELNET server listen socket %d\n", listen_socket);
+	} else
+
+	// does TELNET need to be stopped?
+	if (!telnet && listen_socket > 2) {
+		close(listen_socket);
+		listen_socket = -1;
+	}
+
+	// check for new connections
 	if (listen_socket > 2) {
-		socket = accept4(listen_socket, (struct sockaddr*)&addr, &addrlen, SOCK_NONBLOCK | SOCK_CLOEXEC);
-		if (socket > 2) {
+		newsocket = accept4(listen_socket, (struct sockaddr*)&addr, &addrlen, SOCK_NONBLOCK | SOCK_CLOEXEC);
+		if (newsocket > 2) {
 			if (ctrace) {
+				// get the peer info
 				getnameinfo((struct sockaddr*)&addr, addrlen, host, sizeof(host), NULL, 0, 0);
 				port = ntohs(addr.sin_port);
 			}
+			// set KEEPALIVE option
+			optval = 1;
+			optlen = sizeof(optval);
+			if (setsockopt(newsocket, SOL_SOCKET, SO_KEEPALIVE, &optval, optlen) < 0) {
+				perror("setsockopt(SO_KEEPALIVE)");
+			}
 			// find a free terminal to handle this
 			for (tun = 1; tun < 2; tun++) {
-				for (bnr = 0; bnr < 4; bnr++) {
+				for (bnr = 0; bnr < 16; bnr++) {
 					t = &terminal[tun*16 + bnr];
 					if (!t->connected) {
 						// free terminal found
 						if (ctrace) {
 							sprintf(buf, "+TELNET(%d) %s:%u LINE %u/%u\r\n",
-								socket, host, port, tun, bnr);
+								newsocket, host, port, tun, bnr);
 							spo_print(buf);
 						}
 						t->bufidx = 0;
-						t->socket = socket;
+						t->socket = newsocket;
 						t->abnormal = true;
 						t->bufstate = writeready;
 						t->connected = true;
@@ -361,23 +406,29 @@ static void dcc_test_incoming(void) {
 			// nothing found
 			if (ctrace) {
 				sprintf(buf, "+TELNET#%d %s:%u NO LINE. CLOSING\r\n",
-					socket, host, port);
+					newsocket, host, port);
 				spo_print(buf);
 			}
-			write(socket, msg, strlen(msg));
-			sleep(10);
-			close(socket);
+			write(newsocket, msg, strlen(msg));
+			sleep(1);
+			close(newsocket);
 		} else if (errno != EAGAIN) {
 			perror("accept");
 		}
 	}
 
-	// check for input from any terminal
+	// check for input from any connection
 	for (tun = 1; tun < 16; tun++) {
 		for (bnr = 0; bnr < 16; bnr++) {
 			t = &terminal[tun*16 + bnr];
 			if (t->connected && t->socket > 2 && t->bufstate != readready) {
+				// check for data available
 				cnt = socket_read(t, buf, sizeof buf);
+				// cnt==0 means EOF (socket not connected)
+				if (cnt == 0) {
+					socket_close(t);
+				}
+				// run each character
 				for (i=0; i<cnt; i++) {
 					if (buf[i] == 0x0d) {
 						// end of line
@@ -594,9 +645,11 @@ void dcc_access(IOCU *u) {
 				if (socket_write(t, buffer, p - buffer) < 0)
 					goto closing;
 				if (disc) {
-					if (ctrace)
-						printf("$DCC cande requests disconnect\n");
-					sleep(10);
+					if (ctrace) {
+						sprintf(t->buffer, "+TELNET(%d) CANDE DISC\n", t->socket);
+						spo_print(t->buffer);
+					}
+					sleep(1);
 			closing:	socket_close(t);
 					goto wrapup;
 				}
