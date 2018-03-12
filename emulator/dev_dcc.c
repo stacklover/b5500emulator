@@ -20,6 +20,22 @@
 * However, it seems to cause no issues, when we give each adapter 112
 * chars of buffer.
 *
+* ff fd 03 DO Suppress Go Ahead
+* ff fb 18 WILL Terminal Type
+* ff fb 1f WILL Window Size
+* ff fb 20 WILL Term Speed
+* ff fb 21 WILL Remote Flow
+* ff fb 22 WILL Linemode
+* ff fb 27 WILL Send Locate
+* ff fd 05 DO Opt Status
+* ff fb 23
+*
+* fb (251) WILL
+* fc (252) WONT
+* fd (253) DO
+* fe (254) DONT
+* ff (255) IAC
+*
 * This SYSDISK/MAKER input works:
 *
 ?EXECUTE SYSDISK/MAKER
@@ -90,6 +106,13 @@ STA,0,0,0,0,"0","0",0,0,
 #define TRACE_DCC 0
 
 #define TIMEOUT 1000
+#define	TN_END	240
+#define	TN_SUB	250
+#define	TN_WILL	251
+#define	TN_WONT	252
+#define	TN_DO	253
+#define	TN_DONT	254
+#define	TN_IAC	255
 
 /***********************************************************************
 * the DCC
@@ -102,9 +125,24 @@ enum bufstate {
 	outputbusy,
 	writeready};
 
+enum escape {
+	none=0,
+	had_iac,
+	had_will,
+	had_wont,
+	had_do,
+	had_dont,
+	had_sub};
+
+enum type {
+	line=0,
+	block};
+
 typedef struct terminal {
 	int socket;
 	enum bufstate bufstate;
+	enum escape escape;
+	enum type type;
 	BIT connected;
 	BIT interrupt;
 	BIT abnormal;
@@ -118,7 +156,9 @@ static BIT ready;
 static TERMINAL_T terminal[NUMTERM];	// we waste indices 0..15 here
 
 // telnet
-static int listen_socket = -1;
+static int listen_socket1 = -1;		// LINE type terminals
+static int listen_socket2 = -1;		// BLOCK type terminals
+static BIT etrace = false;
 static BIT dtrace = false;
 static BIT ctrace = true;
 static BIT telnet = false;
@@ -140,6 +180,7 @@ static void socket_close(TERMINAL_T *t) {
 	t->abnormal = true;
 	t->fullbuffer = false;
 	t->bufstate = notready;
+	t->escape = none;
 	t->connected = false;
 	t->buffer[0] = 0;
 	t->bufidx = 0;
@@ -214,6 +255,21 @@ static int set_dtrace(const char *v, void *) {
 }
 
 /***********************************************************************
+* specify extra trace on/off
+***********************************************************************/
+static int set_etrace(const char *v, void *) {
+	if (strcasecmp(v, "ON") == 0) {
+		etrace = true;
+	} else if (strcasecmp(v, "OFF") == 0) {
+		etrace = false;
+	} else {
+		spo_print("$SPECIFY ON OR OFF\r\n");
+		return 2; // FATAL
+	}
+	return 0; // OK
+}
+
+/***********************************************************************
 * specify telnet on/off
 ***********************************************************************/
 static int set_telnet(const char *v, void *) {
@@ -261,6 +317,7 @@ static const command_t dcc_commands[] = {
 	{"TELNET", set_telnet},
 	{"CTRACE", set_ctrace},
 	{"DTRACE", set_dtrace},
+	{"ETRACE", set_etrace},
 	{"STATUS", get_status},
 	{NULL, NULL},
 };
@@ -314,30 +371,31 @@ int dcc_init(const char *option) {
 ***********************************************************************/
 static const char *msg = "\r\nB5500 TIME SHARING - BUSY\r\nPLEASE CALL BACK LATER\r\n";
 static void dcc_test_incoming(void) {
-	int newsocket, cnt, i;
+	int newsocket, cnt, i, j, k;
 	struct sockaddr_in addr;
 	socklen_t addrlen = sizeof(addr);
 	unsigned port = 0;
 	unsigned tun, bnr;
 	char host[50];
 	char buf[BUFLEN2];
+	char buf2[BUFLEN2];
 	TERMINAL_T *t;
 	int optval;
 	socklen_t optlen = sizeof(optval);
 
-	// does TELNET need to be started?
-	if (telnet && listen_socket <= 2) {
+	// does TELNET1 need to be started?
+	if (telnet && listen_socket1 <= 2) {
 		// create socket for listening
 		struct sockaddr_in addr;
-		listen_socket = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
-		if (listen_socket < 0) {
+		listen_socket1 = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
+		if (listen_socket1 < 0) {
 			perror("telnet socket");
 			return;
 		}
 		// set REUSEADDR option
 		optval = 1;
 		optlen = sizeof(optval);
-		if (setsockopt(listen_socket, SOL_SOCKET, SO_REUSEADDR, &optval, optlen) < 0) {
+		if (setsockopt(listen_socket1, SOL_SOCKET, SO_REUSEADDR, &optval, optlen) < 0) {
 			perror("setsockopt(SO_REUSEADDR)");
 		}
 		// bind it to port 23
@@ -345,31 +403,73 @@ static void dcc_test_incoming(void) {
 		addr.sin_family = AF_INET;
 		addr.sin_addr.s_addr = INADDR_ANY;
 		addr.sin_port = htons(23);
-		if (bind(listen_socket, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+		if (bind(listen_socket1, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
 			// perror("telnet bind");
-			close(listen_socket);
-			listen_socket = -1;
+			close(listen_socket1);
+			listen_socket1 = -1;
 			return;
 		}
 		// start the listening
-		if (listen(listen_socket, 4)) {
+		if (listen(listen_socket1, 4)) {
 			perror("telnet listen");
-			close(listen_socket);
-			listen_socket = -1;
+			close(listen_socket1);
+			listen_socket1 = -1;
 			return;
 		}
-		printf("TELNET server listen socket %d\n", listen_socket);
+		printf("TELNET server1 listen socket %d\n", listen_socket1);
 	} else
 
-	// does TELNET need to be stopped?
-	if (!telnet && listen_socket > 2) {
-		close(listen_socket);
-		listen_socket = -1;
+	// does TELNET1 need to be stopped?
+	if (!telnet && listen_socket1 > 2) {
+		close(listen_socket1);
+		listen_socket1 = -1;
+	}
+
+	// does TELNET2 need to be started?
+	if (telnet && listen_socket2 <= 2) {
+		// create socket for listening
+		struct sockaddr_in addr;
+		listen_socket2 = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
+		if (listen_socket2 < 0) {
+			perror("telnet socket");
+			return;
+		}
+		// set REUSEADDR option
+		optval = 1;
+		optlen = sizeof(optval);
+		if (setsockopt(listen_socket2, SOL_SOCKET, SO_REUSEADDR, &optval, optlen) < 0) {
+			perror("setsockopt(SO_REUSEADDR)");
+		}
+		// bind it to port 8023
+		bzero((char*)&addr, sizeof(addr));
+		addr.sin_family = AF_INET;
+		addr.sin_addr.s_addr = INADDR_ANY;
+		addr.sin_port = htons(8023);
+		if (bind(listen_socket2, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+			// perror("telnet bind");
+			close(listen_socket2);
+			listen_socket2 = -1;
+			return;
+		}
+		// start the listening
+		if (listen(listen_socket2, 4)) {
+			perror("telnet listen");
+			close(listen_socket2);
+			listen_socket2 = -1;
+			return;
+		}
+		printf("TELNET server2 listen socket %d\n", listen_socket2);
+	} else
+
+	// does TELNET2 need to be stopped?
+	if (!telnet && listen_socket2 > 2) {
+		close(listen_socket2);
+		listen_socket2 = -1;
 	}
 
 	// check for new connections
-	if (listen_socket > 2) {
-		newsocket = accept4(listen_socket, (struct sockaddr*)&addr, &addrlen, SOCK_NONBLOCK | SOCK_CLOEXEC);
+	if (listen_socket1 > 2) {
+		newsocket = accept4(listen_socket1, (struct sockaddr*)&addr, &addrlen, SOCK_NONBLOCK | SOCK_CLOEXEC);
 		if (newsocket > 2) {
 			if (ctrace) {
 				// get the peer info
@@ -397,8 +497,66 @@ static void dcc_test_incoming(void) {
 						t->socket = newsocket;
 						t->abnormal = true;
 						t->bufstate = writeready;
+						t->escape = none;
+						t->type = line;
 						t->connected = true;
 						t->interrupt = true;
+						sprintf(buf, "%c%c%c", TN_IAC, TN_WILL, 1);
+						socket_write(t, buf, 3);
+						return;
+					}
+				}
+			}
+			// nothing found
+			if (ctrace) {
+				sprintf(buf, "+TELNET#%d %s:%u NO LINE. CLOSING\r\n",
+					newsocket, host, port);
+				spo_print(buf);
+			}
+			write(newsocket, msg, strlen(msg));
+			sleep(1);
+			close(newsocket);
+		} else if (errno != EAGAIN) {
+			perror("accept");
+		}
+	}
+
+	// check for new connections
+	if (listen_socket2 > 2) {
+		newsocket = accept4(listen_socket2, (struct sockaddr*)&addr, &addrlen, SOCK_NONBLOCK | SOCK_CLOEXEC);
+		if (newsocket > 2) {
+			if (ctrace) {
+				// get the peer info
+				getnameinfo((struct sockaddr*)&addr, addrlen, host, sizeof(host), NULL, 0, 0);
+				port = ntohs(addr.sin_port);
+			}
+			// set KEEPALIVE option
+			optval = 1;
+			optlen = sizeof(optval);
+			if (setsockopt(newsocket, SOL_SOCKET, SO_KEEPALIVE, &optval, optlen) < 0) {
+				perror("setsockopt(SO_KEEPALIVE)");
+			}
+			// find a free terminal to handle this
+			for (tun = 2; tun < 3; tun++) {
+				for (bnr = 0; bnr < 16; bnr++) {
+					t = &terminal[tun*16 + bnr];
+					if (!t->connected) {
+						// free terminal found
+						if (ctrace) {
+							sprintf(buf, "+TELNET(%d) %s:%u LINE %u/%u\r\n",
+								newsocket, host, port, tun, bnr);
+							spo_print(buf);
+						}
+						t->bufidx = 0;
+						t->socket = newsocket;
+						t->abnormal = true;
+						t->bufstate = writeready;
+						t->escape = none;
+						t->type = block;
+						t->connected = true;
+						t->interrupt = true;
+						//sprintf(buf, "%c%c%c", TN_IAC, TN_WILL, 1);
+						//socket_write(t, buf, 3);
 						return;
 					}
 				}
@@ -428,32 +586,151 @@ static void dcc_test_incoming(void) {
 				if (cnt == 0) {
 					socket_close(t);
 				}
-				// run each character
-				for (i=0; i<cnt; i++) {
-					if (buf[i] == 0x0d) {
-						// end of line
-						t->buffer[t->bufidx] = 0;
-						t->bufidx = 0;
-						if (dtrace)
-							printf("$DCC received %u/%u:%s\n", tun, bnr, t->buffer);
-						t->abnormal = false;
-						t->bufstate = readready;
-						t->interrupt = true;
-					} else if (buf[i] == 0x08) {
-						// backspace
-						if (t->bufidx > 0)
-							t->bufidx--;
-						socket_write(t, " \010", 2);
-					} else if (buf[i] == 0x1b) {
-						// cancel line
-						t->bufidx = 0;
-						socket_write(t, "X\015\012", 3);
-					} else if (buf[i] >= ' ' && buf[i] <= 0x7e) {
-						// printable, add to buffer
-						if (t->bufidx < BUFLEN2)
-							t->buffer[t->bufidx++] = buf[i];
-					}
+				if (etrace && cnt > 0) {
+					printf("$TELNET RX:");
+					for (i=0; i<cnt; i++)
+						printf(" %02x", buf[i]);
+					printf("\n");
 				}
+				if (t->type == line) {
+					// line mode
+					// run each character
+					j = 0;
+					for (i=0; i<cnt; i++) {
+						switch (t->escape) {
+						case none:
+							if (buf[i] == TN_IAC) {
+								t->escape = had_iac;
+							} else if (buf[i] == 0x0d) {
+								// end of line
+								t->buffer[t->bufidx] = 0;
+								t->bufidx = 0;
+								if (etrace)
+									printf("$DCC received %u/%u:%s\n", tun, bnr, t->buffer);
+								t->abnormal = false;
+								t->bufstate = readready;
+								t->interrupt = true;
+								// echo
+								if (j < BUFLEN2-2) {
+									buf2[j++] = 0x0d;
+									buf2[j++] = 0x0a;
+								}
+							} else if (buf[i] == 0x08 || buf[i] == 0x7f) {
+								// backspace
+								if (t->bufidx > 0) {
+									t->bufidx--;
+									//socket_write(t, " \010", 2);
+									// echo
+									if (j < BUFLEN2-3) {
+										buf2[j++] = 0x08;
+										buf2[j++] = 0x20;
+										buf2[j++] = 0x08;
+									}
+								}
+							} else if (buf[i] == 0x1b) {
+								// cancel line
+								t->bufidx = 0;
+								//socket_write(t, "X\015\012", 3);
+								if (j < BUFLEN2-3) {
+									buf2[j++] = 'x';
+									buf2[j++] = 0x0d;
+									buf2[j++] = 0x0a;
+								}
+							} else if (buf[i] >= ' ' && buf[i] <= 0x7e) {
+								// if printable, add to buffer
+								k = translatetable_ascii2bic[buf[i] & 0x7f];
+								k = translatetable_bic2ascii[k];
+								if (t->bufidx < BUFLEN2) {
+									t->buffer[t->bufidx++] = k;
+									if (j < BUFLEN2-1) {
+										buf2[j++] = k;
+									}
+								} else {
+									if (j < BUFLEN2-1) {
+										buf2[j++] = 0x07;
+									}
+								}
+							}
+							break;
+						case had_iac:
+							if (buf[i] == TN_IAC) {
+								// data 0xff - ignore
+								t->escape = none;
+							} else if (buf[i] == TN_WILL) {
+								t->escape = had_will;
+							} else if (buf[i] == TN_WONT) {
+								t->escape = had_wont;
+							} else if (buf[i] == TN_DO) {
+								t->escape = had_do;
+							} else if (buf[i] == TN_DONT) {
+								t->escape = had_dont;
+							} else if (buf[i] == TN_SUB) {
+								t->escape = had_sub;
+							} else {
+								t->escape = none;
+							}
+							break;
+						case had_will:
+							if (etrace)
+								printf("<WILL%u>", buf[i]);
+							t->escape = none;
+							break;
+						case had_wont:
+							if (etrace)
+								printf("<WONT%u>", buf[i]);
+							t->escape = none;
+							break;
+						case had_do:
+							if (etrace)
+								printf("<DO%u>", buf[i]);
+							t->escape = none;
+							break;
+						case had_dont:
+							if (etrace)
+								printf("<DONT%u>", buf[i]);
+							t->escape = none;
+							break;
+						case had_sub:
+							// ignore all until TN_END
+							if (buf[i] == TN_END) {
+								t->escape = none;
+								if (etrace)
+									printf("<END>");
+							} else {
+								if (etrace)
+									printf("<IGN%u>", buf[i]);
+							}
+							break;
+						} // switch
+					} // for
+					if (etrace && cnt > 0)
+						printf("\n");
+					if (j > 0)
+						socket_write(t, buf2, j);
+				} else {
+					// block mode
+					// run each character
+					for (i=0; i<cnt; i++) {
+						if (buf[i] == 0x0d) {
+							// end of transmission
+							t->buffer[t->bufidx] = 0;
+							t->bufidx = 0;
+							t->abnormal = false;
+							t->bufstate = readready;
+							t->interrupt = true;
+						} else {
+							// if printable, add to buffer
+							k = buf[i] & 0x7f;
+							if (k >= 0x20) {
+								//k = translatetable_ascii2bic[k];
+								//k = translatetable_bic2ascii[k];
+								if (t->bufidx < BUFLEN2) {
+									t->buffer[t->bufidx++] = k;
+								}
+							}
+						} // if
+					} // for
+				} // mode
 			}
 		}
 	}
@@ -563,7 +840,7 @@ void dcc_access(IOCU *u) {
 							// printable char
 							if (dtrace)
 								printf("%c", *p);
-							if (*p == '?')
+							if (t->type == line && *p == '?')
 								t->abnormal = true;
 							u->ib = translatetable_ascii2bic[*p++ & 0x7f];
 						} else {
@@ -608,6 +885,7 @@ void dcc_access(IOCU *u) {
 		if (t->connected) {
 			char buffer[BUFLEN];
 			char *p = buffer;
+			char c;
 			int chars = 0;
 			BIT disc = false;
 			// connected - action depends on buffer state
@@ -625,14 +903,22 @@ void dcc_access(IOCU *u) {
 						t->fullbuffer = false;
 						goto done;
 					}
-					char c = translatetable_bic2ascii[u->ob];
-					switch (c) {
-					case 0x21: if (dtrace) printf("="); *p++ = '\n'; break;
-					case 0x7b: if (dtrace) printf("<"); *p++ = '\r';  break;
-					case 0x3c: if (dtrace) printf("_"); break;
-					case 0x3e: if (dtrace) printf("|"); break;
-					case 0x7d: if (dtrace) printf("~"); disc = true; break;
-					default:   if (dtrace) printf("%c", c); *p++ = c;
+					c = translatetable_bic2ascii[u->ob];
+					if (t->type == line) {
+						// some BIC codes have special meanings on output, handle those
+						switch (u->ob) {
+						case 016: if (dtrace) printf("<xon>"); break;			// BIC: greater than
+						case 017: if (dtrace) printf("<dis>"); disc = true; break;	// BIC: greater or equal
+						case 036: if (dtrace) printf("<ro>"); break;			// BIC: less than
+						case 037: if (dtrace) printf("<eom>"); break;			// BIC: left arrow (cannot not happen)
+						case 057: if (dtrace) printf("<cr>"); *p++ = '\r';  break;	// BIC: less or equal
+						case 074: if (dtrace) printf("<lf>"); *p++ = '\n'; break;	// BIC: not equal
+						default:  if (dtrace) printf("%c", c); *p++ = c;
+						}
+					} else {
+						if (dtrace)
+							printf("%c", c);
+						*p++ = c;
 					}
 					chars++;
 				}
