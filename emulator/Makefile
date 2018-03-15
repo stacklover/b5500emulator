@@ -19,6 +19,7 @@
 
 ALL =		$(ODIR)/emulator2.exe \
 		$(ODIR)/processor_panel.exe \
+		$(ODIR)/b9353.exe \
 		#$(ODIR)/emulator.exe \
 		#$(ODIR)/asm-n-run.exe \
 		#$(ODIR)/sptest.exe \
@@ -34,6 +35,8 @@ OBJTEST	=	$(ODIR)/test.o \
 		$(ODIR)/instr_table.o
 
 OBJPANEL =	$(ODIR)/processor_panel.o $(ODIR)/pdp_text.o $(ODIR)/init_shares.o
+
+OBJB9353 =	$(ODIR)/b9353.o
 
 OBJEMULATOR =	$(ODIR)/emulator2.o $(ODIR)/init_shares.o \
 		$(ODIR)/execute_cm.o $(ODIR)/execute_wm.o \
@@ -103,6 +106,10 @@ $(ODIR)/test.exe:	 $(OBJTEST) Makefile
 $(ODIR)/processor_panel.exe:	 $(OBJPANEL) Makefile
 	@echo "*** Linking $@..."
 	$(CXX) $(LFLAGS) -o $(ODIR)/processor_panel.exe $(OBJPANEL)
+
+$(ODIR)/b9353.exe:	 $(OBJB9353) Makefile
+	@echo "*** Linking $@..."
+	$(CXX) $(LFLAGS) -o $(ODIR)/b9353.exe $(OBJB9353)
 
 $(ODIR)/emulator.exe:	 $(OBJEMULATOR) Makefile
 	@echo "*** Linking $@..."

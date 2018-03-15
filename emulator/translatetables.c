@@ -18,6 +18,23 @@
 #include <stdio.h>
 #include "common.h"
 
+// BIC (Burroughs Internal Code)
+// @00: 0 1 2 3 4 5 6 7
+// @10: 8 9 # @ ? : > }
+// @20: + A B C D E F G
+// @30: H I . [ & ( < ~
+// @40: | J K L M N O P
+// @50: Q R $ * - ) ; {
+// @60:   / S T U V W X
+// @70: Y Z , % ! = ] "
+
+// There are 5 BIC Symbols that got no ASCII equivalent and are substituted as follows:
+//  } is >= (greater or equal)
+//  { is <= (less or equal)
+//  ! is /= (not equal)
+//  ~ is <- (left arrow)
+//  | is x (multiply symbol)
+
 const WORD6 translatetable_ascii2bic[128] = { // Index by 8-bit ASCII to get 6-bit BIC (upcased, invalid=>"?")
         0x0C,0x0C,0x0C,0x0C,0x0C,0x0C,0x0C,0x0C,0x0C,0x0C,0x0C,0x0C,0x0C,0x0C,0x0C,0x0C,  // 00-0F
         0x0C,0x0C,0x0C,0x0C,0x0C,0x0C,0x0C,0x0C,0x0C,0x0C,0x0C,0x0C,0x0C,0x0C,0x0C,0x0C,  // 10-1F
@@ -48,7 +65,7 @@ const WORD6 translatetable_bcl2bic[64]   = { // Index by 6-bit BCL to get 6-bit 
         034,021,022,023,024,025,026,027,        // @60-67
         030,031,020,032,033,035,036,037};       // @70-77
 
-const char * translatetable_bic2baudot_as_ascii[64] = {
+const char *translatetable_bic2baudot_as_ascii[64] = {
 // Index by 6-bit BIC to get 8-bit BAUDOT with ASCII representation
 // Note: ASCII # stands for BAUDOT "who are you?" symbol
 // Note: ASCII ^ stands for BAUDOT "bell" symbol

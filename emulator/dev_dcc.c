@@ -114,6 +114,18 @@ STA,0,0,0,0,"0","0",0,0,
 #define	TN_DONT	254
 #define	TN_IAC	255
 
+// Special Codes 
+#define	EOM	'~'	// Marks Buffer End
+#define	MODE	'!'	// toggles Control/Printable Mode at Line Discipline
+
+// ASCII Control Codes
+#define	STX	0x02
+#define	ETX	0x03
+#define	EOT	0x04
+#define	ENQ	0x05
+#define	ACK	0x06
+#define	NAK	0x15
+
 /***********************************************************************
 * the DCC
 ***********************************************************************/
@@ -147,6 +159,9 @@ typedef struct terminal {
 	BIT interrupt;
 	BIT abnormal;
 	BIT fullbuffer;
+	BIT inmode;
+	BIT outmode;
+	unsigned eotcount;
 	unsigned timer;
 	unsigned bufidx;
 	char buffer[BUFLEN2+1];
@@ -553,6 +568,9 @@ static void dcc_test_incoming(void) {
 						t->bufstate = writeready;
 						t->escape = none;
 						t->type = block;
+						t->inmode = false;
+						t->outmode = false;
+						t->eotcount = 0;
 						t->connected = true;
 						t->interrupt = true;
 						//sprintf(buf, "%c%c%c", TN_IAC, TN_WILL, 1);
@@ -711,24 +729,43 @@ static void dcc_test_incoming(void) {
 					// block mode
 					// run each character
 					for (i=0; i<cnt; i++) {
-						if (buf[i] == 0x0d) {
-							// end of transmission
+						k = buf[i] & 0x7f;
+						if (k >= 0x20) {
+							// printable... if current mode is control...
+							if (!t->inmode) {
+								if (t->bufidx < BUFLEN2) {
+									// ... change it
+									t->buffer[t->bufidx++] = MODE;
+								}
+								t->inmode = true;
+							}
+							// enter printable char as is
+							if (t->bufidx < BUFLEN2) {
+								t->buffer[t->bufidx++] = k;
+							}
+						} else {
+							// control... if current mode is printable...
+							if (t->inmode) {
+								if (t->bufidx < BUFLEN2) {
+									// ... change it
+									t->buffer[t->bufidx++] = MODE;
+								}
+								t->inmode = false;
+							}
+							// enter control char as printable
+							if (t->bufidx < BUFLEN2) {
+								t->buffer[t->bufidx++] = k + ' ';
+							}
+						}
+						// special codes that close buffer
+						if (k==EOT || k==ETX || k==ENQ || k==ACK || k==NAK) {
+							// must send to system, mark end of buffer
 							t->buffer[t->bufidx] = 0;
 							t->bufidx = 0;
 							t->abnormal = false;
 							t->bufstate = readready;
 							t->interrupt = true;
-						} else {
-							// if printable, add to buffer
-							k = buf[i] & 0x7f;
-							if (k >= 0x20) {
-								//k = translatetable_ascii2bic[k];
-								//k = translatetable_bic2ascii[k];
-								if (t->bufidx < BUFLEN2) {
-									t->buffer[t->bufidx++] = k;
-								}
-							}
-						} // if
+						}
 					} // for
 				} // mode
 			}
@@ -899,26 +936,68 @@ void dcc_access(IOCU *u) {
 				for (int count=0; count<8 && chars<BUFLEN; count++) {
 					u->ob = (u->w >> 42) & 077;
 					u->w <<= 6;
-					if (u->ob == 037) {
-						t->fullbuffer = false;
-						goto done;
-					}
 					c = translatetable_bic2ascii[u->ob];
 					if (t->type == line) {
 						// some BIC codes have special meanings on output, handle those
 						switch (u->ob) {
-						case 016: if (dtrace) printf("<xon>"); break;			// BIC: greater than
-						case 017: if (dtrace) printf("<dis>"); disc = true; break;	// BIC: greater or equal
-						case 036: if (dtrace) printf("<ro>"); break;			// BIC: less than
-						case 037: if (dtrace) printf("<eom>"); break;			// BIC: left arrow (cannot not happen)
-						case 057: if (dtrace) printf("<cr>"); *p++ = '\r';  break;	// BIC: less or equal
-						case 074: if (dtrace) printf("<lf>"); *p++ = '\n'; break;	// BIC: not equal
-						default:  if (dtrace) printf("%c", c); *p++ = c;
+						case 016: // BIC: greater than
+							if (dtrace)
+								printf("<xon>");
+							*p++ = 0x11;
+							break;
+						case 017: // BIC: greater or equal
+							if (dtrace)
+								printf("<dis>");
+							disc = true;
+							break;
+						case 036: // BIC: less than
+							if (dtrace)
+								printf("<ro>");
+							*p++ = 0xff;
+							break;
+						case 037: // BIC: left arrow
+							if (dtrace)
+								printf("<eom>");
+							t->fullbuffer = false;
+							goto done;
+						case 057: // BIC: less or equal
+							if (dtrace)
+								printf("<cr>");
+							*p++ = '\r';
+							break;
+						case 074: // BIC: not equal
+							if (dtrace)
+								printf("<lf>");
+							*p++ = '\n';
+							break;
+						default:
+							if (dtrace)
+								printf("%c", c);
+							*p++ = c;
 						}
 					} else {
+						// buffer end ?
+						if (c == EOM) {
+							t->fullbuffer = false;
+							t->outmode = false;
+							goto done;
+						}
 						if (dtrace)
 							printf("%c", c);
-						*p++ = c;
+						if (c == MODE) {
+							t->outmode = !t->outmode;
+						} else if (t->outmode) {
+							*p++ = c;
+						} else {
+							*p++ = c & 0x1f;
+							// count EOTs
+							if (c == 0x24) {
+								if (++t->eotcount >= 3)
+									disc = true;
+							} else {
+								t->eotcount = 0;
+							}
+						}
 					}
 					chars++;
 				}
