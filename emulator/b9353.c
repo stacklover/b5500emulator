@@ -32,11 +32,22 @@
 #define	BUFLEN 112
 #define	BUFLEN2 200
 
+#define	NUL	0x00
 #define	STX	0x02
 #define	ETX	0x03
 #define	EOT	0x04
 #define	ENQ	0x05
 #define	ACK	0x06
+#define	BEL	0x07
+#define	BS	0x08
+#define	TAB	0x09
+#define	LF	0x0a
+#define	FF	0x0c
+#define	CR	0x0d
+#define	DC1	0x11
+#define	DC2	0x12
+#define	DC3	0x13
+#define	DC4	0x14
 #define	NAK	0x15
 
 /***********************************************************************
@@ -63,7 +74,7 @@ static void socket_close(void) {
 	sock = -1;		// prevent recursion
 	if (so > 2) {
 		close(so);
-		fprintf(stderr, "socket closed\n", so);
+		fprintf(stderr, "socket %d closed\n", so);
 	}
 }
 
@@ -218,6 +229,7 @@ loop:
 				if (ptrace)
 					printf("[STX]%s[ETX]\n", inp);
 				inp = NULL;
+				printf("\033[A"); // undo the CRLF currently done by cooked reading of stdin
 				if (socket_write(buf2, p-buf2) < p-buf2)
 					return 1;
 			} else {
@@ -265,8 +277,22 @@ loop:
 				} else {
 					if (ctrace)
 						printf("<%02x>", buf[i]);
-					if (buf[i] == 0x0d)
-						printf("\n");
+					if (buf[i] == CR)
+						printf("<\033[K\n");
+					else if (buf[i] == DC1)
+						;
+					else if (buf[i] == BS)
+						printf("\033[D");
+					else if (buf[i] == LF)
+						printf("\033[B");
+					else if (buf[i] == DC4)
+						printf("\033[H");
+					else if (buf[i] == DC3)
+						printf("\033[A");
+					else if (buf[i] == FF)
+						printf("\033[2J");
+					else if (buf[i] != NUL)
+						printf("<%02x>", buf[i]);
 				}
 			} else {
 				// chars outside STX/ETX
