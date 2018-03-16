@@ -9,6 +9,8 @@
 ************************************************************************
 * 2018-02-27  R.Meyer
 *   Factored out from cc2.c
+* 2018-03-16  R.Meyer
+*   Added MAIN Memory access functions and IB/OB functions
 ***********************************************************************/
 
 #include <stdio.h>
@@ -56,24 +58,38 @@ struct iomsgbuf {
 };
 
 /***********************************************************************
-* main memory access
+* Main memory accesses for I/O units
+* Mask all addresses and words to prevent extra bits from sneaking in
 ***********************************************************************/
 void main_read(IOCU *u) {
-	u->w = MAIN[u->d_addr & MASKMEM];
+	u->w = MAIN[u->d_addr & MASKMEM] & MASK_WORD48;
 }
 
 void main_read_inc(IOCU *u) {
-	u->w = MAIN[u->d_addr & MASKMEM];
+	u->w = MAIN[u->d_addr & MASKMEM] & MASK_WORD48;
 	u->d_addr = (u->d_addr+1) & MASKMEM;
 }
 
 void main_write(IOCU *u) {
-	MAIN[u->d_addr & MASKMEM] = u->w;
+	MAIN[u->d_addr & MASKMEM] = u->w & MASK_WORD48;
 }
 
 void main_write_inc(IOCU *u) {
-	MAIN[u->d_addr & MASKMEM] = u->w;
+	MAIN[u->d_addr & MASKMEM] = u->w & MASK_WORD48;
 	u->d_addr = (u->d_addr+1) & MASKMEM;
+}
+
+/***********************************************************************
+* Sequential character accesses using input/output buffer of a unit
+***********************************************************************/
+void get_ob(IOCU *u) {
+	u->ob = (u->w >> 42) & 077;
+	u->w = (u->w << 6) & MASK_WORD48;
+}
+
+void put_ib(IOCU *u) {
+	u->w = (u->w << 6) & MASK_WORD48;
+	u->w |= u->ib & 077;
 }
 
 /***********************************************************************

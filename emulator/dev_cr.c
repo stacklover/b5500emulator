@@ -9,6 +9,9 @@
 ************************************************************************
 * 2017-10-02  R.Meyer
 *   Factored out from emulator.c
+* 2018-03-16  R.Meyer
+*   Changed old ACCESSOR method to main_*_inc functions
+*   and use u->ib
 ***********************************************************************/
 
 #include <stdio.h>
@@ -137,11 +140,9 @@ void cr_read(IOCU *u) {
 	struct cr *crx;
 	int i;
 
-        ACCESSOR acc;
         int chars;
 
         mi = u->d_control & CD_30_MI ? true : false;
-        acc.addr = u->d_addr;
 
         if (u->d_control & CD_27_BINARY)
                 chars = 160;
@@ -150,8 +151,6 @@ void cr_read(IOCU *u) {
 
         u->d_result = 0;
 
-        acc.id = unit[u->d_unit][1].name;
-        acc.MAIL = false;
 	crx = cr + unit[u->d_unit][1].index;
 
         if (!crx->ready) {
@@ -183,25 +182,23 @@ notready:
                 u->d_result |= RD_19_PAR;
 
         while (chars > 0) {
-		acc.word = 0LL;
+		u->w = 0LL;
 		for (i=0; i<8; i++) {
 		        if (*crx->cbufp >= ' ') {
-		                acc.word = (acc.word << 6) | translatetable_ascii2bic[*crx->cbufp & 0x7f];
+		                u->ib = translatetable_ascii2bic[*crx->cbufp & 0x7f];
 		                crx->cbufp++;
 		        } else {
-		                acc.word = (acc.word << 6) | 060; // blank
+		                u->ib = 060; // BIC code for Blank
 		        }
+			put_ib(u);
 		}
                 chars -= 8;
-		if (!mi) {
-	                store(&acc);
-        	        acc.addr++;
-		}
+		if (!mi)
+			main_write_inc(u);
         }
 
 retresult:
 	u->d_wc = 0;
-	u->d_addr = acc.addr;
 }
 
 

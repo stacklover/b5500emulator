@@ -242,11 +242,12 @@ BIT spo_ready(unsigned index) {
 * write a single line to SPO
 ***********************************************************************/
 void spo_write(IOCU *u) {
-	int count;
+	int i;
 	char *spooutp = spooutbuf;
 #if TIMESTAMP
 	time_t now;
 	struct tm tm;
+
 	time(&now);
 	// subtract stamp
 	now -= stamp;
@@ -259,9 +260,8 @@ loop:
 	// read next word
 	main_read_inc(u);
 	// handle each char in this word
-	for (count=0; count<8; count++) {
-		u->ob = (u->w >> 42) & 077;
-		u->w <<= 6;
+	for (i=0; i<8; i++) {
+		get_ob(u);
 		if (u->ob == 037)
 			goto done;
 		// prevent buffer overrun
@@ -296,7 +296,7 @@ done:
 * read a single line from the SPO input buffer
 ***********************************************************************/
 void spo_read(IOCU *u) {
-	int count;
+	int i;
 	char *spoinp = spoinbuf;
 	BIT gmset = false;
 
@@ -307,7 +307,7 @@ void spo_read(IOCU *u) {
 
 	// do while words (8 characters) while we have more data
 	while (*spoinp >= ' ' || !gmset) {
-		for (count=0; count<8; count++) {
+		for (i=0; i<8; i++) {
 			// note that spoinp stays on the invalid char
 			// causing the rest of the word to be filled with
 			// GM
@@ -319,8 +319,7 @@ void spo_read(IOCU *u) {
 				u->ib = 037;
 				gmset = true;
 			}
-			u->w <<= 6;
-			u->w |= u->ib;
+			put_ib(u);
 		}
 		// store the complete word
 		main_write_inc(u);

@@ -114,6 +114,8 @@ extern void main_read(IOCU *u);
 extern void main_read_inc(IOCU *u);
 extern void main_write(IOCU *u);
 extern void main_write_inc(IOCU *u);
+extern void get_ob(IOCU *u);
+extern void put_ib(IOCU *u);
 
 /* Supervisory Console (SPO) */
 extern void spo_print(const char *buf);

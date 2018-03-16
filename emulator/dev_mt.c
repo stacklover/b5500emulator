@@ -9,6 +9,8 @@
 ************************************************************************
 * 2017-10-02  R.Meyer
 *   Factored out from emulator.c
+* 2018-03-16  R.Meyer
+*   Changed old ACCESSOR method to main_*_inc functions
 ***********************************************************************/
 
 #include <stdio.h>
@@ -153,7 +155,6 @@ void mt_access(IOCU *u) {
         unsigned words;
         BIT mi, binary, tapedir, usewc, read;
 
-        ACCESSOR acc;
         int i, cp=42;
         BIT first;
         WORD48 w;
@@ -166,12 +167,10 @@ void mt_access(IOCU *u) {
         tapedir = (u->d_control & CD_26_DIR) ? true : false;
         usewc = (u->d_control & CD_25_USEWC) ? true : false;
         read = (u->d_control & CD_24_READ) ? true : false;
-        acc.addr = u->d_addr;
+
         // number of words to do
         words = (usewc) ? u->d_wc : 1024;
 
-        acc.id = unit[u->d_unit][0].name;
-        acc.MAIL = false;
 	mtx = mt + unit[u->d_unit][0].index;
 
         u->d_result = 0;
@@ -217,7 +216,7 @@ void mt_access(IOCU *u) {
                 cp = 42;
                 lastchar = -1;
                 if (trace)
-                        fprintf(trace, " READ %u WORDS to %05o\n\t'", words, acc.addr);
+                        fprintf(trace, " READ %u WORDS to %05o\n\t'", words, u->d_addr);
                 lp = 0;
                 while (1) {
                         i = fgetc(mtx->fp);
@@ -268,17 +267,16 @@ void mt_access(IOCU *u) {
                         }
 
                         if (!binary) {
-                                // translate external BSL as ASCII to BIC??
+                                // translate external BCL as ASCII to BIC??
                         }
 
                         w |= (WORD48)(i & 0x3f) << cp;
                         cp -= 6;
                         if (cp < 0) {
                                 if (words > 0) {
-                                        acc.word = w;
+                                        u->w = w;
                                         words--;
-                                        store(&acc);
-                                        acc.addr++;
+					main_write_inc(u);
                                 }
                                 w = 0ll;
                                 cp = 42;
@@ -290,10 +288,9 @@ recend:         // record end reached
                         fprintf(trace, "'\n");
                 // store possible partial filled word
                 if (words > 0 && cp != 42) {
-                        acc.word = w;
+                        u->w = w;
                         words--;
-                        store(&acc);
-                        acc.addr++;
+			main_write_inc(u);
                 }
                 // return good result
                 if (trace)
@@ -321,7 +318,6 @@ retresult:
 		u->d_wc = 0;
 retresult2:
 	u->d_wc = (42-cp)/6;
-	u->d_addr = acc.addr;
 }
 
 

@@ -100,8 +100,9 @@ loop:
 			// TPDO4: received data
 			for (int j=1; j<frame.can_dlc; j++) {
 				char ch = frame.data[j];
-				if (ch == '\n') {
+				if (ch == '\r') {
 					// return
+					*can[id].p = 0;	// close input
 					can_send_string(id, "\r\n");
 					can[id].string = can[id].buf;
 					can[id].p = can[id].buf;

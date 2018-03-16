@@ -278,13 +278,13 @@ loop:
 					if (ctrace)
 						printf("<%02x>", buf[i]);
 					if (buf[i] == CR)
-						printf("<\033[K\n");
+						printf("\033[K\n");
 					else if (buf[i] == DC1)
-						;
+						printf("\033[K");
 					else if (buf[i] == BS)
 						printf("\033[D");
 					else if (buf[i] == LF)
-						printf("\033[B");
+						printf("\033[B\033[K");
 					else if (buf[i] == DC4)
 						printf("\033[H");
 					else if (buf[i] == DC3)

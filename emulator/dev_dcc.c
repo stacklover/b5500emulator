@@ -885,8 +885,7 @@ void dcc_access(IOCU *u) {
 							u->ib = 037;
 							gmset = true;
 						}
-						u->w <<= 6;
-						u->w |= u->ib;
+						put_ib(u);
 					}
 					// store the complete word
 					main_write_inc(u);
@@ -934,8 +933,7 @@ void dcc_access(IOCU *u) {
 
 			loop:	main_read_inc(u);
 				for (int count=0; count<8 && chars<BUFLEN; count++) {
-					u->ob = (u->w >> 42) & 077;
-					u->w <<= 6;
+					get_ob(u);
 					c = translatetable_bic2ascii[u->ob];
 					if (t->type == line) {
 						// some BIC codes have special meanings on output, handle those

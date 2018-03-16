@@ -9,6 +9,9 @@
 ************************************************************************
 * 2017-10-02  R.Meyer
 *   Factored out from emulator.c
+* 2018-03-16  R.Meyer
+*   Changed old ACCESSOR method to main_*_inc functions
+*   and use u->ob
 ***********************************************************************/
 
 #include <stdio.h>
@@ -150,19 +153,15 @@ void lp_write(IOCU *u) {
         WORD2 space;
         WORD4 skip;
 	struct lp *lpx;
-        ACCESSOR acc;
         int i;
 
         mi = (u->d_control & CD_30_MI) ? true : false;
         space = (u->d_result & 060) >> 4;
         skip = (u->d_result & 017) >> 0;
-        acc.addr = u->d_addr;
         if (u->d_control & CD_25_USEWC)
                 count = u->d_wc;
         else
                 count = 0;
-        acc.id = unit[u->d_unit][0].name;
-        acc.MAIL = false;
 	lpx = lp + unit[u->d_unit][0].index;
 
 	u->d_result = 0;
@@ -215,10 +214,11 @@ void lp_write(IOCU *u) {
         if (!mi) {
                 // print
                 while (count > 0) {
-                        fetch(&acc);
-                        for (i=42; i>=0; i-=6)
-                                fputc(translatetable_bic2ascii[(acc.word>>i)&077], lpx->fp);
-                        acc.addr++;
+                        main_read_inc(u);
+                        for (i=0; i<8; i++) {
+                                get_ob(u);
+                                fputc(translatetable_bic2ascii[u->ob], lpx->fp);
+			}
                         count--;
                 }
         }
@@ -239,7 +239,6 @@ void lp_write(IOCU *u) {
 	}
 
 retresult:
-	u->d_addr = acc.addr;
         // set printer finished IRQ
         switch (unit[u->d_unit][0].index) {
 	case 0: CC->CCI06F = true; break;

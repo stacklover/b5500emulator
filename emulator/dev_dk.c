@@ -12,6 +12,8 @@
 * 2017-10-14  R.Meyer
 *   changed file operations from fread/fwrite/fopen/fseek to
 *   read/write/open/lseek
+* 2018-03-16  R.Meyer
+*   Changed old ACCESSOR method to main_*_inc functions
 ***********************************************************************/
 
 #define COMPLAINABOUTNEVERWRITTEN 1
@@ -220,8 +222,6 @@ BIT dk_ready(unsigned index) {
 ***********************************************************************/
 void dk_access(IOCU *u) {
 	unsigned count, segcnt, words;
-	// prepare result with unit and read flag
-	ACCESSOR acc;
 	int i, j, k, retry;
 	unsigned eu = 0, diskfileaddr = 0;
 	off_t seekval;
@@ -230,26 +230,25 @@ void dk_access(IOCU *u) {
 
 	count = u->d_wc;
 	segcnt = u->d_result & 077;
-	acc.addr = u->d_addr;
 	// number of words to do
 	words = (u->d_control & CD_25_USEWC) ? count : segcnt * 30;
 
-	acc.id = unit[u->d_unit][0].name;
-	acc.MAIL = false;
+	// select local data structure
 	dkx = dk + unit[u->d_unit][0].index;
 
 	u->d_result = 0;
 
 	if (!dkx->ready) {
+		printf("*** DISK %s NOT READY ***\n", unit[u->d_unit][0].name);
 		u->d_result = RD_18_NRDY;
 		goto retresult;
 	}
 
 	// fetch first word from core with disk address
-	fetch(&acc);
-	eu = (acc.word >> 36) & 0xf;
+	main_read_inc(u);
+	eu = (u->w >> 36) & 0xf;
 	for (i=5; i>=0; i--) {
-		unsigned char ch = (acc.word >> 6*i) & 0xf;
+		unsigned char ch = (u->w >> 6*i) & 0xf;
 		if (ch > 9) {
 			printf("*** FATAL: disk file address has value > 9 ***\n");
 			exit(2);
@@ -257,9 +256,6 @@ void dk_access(IOCU *u) {
 		diskfileaddr *= 10;
 		diskfileaddr += ch;
 	}
-
-	// proceed to first data word
-	INCADDR(acc.addr);
 
 	// legal access?
 	if (eu >= dkx->eus || diskfileaddr >= SEGS_PER_DFEU) {
@@ -356,20 +352,20 @@ void dk_access(IOCU *u) {
 			// always handle chunks of 30 words
 			for (i=0; i<3; i++) {
 				if (trace)
-					fprintf(trace, "\t%05o %u:%06u", acc.addr, eu, diskfileaddr);
+					fprintf(trace, "\t%05o %u:%06u", u->d_addr, eu, diskfileaddr);
 				for (j=0; j<10; j++) {
 					if (trace)
 						fprintf(trace, " %-8.8s", dkx->dbufp);
 					// store until word count exhausted
 					if (words > 0) {
-						acc.word = 0LL;
+						u->w = 0LL;
 						for (k=0; k<8; k++) {
-							acc.word = (acc.word << 6) | translatetable_ascii2bic[*dkx->dbufp & 0x7f];
+							u->ib = translatetable_ascii2bic[*dkx->dbufp & 0x7f];
+							put_ib(u);
 							sum += *dkx->dbufp;
 							dkx->dbufp++;
 						}
-						store(&acc);
-						INCADDR(acc.addr);
+						main_write_inc(u);
 						words--;
 					} else {
 						for (k=0; k<8; k++) {
@@ -421,16 +417,15 @@ void dk_access(IOCU *u) {
 			// always handle chunks of 30 words
 			for (i=0; i<3; i++) {
 				if (trace)
-					fprintf(trace, "\t%05o %u:%06u", acc.addr, eu, diskfileaddr);
+					fprintf(trace, "\t%05o %u:%06u", u->d_addr, eu, diskfileaddr);
 				for (j=0; j<10; j++) {
 					if (words > 0) {
 						// if word count NOT exhausted, write next word
-						fetch(&acc);
-						INCADDR(acc.addr);
+						main_read_inc(u);
 						for (k=0; k<8; k++) {
-							unsigned ch = translatetable_bic2ascii[acc.word & 0x3f];
+							unsigned ch = translatetable_bic2ascii[u->w & 077];
 							dkx->dbufp[7-k] = ch;
-							acc.word >>= 6;
+							u->w >>= 6;
 							sum += ch;
 						}
 						words--;
@@ -497,7 +492,6 @@ retresult:
 		u->d_wc = words;
 	else
 		u->d_wc = 0;
-	u->d_addr = acc.addr;
 
 	if (trace)
 		fflush(trace);
