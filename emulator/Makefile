@@ -1,7 +1,7 @@
 #***********************************************************************
 # b5500emulator
 #***********************************************************************
-# Copyright (c)	2016, Reinhard Meyer, DL5UY
+# Copyright (c)	2016-2018, Reinhard Meyer, DL5UY
 # Licensed under the MIT License,
 #	see LICENSE
 # based	on work	by Nigel Williams and Paul Kimpel
@@ -63,7 +63,9 @@ OBJEMULATOR2 =	$(ODIR)/emulator2.o $(ODIR)/init_shares.o \
 		$(ODIR)/dev_dk.o \
 		$(ODIR)/dev_dcc.o \
 		$(ODIR)/translatetables.o \
-		$(ODIR)/instr_table.o
+		$(ODIR)/instr_table.o \
+		$(ODIR)/circbuffer.o \
+		$(ODIR)/telnetd.o
 ifeq ($(USECAN),1)
 OBJEMULATOR2 +=	$(ODIR)/canbus.o $(ODIR)/canlib.o
 endif
@@ -86,7 +88,7 @@ OBJSPTEST =	$(ODIR)/sptest.o \
 		$(ODIR)/translatetables.o \
 		$(ODIR)/instr_table.o
 
-INC =		common.h io.h b5500_defs.h canlib.h
+INC =		common.h io.h b5500_defs.h canlib.h telnetd.h
 
 CFLAGS		= -D_LARGEFILE64_SOURCE	-D_FILE_OFFSET_BITS=64 -pipe -Os \
 		  -D_THREAD_SAFE -D_REENTRANT -DNOSIMH -Wall

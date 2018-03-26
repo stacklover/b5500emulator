@@ -149,7 +149,7 @@ void cr_read(IOCU *u) {
         else
                 chars = 80;
 
-        u->d_result = 0;
+        u->d_result = 0; // no errors so far
 
 	crx = cr + unit[u->d_unit][1].index;
 
@@ -173,16 +173,21 @@ notready:
                 *crx->cbufp-- = 0;
         crx->cbufp = crx->cbuf;
 
+	// warn if a binary line is not exactly 160 chars
         if ((u->d_control & CD_27_BINARY) && strlen(crx->cbuf) != (unsigned)chars) {
-                printf("*\tERROR: binary card incorrect length(%u). abort\n", strlen(crx->cbuf));
-                exit(0);
+                printf("*\tWARNING: binary card incorrect length(%u). abort\n", strlen(crx->cbuf));
         }
 
+	// a "?" is an illegal char when at column 0 and in alpha mode
         if (crx->cbuf[0] == '?' && !(u->d_control & CD_27_BINARY))
-                u->d_result |= RD_19_PAR;
+                u->d_result |= RD_19_PAR; // set illegal char bit in result
 
+	// now fill the buffer with the just read card
+	// note that "cbufp" will stay on the first non-printable character
+	// and this will cause the rest of the buffer to be filled with blanks
         while (chars > 0) {
 		u->w = 0LL;
+		// 8 chars fit into a word
 		for (i=0; i<8; i++) {
 		        if (*crx->cbufp >= ' ') {
 		                u->ib = translatetable_ascii2bic[*crx->cbufp & 0x7f];
@@ -190,10 +195,12 @@ notready:
 		        } else {
 		                u->ib = 060; // BIC code for Blank
 		        }
+			// put input buffer char into word
 			put_ib(u);
 		}
                 chars -= 8;
-		if (!mi)
+		// after 8 chars one word is complete and must be written to memory
+		if (!mi) // if not inhibited
 			main_write_inc(u);
         }
 

@@ -20,61 +20,6 @@
 * However, it seems to cause no issues, when we give each adapter 112
 * chars of buffer.
 *
-* ff fd 03 DO Suppress Go Ahead
-* ff fb 18 WILL Terminal Type
-* ff fb 1f WILL Window Size
-* ff fb 20 WILL Term Speed
-* ff fb 21 WILL Remote Flow
-* ff fb 22 WILL Linemode
-* ff fb 27 WILL Send Locate
-* ff fd 05 DO Opt Status
-* ff fb 23
-*
-* fb (251) WILL
-* fc (252) WONT
-* fd (253) DO
-* fe (254) DONT
-* ff (255) IAC
-*
-* This SYSDISK/MAKER input works:
-*
-?EXECUTE SYSDISK/MAKER
-?DATA CARD
-LINE,0,0,112,0,0,7,0,
-LINE,1,0,112,0,0,0,0,
-STA,0,0,0,0,"0","0",0,0,
-LINE,1,1,112,0,0,0,0,
-STA,0,0,0,0,"0","0",0,0,
-LINE,1,2,112,0,0,0,0,
-STA,0,0,0,0,"0","0",0,0,
-LINE,1,3,112,0,0,0,0,
-STA,0,0,0,0,"0","0",0,0,
-LINE,1,4,112,0,0,0,0,
-STA,0,0,0,0,"0","0",0,0,
-LINE,1,5,112,0,0,0,0,
-STA,0,0,0,0,"0","0",0,0,
-LINE,1,6,112,0,0,0,0,
-STA,0,0,0,0,"0","0",0,0,
-LINE,1,7,112,0,0,0,0,
-STA,0,0,0,0,"0","0",0,0,
-LINE,1,8,112,0,0,0,0,
-STA,0,0,0,0,"0","0",0,0,
-LINE,1,9,112,0,0,0,0,
-STA,0,0,0,0,"0","0",0,0,
-LINE,1,10,112,0,0,0,0,
-STA,0,0,0,0,"0","0",0,0,
-LINE,1,11,112,0,0,0,0,
-STA,0,0,0,0,"0","0",0,0,
-LINE,1,12,112,0,0,0,0,
-STA,0,0,0,0,"0","0",0,0,
-LINE,1,13,112,0,0,0,0,
-STA,0,0,0,0,"0","0",0,0,
-LINE,1,14,112,0,0,0,0,
-STA,0,0,0,0,"0","0",0,0,
-LINE,1,15,112,0,0,0,0,
-STA,0,0,0,0,"0","0",0,0,
-?END
-*
 ************************************************************************
 * 2018-02-14  R.Meyer
 *   Frame from dev_spo.c
@@ -98,21 +43,14 @@ STA,0,0,0,0,"0","0",0,0,
 
 #include "common.h"
 #include "io.h"
+#include "circbuffer.h"
+#include "telnetd.h"
 
-#define NUMTERM 256
+#define NUMTERM 32
 #define	BUFLEN 112
 #define	BUFLEN2 200
 
 #define TRACE_DCC 0
-
-#define TIMEOUT 1000
-#define	TN_END	240
-#define	TN_SUB	250
-#define	TN_WILL	251
-#define	TN_WONT	252
-#define	TN_DO	253
-#define	TN_DONT	254
-#define	TN_IAC	255
 
 // Special Codes 
 #define	EOM	'~'	// Marks Buffer End
@@ -126,6 +64,11 @@ STA,0,0,0,0,"0","0",0,0,
 #define	ACK	0x06
 #define	NAK	0x15
 
+// tnr/bnr to idx and back
+#define	IDX(tnr,bnr)	(((tun)-1)*16+(bnr))
+#define	TUN(idx)	((idx)/16+1)
+#define	BNR(idx)	((idx)%16)
+
 /***********************************************************************
 * the DCC
 ***********************************************************************/
@@ -137,23 +80,13 @@ enum bufstate {
 	outputbusy,
 	writeready};
 
-enum escape {
-	none=0,
-	had_iac,
-	had_will,
-	had_wont,
-	had_do,
-	had_dont,
-	had_sub};
-
 enum type {
 	line=0,
 	block};
 
 typedef struct terminal {
-	int socket;
+	TELNET_SESSION_T session;
 	enum bufstate bufstate;
-	enum escape escape;
 	enum type type;
 	BIT connected;
 	BIT interrupt;
@@ -168,76 +101,15 @@ typedef struct terminal {
 } TERMINAL_T;
 
 static BIT ready;
-static TERMINAL_T terminal[NUMTERM];	// we waste indices 0..15 here
+static TERMINAL_T terminal[NUMTERM];
 
 // telnet
-static int listen_socket1 = -1;		// LINE type terminals
-static int listen_socket2 = -1;		// BLOCK type terminals
+static TELNET_SERVER_T server1;		// Port   23 - LINE type terminals
+static TELNET_SERVER_T server2;		// Port 8023 - BLOCK type terminals
 static BIT etrace = false;
 static BIT dtrace = false;
 static BIT ctrace = true;
 static BIT telnet = false;
-
-/***********************************************************************
-* Socket Close
-***********************************************************************/
-static void socket_close(TERMINAL_T *t) {
-	int so = t->socket;
-	t->socket = -1;		// prevent recursion
-	if (so > 2) {
-		close(so);
-		if (ctrace) {
-			sprintf(t->buffer, "+TELNET(%d) CLOSED\r\n", so);
-			spo_print(t->buffer);
-		}
-	}
-	t->interrupt = true;
-	t->abnormal = true;
-	t->fullbuffer = false;
-	t->bufstate = notready;
-	t->escape = none;
-	t->connected = false;
-	t->buffer[0] = 0;
-	t->bufidx = 0;
-}
-
-/***********************************************************************
-* Socket Read
-***********************************************************************/
-static int socket_read(TERMINAL_T *t, char *buf, int len) {
-	if (t->socket > 2) {
-		int cnt = read(t->socket, buf, len);
-		if (cnt < 0) {
-			if (errno == EAGAIN)
-				return -1;
-			if (dtrace)
-				perror("read failed - closing");
-			socket_close(t);
-		}
-		return cnt;
-	}
-	errno = ECONNRESET;
-	return -1;
-}
-
-/***********************************************************************
-* Socket Write
-***********************************************************************/
-static int socket_write(TERMINAL_T *t, const char *buf, int len) {
-	if (t->socket > 2) {
-		int cnt = write(t->socket, buf, len);
-		if (cnt < 0) {
-			if (errno == EAGAIN)
-				return -1;
-			if (dtrace)
-				perror("write failed - closing");
-			socket_close(t);
-		}
-		return cnt;
-	}
-	errno = ECONNRESET;
-	return -1;
-}
 
 /***********************************************************************
 * specify connect trace on/off
@@ -305,22 +177,19 @@ static int set_telnet(const char *v, void *) {
 static int get_status(const char *v, void *) {
 	char buf[BUFLEN2];
 	TERMINAL_T *t;
-	unsigned tun, bnr;
+	unsigned idx;
 
 	// list all connected terminals
-	for (tun = 1; tun < 16; tun++) {
-		for (bnr = 0; bnr < 16; bnr++) {
-			t = &terminal[tun*16 + bnr];
-			if (t->connected) {
-				sprintf(buf,"%u/%u S=%d B=%d I=%u A=%u F=%u\r\n",
-					tun, bnr,
-					t->socket, (int)t->bufstate,
-					t->interrupt, t->abnormal, t->fullbuffer);
-				spo_print(buf);
-			}
+	for (idx = 0; idx < NUMTERM; idx++) {
+		t = &terminal[idx];
+		if (t->connected) {
+			sprintf(buf,"%u/%u S=%d T=%d B=%d I=%u A=%u F=%u\r\n",
+				TUN(idx), BNR(idx),
+				t->session.socket, (int)t->type, (int)t->bufstate,
+				t->interrupt, t->abnormal, t->fullbuffer);
+			spo_print(buf);
 		}
 	}
-
 	return 0; // OK
 }
 
@@ -341,26 +210,23 @@ static const command_t dcc_commands[] = {
 * Find a buffer that needs service
 ***********************************************************************/
 static BIT terminal_search(unsigned *ptun, unsigned *pbnr) {
-	unsigned tun, bnr;
+	unsigned idx;
 	TERMINAL_T *t;
 
-	for (tun = 1; tun < 16; tun++) {
-		for (bnr = 0; bnr < 16; bnr++) {
-			t = &terminal[tun*16 + bnr];
-			// trigger late output IRQ
-			if (t->bufstate == outputbusy) {
-				if (++t->timer > TIMEOUT) {
-					t->bufstate = t->fullbuffer ? writeready : idle;
-					t->interrupt = true;
-					//printf("IRQ %u/%u\n", tun, bnr);
-				}
+	for (idx = 0; idx < NUMTERM; idx++) {
+		t = &terminal[idx];
+		// trigger late output IRQ
+		if (t->bufstate == outputbusy) {
+			if (++t->timer > TIMEOUT) {
+				t->bufstate = t->fullbuffer ? writeready : idle;
+				t->interrupt = true;
 			}
-			if (t->interrupt)  {
-				// something found
-				if (ptun) *ptun = tun;
-				if (pbnr) *pbnr = bnr;
-				return true;
-			}
+		}
+		if (t->interrupt)  {
+			// something found
+			if (ptun) *ptun = TUN(idx);
+			if (pbnr) *pbnr = BNR(idx);
+			return true;
 		}
 	}
 	// nothing found
@@ -374,8 +240,16 @@ static BIT terminal_search(unsigned *ptun, unsigned *pbnr) {
 ***********************************************************************/
 int dcc_init(const char *option) {
 	if (!ready) {
+		int i;
 		// ignore all SIGPIPEs
 		signal(SIGPIPE, SIG_IGN);
+		// init data structures
+		telnet_server_clear(&server1);
+		telnet_server_clear(&server2);
+		for (i=0; i<NUMTERM; i++) {
+			memset(&terminal[i], 0, sizeof(TERMINAL_T));
+			telnet_session_clear(&terminal[i].session);
+		}
 	}
 	ready = true;
 	return command_parser(dcc_commands, option);
@@ -384,247 +258,132 @@ int dcc_init(const char *option) {
 /***********************************************************************
 * handle new incoming TELNET session
 ***********************************************************************/
-static const char *msg = "\r\nB5500 TIME SHARING - BUSY\r\nPLEASE CALL BACK LATER\r\n";
+static void new_connection(int newsocket, struct sockaddr_in *addr, enum type type) {
+	static const char *msg = "\r\nB5500 TIME SHARING - BUSY\r\nPLEASE CALL BACK LATER\r\n";
+	socklen_t addrlen = sizeof(*addr);
+	char host[40];
+	unsigned port;
+	int idx, beg, end;
+	TERMINAL_T *t;
+	char buf[200];
+
+	// get the peer info
+	getnameinfo((struct sockaddr*)addr, addrlen, host, sizeof(host), NULL, 0, 0);
+	port = ntohs(addr->sin_port);
+
+	// determine terminal range
+	if (type == line) {
+		beg = 0;
+		end = 15;
+	} else {
+		beg = 16;
+		end = 31;
+	}
+
+	// find a free terminal to handle this
+	for (idx = beg; idx <= end && idx < NUMTERM; idx++) {
+		t = &terminal[idx];
+		if (!t->connected) {
+			// free terminal found
+			if (ctrace) {
+				sprintf(buf, "+LINE %u/%u TELNET(%d) FROM %s:%u\r\n",
+					TUN(idx), BNR(idx), newsocket, host, port);
+				spo_print(buf);
+			}
+			telnet_session_open(&(t->session), newsocket);
+			t->bufidx = 0;
+			t->abnormal = true;
+			t->bufstate = writeready;
+			t->type = type;
+			t->inmode = false;
+			t->outmode = false;
+			t->eotcount = 0;
+			t->connected = true;
+			t->interrupt = true;
+			return;
+		}
+	}
+	// nothing found
+	if (ctrace) {
+		sprintf(buf, "+LINE BUSY - TELNET(%d) FROM %s:%u REJECTED\r\n",
+			newsocket, host, port);
+		spo_print(buf);
+	}
+	write(newsocket, msg, strlen(msg));
+	sleep(1);
+	close(newsocket);
+}
+ 
+/***********************************************************************
+* handle TELNET server
+***********************************************************************/
 static void dcc_test_incoming(void) {
-	int newsocket, cnt, i, j, k;
+	int newsocket = -1, cnt, i, j, k;
 	struct sockaddr_in addr;
-	socklen_t addrlen = sizeof(addr);
-	unsigned port = 0;
-	unsigned tun, bnr;
-	char host[50];
+	unsigned idx;
 	char buf[BUFLEN2];
 	char buf2[BUFLEN2];
 	TERMINAL_T *t;
-	int optval;
-	socklen_t optlen = sizeof(optval);
 
-	// does TELNET1 need to be started?
-	if (telnet && listen_socket1 <= 2) {
-		// create socket for listening
-		struct sockaddr_in addr;
-		listen_socket1 = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
-		if (listen_socket1 < 0) {
-			perror("telnet socket");
-			return;
-		}
-		// set REUSEADDR option
-		optval = 1;
-		optlen = sizeof(optval);
-		if (setsockopt(listen_socket1, SOL_SOCKET, SO_REUSEADDR, &optval, optlen) < 0) {
-			perror("setsockopt(SO_REUSEADDR)");
-		}
-		// bind it to port 23
-		bzero((char*)&addr, sizeof(addr));
-		addr.sin_family = AF_INET;
-		addr.sin_addr.s_addr = INADDR_ANY;
-		addr.sin_port = htons(23);
-		if (bind(listen_socket1, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
-			// perror("telnet bind");
-			close(listen_socket1);
-			listen_socket1 = -1;
-			return;
-		}
-		// start the listening
-		if (listen(listen_socket1, 4)) {
-			perror("telnet listen");
-			close(listen_socket1);
-			listen_socket1 = -1;
-			return;
-		}
-		printf("TELNET server1 listen socket %d\n", listen_socket1);
-	} else
-
-	// does TELNET1 need to be stopped?
-	if (!telnet && listen_socket1 > 2) {
-		close(listen_socket1);
-		listen_socket1 = -1;
+	if (telnet && server1.socket <= 2) {
+		// SERVER1 needs to be started
+		telnet_server_start(&server1, 23);
+	} else if (!telnet && server1.socket > 2) {
+		// SERVER1 needs to be stopped
+		telnet_server_stop(&server1);
 	}
 
-	// does TELNET2 need to be started?
-	if (telnet && listen_socket2 <= 2) {
-		// create socket for listening
-		struct sockaddr_in addr;
-		listen_socket2 = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
-		if (listen_socket2 < 0) {
-			perror("telnet socket");
-			return;
-		}
-		// set REUSEADDR option
-		optval = 1;
-		optlen = sizeof(optval);
-		if (setsockopt(listen_socket2, SOL_SOCKET, SO_REUSEADDR, &optval, optlen) < 0) {
-			perror("setsockopt(SO_REUSEADDR)");
-		}
-		// bind it to port 8023
-		bzero((char*)&addr, sizeof(addr));
-		addr.sin_family = AF_INET;
-		addr.sin_addr.s_addr = INADDR_ANY;
-		addr.sin_port = htons(8023);
-		if (bind(listen_socket2, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
-			// perror("telnet bind");
-			close(listen_socket2);
-			listen_socket2 = -1;
-			return;
-		}
-		// start the listening
-		if (listen(listen_socket2, 4)) {
-			perror("telnet listen");
-			close(listen_socket2);
-			listen_socket2 = -1;
-			return;
-		}
-		printf("TELNET server2 listen socket %d\n", listen_socket2);
-	} else
-
-	// does TELNET2 need to be stopped?
-	if (!telnet && listen_socket2 > 2) {
-		close(listen_socket2);
-		listen_socket2 = -1;
+	if (telnet && server2.socket <= 2) {
+		// SERVER2 needs to be started
+		telnet_server_start(&server2, 8023);
+	} else if (!telnet && server2.socket > 2) {
+		// SERVER2 needs to be stopped
+		telnet_server_stop(&server2);
 	}
 
-	// check for new connections
-	if (listen_socket1 > 2) {
-		newsocket = accept4(listen_socket1, (struct sockaddr*)&addr, &addrlen, SOCK_NONBLOCK | SOCK_CLOEXEC);
-		if (newsocket > 2) {
-			if (ctrace) {
-				// get the peer info
-				getnameinfo((struct sockaddr*)&addr, addrlen, host, sizeof(host), NULL, 0, 0);
-				port = ntohs(addr.sin_port);
-			}
-			// set KEEPALIVE option
-			optval = 1;
-			optlen = sizeof(optval);
-			if (setsockopt(newsocket, SOL_SOCKET, SO_KEEPALIVE, &optval, optlen) < 0) {
-				perror("setsockopt(SO_KEEPALIVE)");
-			}
-			// find a free terminal to handle this
-			for (tun = 1; tun < 2; tun++) {
-				for (bnr = 0; bnr < 16; bnr++) {
-					t = &terminal[tun*16 + bnr];
-					if (!t->connected) {
-						// free terminal found
-						if (ctrace) {
-							sprintf(buf, "+TELNET(%d) %s:%u LINE %u/%u\r\n",
-								newsocket, host, port, tun, bnr);
-							spo_print(buf);
-						}
-						t->bufidx = 0;
-						t->socket = newsocket;
-						t->abnormal = true;
-						t->bufstate = writeready;
-						t->escape = none;
-						t->type = line;
-						t->connected = true;
-						t->interrupt = true;
-						sprintf(buf, "%c%c%c", TN_IAC, TN_WILL, 1);
-						socket_write(t, buf, 3);
-						return;
-					}
-				}
-			}
-			// nothing found
-			if (ctrace) {
-				sprintf(buf, "+TELNET#%d %s:%u NO LINE. CLOSING\r\n",
-					newsocket, host, port);
-				spo_print(buf);
-			}
-			write(newsocket, msg, strlen(msg));
-			sleep(1);
-			close(newsocket);
-		} else if (errno != EAGAIN) {
-			perror("accept");
-		}
+	// poll both servers for new connections
+	if (server1.socket > 2) {
+		newsocket = telnet_server_poll(&server1, &addr);
+		if (newsocket > 0)
+			new_connection(newsocket, &addr, line);
 	}
-
-	// check for new connections
-	if (listen_socket2 > 2) {
-		newsocket = accept4(listen_socket2, (struct sockaddr*)&addr, &addrlen, SOCK_NONBLOCK | SOCK_CLOEXEC);
-		if (newsocket > 2) {
-			if (ctrace) {
-				// get the peer info
-				getnameinfo((struct sockaddr*)&addr, addrlen, host, sizeof(host), NULL, 0, 0);
-				port = ntohs(addr.sin_port);
-			}
-			// set KEEPALIVE option
-			optval = 1;
-			optlen = sizeof(optval);
-			if (setsockopt(newsocket, SOL_SOCKET, SO_KEEPALIVE, &optval, optlen) < 0) {
-				perror("setsockopt(SO_KEEPALIVE)");
-			}
-			// find a free terminal to handle this
-			for (tun = 2; tun < 3; tun++) {
-				for (bnr = 0; bnr < 16; bnr++) {
-					t = &terminal[tun*16 + bnr];
-					if (!t->connected) {
-						// free terminal found
-						if (ctrace) {
-							sprintf(buf, "+TELNET(%d) %s:%u LINE %u/%u\r\n",
-								newsocket, host, port, tun, bnr);
-							spo_print(buf);
-						}
-						t->bufidx = 0;
-						t->socket = newsocket;
-						t->abnormal = true;
-						t->bufstate = writeready;
-						t->escape = none;
-						t->type = block;
-						t->inmode = false;
-						t->outmode = false;
-						t->eotcount = 0;
-						t->connected = true;
-						t->interrupt = true;
-						//sprintf(buf, "%c%c%c", TN_IAC, TN_WILL, 1);
-						//socket_write(t, buf, 3);
-						return;
-					}
-				}
-			}
-			// nothing found
-			if (ctrace) {
-				sprintf(buf, "+TELNET#%d %s:%u NO LINE. CLOSING\r\n",
-					newsocket, host, port);
-				spo_print(buf);
-			}
-			write(newsocket, msg, strlen(msg));
-			sleep(1);
-			close(newsocket);
-		} else if (errno != EAGAIN) {
-			perror("accept");
-		}
+	if (server2.socket > 2) {
+		newsocket = telnet_server_poll(&server2, &addr);
+		if (newsocket > 0)
+			new_connection(newsocket, &addr, block);
 	}
-
+	
 	// check for input from any connection
-	for (tun = 1; tun < 16; tun++) {
-		for (bnr = 0; bnr < 16; bnr++) {
-			t = &terminal[tun*16 + bnr];
-			if (t->connected && t->socket > 2 && t->bufstate != readready) {
-				// check for data available
-				cnt = socket_read(t, buf, sizeof buf);
-				// cnt==0 means EOF (socket not connected)
-				if (cnt == 0) {
-					socket_close(t);
-				}
-				if (etrace && cnt > 0) {
-					printf("$TELNET RX:");
-					for (i=0; i<cnt; i++)
-						printf(" %02x", buf[i]);
-					printf("\n");
-				}
-				if (t->type == line) {
-					// line mode
-					// run each character
-					j = 0;
-					for (i=0; i<cnt; i++) {
-						switch (t->escape) {
-						case none:
-							if (buf[i] == TN_IAC) {
-								t->escape = had_iac;
-							} else if (buf[i] == 0x0d) {
+	for (idx = 0; idx < NUMTERM; idx++) {
+		t = &terminal[idx];
+		if (t->connected) {
+			if (t->session.socket > 2) {
+				// socket still open
+				if (t->bufstate != readready) {
+					// check for data available
+					cnt = telnet_session_read(&t->session, buf, sizeof buf);
+					if (cnt < 0) {
+						// non recoverable error - session was closed
+						goto isclosed;
+					}
+					if (etrace && cnt > 0) {
+						printf("$TELNET RX:");
+						for (i=0; i<cnt; i++)
+							printf(" %02x", buf[i]);
+						printf("\n");
+					}
+					if (t->type == line) {
+						// line mode
+						// run each character
+						j = 0;
+						for (i=0; i<cnt; i++) {
+							if (buf[i] == 0x0d) {
 								// end of line
 								t->buffer[t->bufidx] = 0;
 								t->bufidx = 0;
 								if (etrace)
-									printf("$DCC received %u/%u:%s\n", tun, bnr, t->buffer);
+									printf("+LINE %u/%u RECEIVED %s\n",
+										TUN(idx), BNR(idx), t->buffer);
 								t->abnormal = false;
 								t->bufstate = readready;
 								t->interrupt = true;
@@ -637,7 +396,6 @@ static void dcc_test_incoming(void) {
 								// backspace
 								if (t->bufidx > 0) {
 									t->bufidx--;
-									//socket_write(t, " \010", 2);
 									// echo
 									if (j < BUFLEN2-3) {
 										buf2[j++] = 0x08;
@@ -648,7 +406,6 @@ static void dcc_test_incoming(void) {
 							} else if (buf[i] == 0x1b) {
 								// cancel line
 								t->bufidx = 0;
-								//socket_write(t, "X\015\012", 3);
 								if (j < BUFLEN2-3) {
 									buf2[j++] = 'x';
 									buf2[j++] = 0x0d;
@@ -669,105 +426,69 @@ static void dcc_test_incoming(void) {
 									}
 								}
 							}
-							break;
-						case had_iac:
-							if (buf[i] == TN_IAC) {
-								// data 0xff - ignore
-								t->escape = none;
-							} else if (buf[i] == TN_WILL) {
-								t->escape = had_will;
-							} else if (buf[i] == TN_WONT) {
-								t->escape = had_wont;
-							} else if (buf[i] == TN_DO) {
-								t->escape = had_do;
-							} else if (buf[i] == TN_DONT) {
-								t->escape = had_dont;
-							} else if (buf[i] == TN_SUB) {
-								t->escape = had_sub;
-							} else {
-								t->escape = none;
-							}
-							break;
-						case had_will:
-							if (etrace)
-								printf("<WILL%u>", buf[i]);
-							t->escape = none;
-							break;
-						case had_wont:
-							if (etrace)
-								printf("<WONT%u>", buf[i]);
-							t->escape = none;
-							break;
-						case had_do:
-							if (etrace)
-								printf("<DO%u>", buf[i]);
-							t->escape = none;
-							break;
-						case had_dont:
-							if (etrace)
-								printf("<DONT%u>", buf[i]);
-							t->escape = none;
-							break;
-						case had_sub:
-							// ignore all until TN_END
-							if (buf[i] == TN_END) {
-								t->escape = none;
-								if (etrace)
-									printf("<END>");
-							} else {
-								if (etrace)
-									printf("<IGN%u>", buf[i]);
-							}
-							break;
-						} // switch
-					} // for
-					if (etrace && cnt > 0)
-						printf("\n");
-					if (j > 0)
-						socket_write(t, buf2, j);
-				} else {
-					// block mode
-					// run each character
-					for (i=0; i<cnt; i++) {
-						k = buf[i] & 0x7f;
-						if (k >= 0x20) {
-							// printable... if current mode is control...
-							if (!t->inmode) {
-								if (t->bufidx < BUFLEN2) {
-									// ... change it
-									t->buffer[t->bufidx++] = MODE;
+						} // for
+						if (etrace && cnt > 0)
+							printf("\n");
+						if (j > 0)
+							telnet_session_write(&t->session, buf2, j);
+					} else {
+						// block mode
+						// run each character
+						for (i=0; i<cnt; i++) {
+							k = buf[i] & 0x7f;
+							if (k >= 0x20) {
+								// printable... if current mode is control...
+								if (!t->inmode) {
+									if (t->bufidx < BUFLEN2) {
+										// ... change it
+										t->buffer[t->bufidx++] = MODE;
+									}
+									t->inmode = true;
 								}
-								t->inmode = true;
-							}
-							// enter printable char as is
-							if (t->bufidx < BUFLEN2) {
-								t->buffer[t->bufidx++] = k;
-							}
-						} else {
-							// control... if current mode is printable...
-							if (t->inmode) {
+								// enter printable char as is
 								if (t->bufidx < BUFLEN2) {
-									// ... change it
-									t->buffer[t->bufidx++] = MODE;
+									t->buffer[t->bufidx++] = k;
 								}
-								t->inmode = false;
+							} else {
+								// control... if current mode is printable...
+								if (t->inmode) {
+									if (t->bufidx < BUFLEN2) {
+										// ... change it
+										t->buffer[t->bufidx++] = MODE;
+									}
+									t->inmode = false;
+								}
+								// enter control char as printable
+								if (t->bufidx < BUFLEN2) {
+									t->buffer[t->bufidx++] = k + ' ';
+								}
 							}
-							// enter control char as printable
-							if (t->bufidx < BUFLEN2) {
-								t->buffer[t->bufidx++] = k + ' ';
+							// special codes that close buffer
+							if (k==EOT || k==ETX || k==ENQ || k==ACK || k==NAK) {
+								// must send to system, mark end of buffer
+								t->buffer[t->bufidx] = 0;
+								t->bufidx = 0;
+								t->abnormal = false;
+								t->bufstate = readready;
+								t->interrupt = true;
 							}
-						}
-						// special codes that close buffer
-						if (k==EOT || k==ETX || k==ENQ || k==ACK || k==NAK) {
-							// must send to system, mark end of buffer
-							t->buffer[t->bufidx] = 0;
-							t->bufidx = 0;
-							t->abnormal = false;
-							t->bufstate = readready;
-							t->interrupt = true;
-						}
-					} // for
-				} // mode
+						} // for
+					} // mode
+				}
+			} else {
+isclosed:			// socket was closed
+				if (ctrace) {
+					sprintf(buf, "+LINE %u/%u CLOSED\r\n",
+						TUN(idx), BNR(idx));
+					spo_print(buf);
+				}
+				t->interrupt = true;
+				t->abnormal = true;
+				t->fullbuffer = false;
+				t->bufstate = notready;
+				t->connected = false;
+				t->buffer[0] = 0;
+				t->bufidx = 0;
 			}
 		}
 	}
@@ -802,6 +523,7 @@ void dcc_access(IOCU *u) {
 	// terminal unit and buffer number are win word count
 	unsigned tun = (u->d_wc >> 5) & 0xf;
 	unsigned bnr = (u->d_wc >> 0) & 0xf;
+	unsigned idx;
 	TERMINAL_T *t;
 
 	// interrogate command
@@ -829,33 +551,36 @@ void dcc_access(IOCU *u) {
 		}
 		// any found or specific query?
 		if (tun > 0) {
-			t = &terminal[tun*16 + bnr];
-			switch (t->bufstate) {
-			case readready:
-				u->d_result = RD_24_READ;
-				break;
-			case writeready:
-				u->d_result = RD_21_END;
-				break;
-			case inputbusy:
-			case outputbusy:
-				u->d_result = RD_20_ERR;
-				break;
-			case idle:
-				break;
-			default:
-				u->d_result = RD_20_ERR | RD_18_NRDY;
+			idx = IDX(tun, bnr);
+			if (idx < NUMTERM) {
+				t = &terminal[idx];
+				switch (t->bufstate) {
+				case readready:
+					u->d_result = RD_24_READ;
+					break;
+				case writeready:
+					u->d_result = RD_21_END;
+					break;
+				case inputbusy:
+				case outputbusy:
+					u->d_result = RD_20_ERR;
+					break;
+				case idle:
+					break;
+				default:
+					u->d_result = RD_20_ERR | RD_18_NRDY;
+				}
+				// abnornal flag?
+				if (t->abnormal)
+					u->d_result |= RD_25_ABNORMAL;
+				// clear pending IRQ
+				t->interrupt = false;
 			}
-			// abnornal flag?
-			if (t->abnormal)
-				u->d_result |= RD_25_ABNORMAL;
-			// clear pending IRQ
-			t->interrupt = false;
 		}
 	} else if (reading) {
 		// read buffer
-		t = &terminal[tun*16 + bnr];
-		if (t->connected) {
+		idx = IDX(tun, bnr);
+		if (idx < NUMTERM && (t = &terminal[idx])->connected) {
 			int count;
 			char *p = t->buffer;
 			BIT gmset = false;
@@ -865,7 +590,7 @@ void dcc_access(IOCU *u) {
 			switch (t->bufstate) {
 			case readready:
 				if (dtrace)
-					printf("$DCC READ(%u/%u)=\"", tun, bnr);
+					printf("+LINE %u/%u READ \"", tun, bnr);
 
 				// do whole words (8 characters) while we have more data
 				while (*p >= ' ' || !gmset) {
@@ -917,8 +642,8 @@ void dcc_access(IOCU *u) {
 		}
 	} else {
 		// write buffer
-		t = &terminal[tun*16 + bnr];
-		if (t->connected) {
+		idx = IDX(tun, bnr);
+		if (idx < NUMTERM && (t = &terminal[idx])->connected) {
 			char buffer[BUFLEN];
 			char *p = buffer;
 			char c;
@@ -929,7 +654,7 @@ void dcc_access(IOCU *u) {
 			case idle:
 			case writeready:
 				if (dtrace)
-					printf("$DCC WRITE(%u/%u)=\"", tun, bnr);
+					printf("+LINE %u/%u WRIT \"", tun, bnr);
 
 			loop:	main_read_inc(u);
 				for (int count=0; count<8 && chars<BUFLEN; count++) {
@@ -1005,15 +730,15 @@ void dcc_access(IOCU *u) {
 
 			done:	if (dtrace)
 					printf("\"\n");
-				if (socket_write(t, buffer, p - buffer) < 0)
+				if (telnet_session_write(&t->session, buffer, p - buffer) < 0)
 					goto closing;
 				if (disc) {
 					if (ctrace) {
-						sprintf(t->buffer, "+TELNET(%d) CANDE DISC\n", t->socket);
+						sprintf(t->buffer, "+TELNET(%d) CANDE DISC\n", t->session.socket);
 						spo_print(t->buffer);
 					}
 					sleep(1);
-			closing:	socket_close(t);
+			closing:	telnet_session_close(&t->session);
 					goto wrapup;
 				}
 				// set IRQ
