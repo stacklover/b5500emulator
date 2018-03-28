@@ -12,6 +12,8 @@
 * 2018-03-16  R.Meyer
 *   Changed old ACCESSOR method to main_*_inc functions
 *   and use u->ob
+* 2018-03-28  R.Meyer
+*   Added HPLJ type
 ***********************************************************************/
 
 #include <stdio.h>
@@ -41,16 +43,23 @@
 #define PRINTERS 2
 #define NAMELEN 100
 
+//			RESET	DIN-A4		PORTRAIT	ROMAN-8		LINEPRINTFONT	16.66CPI	VERY BOLD
+#define INIT_HPLJ	"\033E"	"\033&l26A"	"\033&l0O"	"\033(8U"	"\033(s0T"	"\033(s16.66H"	"\033(s7B"
+#define	LINES_HPLJ	60
+
 /***********************************************************************
 * for each supported printer
 ***********************************************************************/
-enum pt	{pt_file=0, pt_lc10, pt_text};
+enum pt	{pt_file=0, pt_lc10, pt_text, pt_hplj};
 static struct lp {
 	char	filename[NAMELEN];
 	FILE	*fp;
 	enum pt	type;
+	int	pagelen;
 	int 	lineno;
+	BIT	initsent;
 	BIT	ready;
+	BIT	pageused;
 } lp[PRINTERS];
 
 static struct lp *lpx = NULL;
@@ -70,10 +79,16 @@ static int set_lptype(const char *v, void *) {
 	}
 	if (strcmp(v, "file") == 0) {
 		lpx->type = pt_file;
+		lpx->pagelen = 60;
 	} else if (strcmp(v, "lc10") == 0) {
 		lpx->type = pt_lc10;
+		lpx->pagelen = 66;
 	} else if (strcmp(v, "text") == 0) {
 		lpx->type = pt_text;
+		lpx->pagelen = 0;
+	} else if (strcmp(v, "hplj") == 0) {
+		lpx->type = pt_hplj;
+		lpx->pagelen = LINES_HPLJ;
 	} else {
 		printf("unknown type\n");
 		return 2; // FATAL
@@ -106,6 +121,8 @@ static int set_lpfile(const char *v, void *) {
 		if (lpx->fp) {
 			lpx->ready = true;
 			lpx->lineno = 1;
+			lpx->pageused = false;
+			lpx->initsent = false;
 			return 0; // OK
 		} else {
 			// cannot open
@@ -171,6 +188,23 @@ void lp_write(IOCU *u) {
                 goto retresult;
         }
 
+	if (!lpx->initsent) {
+		// send printer specific init commands
+		switch (lpx->type) {
+		case pt_text:
+			break;
+		case pt_file:
+			break;
+		case pt_lc10:
+			break;
+		case pt_hplj:
+			fprintf(lpx->fp, INIT_HPLJ);
+			break;
+                }
+		lpx->initsent = true;
+	}
+		
+
         if (skip) {
                 // skip to stop
 		switch (lpx->type) {
@@ -184,8 +218,13 @@ void lp_write(IOCU *u) {
 			if (skip == 1 && lpx->lineno != 1)
 				fprintf(lpx->fp, "\014");
 			break;
+		case pt_hplj:
+			if (skip == 1 && lpx->pageused)
+				fprintf(lpx->fp, "\014");
+			break;
 		}
 		lpx->lineno = 1;
+		lpx->pageused = 0;
         } else {
                 // space
 		switch (lpx->type) {
@@ -209,6 +248,12 @@ void lp_write(IOCU *u) {
 		        case 2: fprintf(lpx->fp, "\n\033P\017"); lpx->lineno++; break;
 			}
 			break;
+		case pt_hplj:
+		        switch (space) {
+		        case 1: case 3: fprintf(lpx->fp, "\n\n"); lpx->lineno += 2; break;
+		        case 2: fprintf(lpx->fp, "\n"); lpx->lineno++; break;
+			}
+			break;
                 }
         }
         if (!mi) {
@@ -221,6 +266,7 @@ void lp_write(IOCU *u) {
 			}
                         count--;
                 }
+		lpx->pageused = true;
         }
 	switch (lpx->type) {
 	case pt_text:
@@ -230,11 +276,14 @@ void lp_write(IOCU *u) {
 	case pt_lc10:
 	        fprintf(lpx->fp, "\r");
 		break;
+	case pt_hplj:
+	        fprintf(lpx->fp, "\r");
+		break;
 	}
 	fflush(lpx->fp);
 
 	// end of page reached?
-	if (lpx->type != pt_text && lpx->lineno >= 66) {
+	if (lpx->pagelen > 0 && lpx->lineno >= lpx->pagelen) {
 		u->d_result |= RD_21_END;
 	}
 
