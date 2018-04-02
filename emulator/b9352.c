@@ -77,7 +77,7 @@
 
 /***********************************************************************
 * ASCII control codes
-* the codes for LF, RS, US are also used in the non-spatial memory
+* the codes for LF, RS, US are also used in the display memory
 ***********************************************************************/
 #define	NUL	0x00	// time fill - ignored
 #define	STX	0x02	// start of text during transmission

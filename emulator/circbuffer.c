@@ -11,14 +11,26 @@
 #include <stdlib.h>
 #include "circbuffer.h"
 
-int circ_init(CIRCBUFFER_T *cb, int size) {
+void circ_clear(CIRCBUFFER_T *cb) {
 	cb->rp = cb->wp = cb->buf;
+	cb->used = 0;
+}
+
+int circ_create(CIRCBUFFER_T *cb, int size) {
+	cb->rp = cb->wp = cb->buf = (unsigned char *)malloc(size);
 	if (cb->buf == 0)
 		return -1;
 	cb->length = size;
 	cb->used = 0;
 	cb->ep = cb->buf + size;
-	return size;
+	return 0;
+}
+
+void circ_destroy(CIRCBUFFER_T *cb) {
+	free(cb->buf);
+	cb->ep = cb->rp = cb->wp = cb->buf = NULL;
+	cb->length = 0;
+	cb->used = 0;
 }
 
 int circ_space(CIRCBUFFER_T *cb) {

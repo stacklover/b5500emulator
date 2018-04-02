@@ -20,7 +20,9 @@ typedef struct circbuffer {
 	unsigned	used;	// bytes used in buffer
 } CIRCBUFFER_T;
 
-extern int circ_init(CIRCBUFFER_T *cb, int size);
+extern int circ_create(CIRCBUFFER_T *cb, int size);
+extern void circ_destroy(CIRCBUFFER_T *cb);
+extern void circ_clear(CIRCBUFFER_T *cb);
 extern int circ_space(CIRCBUFFER_T *cb);
 extern int circ_used(CIRCBUFFER_T *cb);
 extern int circ_write(CIRCBUFFER_T *cb, unsigned char v);

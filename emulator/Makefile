@@ -65,6 +65,8 @@ OBJEMULATOR2 =	$(ODIR)/emulator2.o $(ODIR)/init_shares.o \
 		$(ODIR)/dev_lp.o \
 		$(ODIR)/dev_dk.o \
 		$(ODIR)/dev_dcc.o \
+		$(ODIR)/dcc_b9352.o \
+		$(ODIR)/dcc_teletype.o \
 		$(ODIR)/translatetables.o \
 		$(ODIR)/instr_table.o \
 		$(ODIR)/circbuffer.o \
@@ -91,7 +93,7 @@ OBJSPTEST =	$(ODIR)/sptest.o \
 		$(ODIR)/translatetables.o \
 		$(ODIR)/instr_table.o
 
-INC =		common.h io.h b5500_defs.h canlib.h telnetd.h
+INC =		common.h io.h b5500_defs.h canlib.h dcc.h telnetd.h
 
 CFLAGS		= -D_LARGEFILE64_SOURCE	-D_FILE_OFFSET_BITS=64 -pipe -Os \
 		  -D_THREAD_SAFE -D_REENTRANT -DNOSIMH -Wall

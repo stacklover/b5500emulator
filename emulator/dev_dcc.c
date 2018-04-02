@@ -20,6 +20,12 @@
 * However, it seems to cause no issues, when we give each adapter 112
 * chars of buffer.
 *
+* operational notes:
+*   there is no word or character count given in the IOCW
+*   by default, all 112 chars (14 words) are valid
+*   a shorter message is ended with the EOM character, which is never
+*   part of a message
+*
 ************************************************************************
 * 2018-02-14  R.Meyer
 *   Frame from dev_spo.c
@@ -45,71 +51,33 @@
 #include "io.h"
 #include "circbuffer.h"
 #include "telnetd.h"
-
-#define NUMTERM 32
-#define	BUFLEN 112
-#define	BUFLEN2 200
-
-#define TRACE_DCC 0
-
-// Special Codes 
-#define	EOM	'~'	// Marks Buffer End
-#define	MODE	'!'	// toggles Control/Printable Mode at Line Discipline
-
-// ASCII Control Codes
-#define	STX	0x02
-#define	ETX	0x03
-#define	EOT	0x04
-#define	ENQ	0x05
-#define	ACK	0x06
-#define	NAK	0x15
-
-// tnr/bnr to idx and back
-#define	IDX(tnr,bnr)	(((tun)-1)*16+(bnr))
-#define	TUN(idx)	((idx)/16+1)
-#define	BNR(idx)	((idx)%16)
+#include "dcc.h"
 
 /***********************************************************************
-* the DCC
+* the terminals
 ***********************************************************************/
-enum bufstate {
-	notready=0,
-	idle,
-	inputbusy,
-	readready,
-	outputbusy,
-	writeready};
-
-enum type {
-	line=0,
-	block};
-
-typedef struct terminal {
-	TELNET_SESSION_T session;
-	enum bufstate bufstate;
-	enum type type;
-	BIT connected;
-	BIT interrupt;
-	BIT abnormal;
-	BIT fullbuffer;
-	BIT inmode;
-	BIT outmode;
-	unsigned eotcount;
-	unsigned timer;
-	unsigned bufidx;
-	char buffer[BUFLEN2+1];
-} TERMINAL_T;
-
-static BIT ready;
 static TERMINAL_T terminal[NUMTERM];
 
-// telnet
-static TELNET_SERVER_T server1;		// Port   23 - LINE type terminals
-static TELNET_SERVER_T server2;		// Port 8023 - BLOCK type terminals
-static BIT etrace = false;
-static BIT dtrace = false;
-static BIT ctrace = true;
+/***********************************************************************
+* the TELNET servers
+***********************************************************************/
+static TELNET_SERVER_T server[NUMSERV];
+// server[0]: Port   23 - LINE type terminals (TELETYPE)
+// server[1]: Port 8023 - BLOCK type terminals (B9352)
+// server[2]: Port 9023 - BLOCK type terminals (B9352 with external ANSI)
+static unsigned portno[NUMSERV] = {23, 8023, 9023};
+static enum ld ldno[NUMSERV] = {ld_teletype, ld_contention, ld_contention};
+static enum em emno[NUMSERV] = {em_none, em_none, em_teletype};
+
+/***********************************************************************
+* misc variables
+***********************************************************************/
+static BIT ready;
 static BIT telnet = false;
+
+BIT etrace = false;
+BIT dtrace = false;
+BIT ctrace = true;
 
 /***********************************************************************
 * specify connect trace on/off
@@ -175,17 +143,18 @@ static int set_telnet(const char *v, void *) {
 * get status
 ***********************************************************************/
 static int get_status(const char *v, void *) {
-	char buf[BUFLEN2];
+	char buf[OUTBUFSIZE];
 	TERMINAL_T *t;
-	unsigned idx;
+	unsigned index;
 
 	// list all connected terminals
-	for (idx = 0; idx < NUMTERM; idx++) {
-		t = &terminal[idx];
+	for (index = 0; index < NUMTERM; index++) {
+		t = &terminal[index];
 		if (t->connected) {
-			sprintf(buf,"%u/%u S=%d T=%d B=%d I=%u A=%u F=%u\r\n",
-				TUN(idx), BNR(idx),
-				t->session.socket, (int)t->type, (int)t->bufstate,
+			sprintf(buf,"%u/%u S=%d DE=%d%d B=%d I=%u A=%u F=%u\r\n",
+				TUN(index), BNR(index),
+				t->session.socket, (int)t->ld, (int)t->em,
+				(int)t->bufstate,
 				t->interrupt, t->abnormal, t->fullbuffer);
 			spo_print(buf);
 		}
@@ -207,25 +176,31 @@ static const command_t dcc_commands[] = {
 };
 
 /***********************************************************************
-* Find a buffer that needs service
+* Find a terminal that needs service
 ***********************************************************************/
 static BIT terminal_search(unsigned *ptun, unsigned *pbnr) {
-	unsigned idx;
+	unsigned index;
 	TERMINAL_T *t;
 
-	for (idx = 0; idx < NUMTERM; idx++) {
-		t = &terminal[idx];
+	for (index = 0; index < NUMTERM; index++) {
+		t = &terminal[index];
+
 		// trigger late output IRQ
 		if (t->bufstate == outputbusy) {
 			if (++t->timer > TIMEOUT) {
-				t->bufstate = t->fullbuffer ? writeready : idle;
-				t->interrupt = true;
+				// now send/interpret the data
+				if (t->ld == ld_teletype)
+					teletype_emulation_write(t);
+				else
+					b9352_emulation_write(t);
 			}
 		}
+
+		// is this requiring service now?
 		if (t->interrupt)  {
 			// something found
-			if (ptun) *ptun = TUN(idx);
-			if (pbnr) *pbnr = BNR(idx);
+			if (ptun) *ptun = TUN(index);
+			if (pbnr) *pbnr = BNR(index);
 			return true;
 		}
 	}
@@ -240,15 +215,29 @@ static BIT terminal_search(unsigned *ptun, unsigned *pbnr) {
 ***********************************************************************/
 int dcc_init(const char *option) {
 	if (!ready) {
-		int i;
+		int index;
+
 		// ignore all SIGPIPEs
 		signal(SIGPIPE, SIG_IGN);
-		// init data structures
-		telnet_server_clear(&server1);
-		telnet_server_clear(&server2);
-		for (i=0; i<NUMTERM; i++) {
-			memset(&terminal[i], 0, sizeof(TERMINAL_T));
-			telnet_session_clear(&terminal[i].session);
+
+		// init server data structures
+		for (index=0; index<NUMSERV; index++) {
+			telnet_server_clear(server+index);
+		}
+
+		// init terminal data structures
+		for (index=0; index<NUMTERM; index++) {
+			TERMINAL_T *t = terminal+index;
+			memset(t, 0, sizeof(TERMINAL_T));
+			telnet_session_clear(&t->session);
+			if (circ_create(&t->inbuf, INBUFSIZE) < 0) {
+				perror("cannot create inbuf");
+				exit(2);
+			}
+			if (circ_create(&t->outbuf, OUTBUFSIZE) < 0) {
+				perror("cannot create outbuf");
+				exit(2);
+			}
 		}
 	}
 	ready = true;
@@ -258,45 +247,54 @@ int dcc_init(const char *option) {
 /***********************************************************************
 * handle new incoming TELNET session
 ***********************************************************************/
-static void new_connection(int newsocket, struct sockaddr_in *addr, enum type type) {
+static void new_connection(int newsocket, struct sockaddr_in *addr, enum ld ld, enum em em) {
 	static const char *msg = "\r\nB5500 TIME SHARING - BUSY\r\nPLEASE CALL BACK LATER\r\n";
 	socklen_t addrlen = sizeof(*addr);
 	char host[40];
 	unsigned port;
-	int idx, beg, end;
+	int index, beg, end;
 	TERMINAL_T *t;
-	char buf[200];
+	char buf[OUTBUFSIZE];
 
 	// get the peer info
 	getnameinfo((struct sockaddr*)addr, addrlen, host, sizeof(host), NULL, 0, 0);
 	port = ntohs(addr->sin_port);
 
 	// determine terminal range
-	if (type == line) {
+	if (ld == ld_teletype) {
 		beg = 0;
 		end = 15;
 	} else {
 		beg = 16;
-		end = 31;
+		end = NUMTERM-1;
 	}
 
 	// find a free terminal to handle this
-	for (idx = beg; idx <= end && idx < NUMTERM; idx++) {
-		t = &terminal[idx];
+	for (index = beg; index <= end && index < NUMTERM; index++) {
+		t = &terminal[index];
 		if (!t->connected) {
 			// free terminal found
 			if (ctrace) {
-				sprintf(buf, "+LINE %u/%u TELNET(%d) FROM %s:%u\r\n",
-					TUN(idx), BNR(idx), newsocket, host, port);
+				sprintf(buf, "+FROM %u/%u (%d) %s:%u\r\n",
+					TUN(index), BNR(index), newsocket, host, port);
 				spo_print(buf);
 			}
+			circ_clear(&t->inbuf);
+			circ_clear(&t->outbuf);
 			telnet_session_open(&(t->session), newsocket);
-			t->bufidx = 0;
+			t->sysidx = 0;
+			t->keyidx = 0;
+			t->lfpending = false;
+			t->paused = false;
+			t->eotcount = 0;
 			t->abnormal = true;
 			t->bufstate = writeready;
-			t->type = type;
+			t->ld = ld;
+			t->em = em;
+			t->lds = lds_idle;
 			t->inmode = false;
 			t->outmode = false;
+			t->outlastwasmode = false;
 			t->eotcount = 0;
 			t->connected = true;
 			t->interrupt = true;
@@ -305,181 +303,62 @@ static void new_connection(int newsocket, struct sockaddr_in *addr, enum type ty
 	}
 	// nothing found
 	if (ctrace) {
-		sprintf(buf, "+LINE BUSY - TELNET(%d) FROM %s:%u REJECTED\r\n",
-			newsocket, host, port);
+		sprintf(buf, "+BUSY %u/%u (%d)\r\n",
+			TUN(index), BNR(index), newsocket);
 		spo_print(buf);
 	}
 	write(newsocket, msg, strlen(msg));
-	sleep(1);
 	close(newsocket);
 }
- 
+
 /***********************************************************************
 * handle TELNET server
 ***********************************************************************/
 static void dcc_test_incoming(void) {
-	int newsocket = -1, cnt, i, j, k;
+	int newsocket = -1, cnt;
 	struct sockaddr_in addr;
-	unsigned idx;
-	char buf[BUFLEN2];
-	char buf2[BUFLEN2];
+	unsigned index;
+	char buf[OUTBUFSIZE];
 	TERMINAL_T *t;
 
-	if (telnet && server1.socket <= 2) {
-		// SERVER1 needs to be started
-		telnet_server_start(&server1, 23);
-	} else if (!telnet && server1.socket > 2) {
-		// SERVER1 needs to be stopped
-		telnet_server_stop(&server1);
+	// start/stop servers
+	for (index=0; index<NUMSERV; index++) {
+		if (telnet && server[index].socket <= 2) {
+			// server needs to be started
+			telnet_server_start(server+index, portno[index]);
+		} else if (!telnet && server[index].socket > 2) {
+			// server needs to be stopped
+			telnet_server_stop(server+index);
+		}
 	}
 
-	if (telnet && server2.socket <= 2) {
-		// SERVER2 needs to be started
-		telnet_server_start(&server2, 8023);
-	} else if (!telnet && server2.socket > 2) {
-		// SERVER2 needs to be stopped
-		telnet_server_stop(&server2);
-	}
-
-	// poll both servers for new connections
-	if (server1.socket > 2) {
-		newsocket = telnet_server_poll(&server1, &addr);
-		if (newsocket > 0)
-			new_connection(newsocket, &addr, line);
-	}
-	if (server2.socket > 2) {
-		newsocket = telnet_server_poll(&server2, &addr);
-		if (newsocket > 0)
-			new_connection(newsocket, &addr, block);
+	// poll servers for new connections
+	for (index=0; index<NUMSERV; index++) {
+		if (server[index].socket > 2) {
+			newsocket = telnet_server_poll(server+index, &addr);
+			if (newsocket > 0)
+				new_connection(newsocket, &addr, ldno[index], emno[index]);
+		}
 	}
 	
 	// check for input from any connection
-	for (idx = 0; idx < NUMTERM; idx++) {
-		t = &terminal[idx];
+	for (index = 0; index < NUMTERM; index++) {
+		t = &terminal[index];
 		if (t->connected) {
 			if (t->session.socket > 2) {
-				// socket still open
-				if (t->bufstate != readready) {
-					// check for data available
-					cnt = telnet_session_read(&t->session, buf, sizeof buf);
-					if (cnt < 0) {
-						// non recoverable error - session was closed
-						goto isclosed;
-					}
-					if (etrace && cnt > 0) {
-						printf("$TELNET RX:");
-						for (i=0; i<cnt; i++)
-							printf(" %02x", buf[i]);
-						printf("\n");
-					}
-					if (t->type == line) {
-						// line mode
-						// run each character
-						j = 0;
-						for (i=0; i<cnt; i++) {
-							if (buf[i] == 0x0d) {
-								// end of line
-								t->buffer[t->bufidx] = 0;
-								t->bufidx = 0;
-								if (etrace)
-									printf("+LINE %u/%u RECEIVED %s\n",
-										TUN(idx), BNR(idx), t->buffer);
-								t->abnormal = false;
-								t->bufstate = readready;
-								t->interrupt = true;
-								// echo
-								if (j < BUFLEN2-2) {
-									buf2[j++] = 0x0d;
-									buf2[j++] = 0x0a;
-								}
-							} else if (buf[i] == 0x08 || buf[i] == 0x7f) {
-								// backspace
-								if (t->bufidx > 0) {
-									t->bufidx--;
-									// echo
-									if (j < BUFLEN2-3) {
-										buf2[j++] = 0x08;
-										buf2[j++] = 0x20;
-										buf2[j++] = 0x08;
-									}
-								}
-							} else if (buf[i] == 0x1b) {
-								// cancel line
-								t->bufidx = 0;
-								if (j < BUFLEN2-3) {
-									buf2[j++] = 'x';
-									buf2[j++] = 0x0d;
-									buf2[j++] = 0x0a;
-								}
-							} else if (buf[i] >= ' ' && buf[i] <= 0x7e) {
-								// if printable, add to buffer
-								k = translatetable_ascii2bic[buf[i] & 0x7f];
-								k = translatetable_bic2ascii[k];
-								if (t->bufidx < BUFLEN2) {
-									t->buffer[t->bufidx++] = k;
-									if (j < BUFLEN2-1) {
-										buf2[j++] = k;
-									}
-								} else {
-									if (j < BUFLEN2-1) {
-										buf2[j++] = 0x07;
-									}
-								}
-							}
-						} // for
-						if (etrace && cnt > 0)
-							printf("\n");
-						if (j > 0)
-							telnet_session_write(&t->session, buf2, j);
-					} else {
-						// block mode
-						// run each character
-						for (i=0; i<cnt; i++) {
-							k = buf[i] & 0x7f;
-							if (k >= 0x20) {
-								// printable... if current mode is control...
-								if (!t->inmode) {
-									if (t->bufidx < BUFLEN2) {
-										// ... change it
-										t->buffer[t->bufidx++] = MODE;
-									}
-									t->inmode = true;
-								}
-								// enter printable char as is
-								if (t->bufidx < BUFLEN2) {
-									t->buffer[t->bufidx++] = k;
-								}
-							} else {
-								// control... if current mode is printable...
-								if (t->inmode) {
-									if (t->bufidx < BUFLEN2) {
-										// ... change it
-										t->buffer[t->bufidx++] = MODE;
-									}
-									t->inmode = false;
-								}
-								// enter control char as printable
-								if (t->bufidx < BUFLEN2) {
-									t->buffer[t->bufidx++] = k + ' ';
-								}
-							}
-							// special codes that close buffer
-							if (k==EOT || k==ETX || k==ENQ || k==ACK || k==NAK) {
-								// must send to system, mark end of buffer
-								t->buffer[t->bufidx] = 0;
-								t->bufidx = 0;
-								t->abnormal = false;
-								t->bufstate = readready;
-								t->interrupt = true;
-							}
-						} // for
-					} // mode
-				}
+				// socket is open
+				// depending on line discipline the action is different
+				if (t->ld == ld_teletype)
+					cnt = teletype_emulation_poll(t);
+				else
+					cnt = b9352_emulation_poll(t);
+				if (cnt < 0)
+					goto isclosed;
 			} else {
-isclosed:			// socket was closed
+isclosed:			// socket is closed
 				if (ctrace) {
-					sprintf(buf, "+LINE %u/%u CLOSED\r\n",
-						TUN(idx), BNR(idx));
+					sprintf(buf, "+CLSD %u/%u\r\n",
+						TUN(index), BNR(index));
 					spo_print(buf);
 				}
 				t->interrupt = true;
@@ -487,8 +366,8 @@ isclosed:			// socket was closed
 				t->fullbuffer = false;
 				t->bufstate = notready;
 				t->connected = false;
-				t->buffer[0] = 0;
-				t->bufidx = 0;
+				t->sysbuf[0] = 0;
+				t->sysidx = 0;
 			}
 		}
 	}
@@ -506,7 +385,7 @@ BIT dcc_ready(unsigned index) {
 	// test if incoming connection or data
 	dcc_test_incoming();
 
-	// check for a signal ready buffer
+	// check for a signal ready sysbuf
 	if (terminal_search(NULL, NULL)) {
 		// a terminal requesting service has been found - set Datacomm IRQ
 		CC->CCI13F = true;
@@ -517,15 +396,241 @@ BIT dcc_ready(unsigned index) {
 }
 
 /***********************************************************************
+* read (from inbuf to system)
+***********************************************************************/
+static void dcc_read(IOCU *u) {
+	// terminal unit and buffer number are in "word count" field of IOCW
+	unsigned tun = (u->d_wc >> 5) & 0xf;
+	unsigned bnr = (u->d_wc >> 0) & 0xf;
+	unsigned index = IDX(tun, bnr);
+
+	// resolve critical error cases first
+	if (index >= NUMTERM || !terminal[index].connected) {
+		// terminal number outside range or not connected
+		u->d_result = RD_21_END | RD_20_ERR | RD_18_NRDY;
+		return;
+	}
+
+	TERMINAL_T *t = terminal+index;
+	char c;
+	int count;
+	int ptr;
+	BIT gmset;
+
+	// return for all sysbuf states that do not allow reading
+	switch (t->bufstate) {
+	case idle:
+	case writeready:
+		// awaiting write data
+		u->d_result = RD_21_END;
+		break;
+	case readready:
+		// sysbuf is filled with read data, continue after switch
+		break;
+	case inputbusy:
+	case outputbusy:
+		// sysbuf is currently in use - return with flags
+		u->d_result = RD_21_END | RD_20_ERR;
+		return;
+	case notready:
+		// sysbuf is not in any useful state - return with flags
+		u->d_result = RD_21_END | RD_20_ERR | RD_18_NRDY;
+		return;
+	}
+
+	// now do the read
+
+	if (dtrace)
+		printf("+READ %u/%u |", tun, bnr);
+
+	ptr = 0;
+	gmset = false;
+
+loop:
+	u->w = 0LL;
+	// do whole words (8 characters) while we have more data
+	for (count=0; count<8; count++) {
+		if (ptr >= t->sysidx) {
+			gmset = true;
+			c = EOM;
+		} else {
+			c = t->sysbuf[ptr++];
+			if (dtrace)
+				printf("%c", c);
+		}
+		// note that ptr stays on the current end of sysbuf
+		// causing the rest of the word to be filled with
+		// EOM characters
+		if (t->ld == ld_teletype && c == '?')
+			t->abnormal = true;
+		u->ib = translatetable_ascii2bic[c & 0x7f];
+		put_ib(u);
+	}
+	// store the complete word
+	main_write_inc(u);
+
+	// continue until done
+	if (!gmset && ptr < SYSBUFSIZE)
+		goto loop;
+
+	if (dtrace)
+		printf("|\n");
+
+	// abnormal flag?
+	if (t->abnormal)
+		u->d_result |= RD_25_ABNORMAL;
+
+	// sysbuf sent to system, is idle now
+	t->bufstate = idle;
+	t->abnormal = false;
+	t->interrupt = false;
+}
+
+/***********************************************************************
+* write (from system to sysbuf)
+***********************************************************************/
+static void dcc_write(IOCU *u) {
+	// terminal unit and buffer number are in "word count" field of IOCW
+	unsigned tun = (u->d_wc >> 5) & 0xf;
+	unsigned bnr = (u->d_wc >> 0) & 0xf;
+	unsigned index = IDX(tun, bnr);
+
+	// resolve critical error cases first
+	if (index >= NUMTERM || !terminal[index].connected) {
+		// terminal number outside range or not connected
+		u->d_result = RD_21_END | RD_20_ERR | RD_18_NRDY;
+		return;
+	}
+
+	TERMINAL_T *t = terminal+index;
+	char c;
+
+	// return for all sysbuf states that do not allow writing
+	switch (t->bufstate) {
+	case idle:
+	case writeready:
+		// we can write, continue after switch
+		break;
+	case readready:
+		// sysbuf is filled with read data - return with flags
+		u->d_result = RD_21_END;
+		return;
+	case inputbusy:
+	case outputbusy:
+		// sysbuf is currently in use - return with flags
+		u->d_result = RD_21_END | RD_20_ERR;
+		return;
+	case notready:
+		// sysbuf is not in any useful state - return with flags
+		u->d_result = RD_21_END | RD_20_ERR | RD_18_NRDY;
+		return;
+	}
+
+	// now do the write
+	if (dtrace)
+		printf("+WRIT %u/%u |", tun, bnr);
+
+	t->sysidx = 0;	// start of sysbuf
+	t->bufstate = outputbusy;
+
+	// we keep copying data to sysbuf until:
+	// we reach SYSBUFSIZE chars -> fullbuffer = true
+	// we find the EOM char  -> fullbuffer = false
+
+loop:
+	// get next word
+	main_read_inc(u);
+	// handle each char
+	for (int count=0; count<8 && t->sysidx<SYSBUFSIZE; count++) {
+		// get next char
+		get_ob(u);
+		// translate it to ASCII
+		c = translatetable_bic2ascii[u->ob];
+		// premature end ?
+		if (c == EOM) {
+			// end of message -> partially filled sysbuf
+			t->fullbuffer = false;
+			goto done;
+		}
+		// store char in sysbuf
+		t->sysbuf[t->sysidx++] = c;
+		if (dtrace)
+			printf("%c", c);
+	}
+	// if not reached SYSBUFSIZE chars, we go on writing
+	if (t->sysidx < SYSBUFSIZE)
+		goto loop;
+	// coming here means we got a full sysbuf
+	t->fullbuffer = true;
+
+done:	if (dtrace)
+		printf("|\n");
+
+	// set flags
+	t->timer = 0;
+	t->abnormal = false;
+	if (t->abnormal)
+		u->d_result = RD_25_ABNORMAL;
+	if (t->fullbuffer)
+		u->d_result |= RD_23_ETYPE;
+
+	// data is now going to be sent...
+	// the sending is concluded in "terminal_search"
+}
+
+/***********************************************************************
+* interrogate
+***********************************************************************/
+static void dcc_interrogate(IOCU *u) {
+	// terminal unit and buffer number are in "word count" field of IOCW
+	unsigned tun = (u->d_wc >> 5) & 0xf;
+	unsigned bnr = (u->d_wc >> 0) & 0xf;
+
+	// tun == 0: general query - find a terminal that needs service
+	if (tun == 0) {
+		// search if any terminal needs service
+		terminal_search(&tun, &bnr);
+	}
+
+	// any found or specific query?
+	if (tun > 0) {
+		TERMINAL_T *t;
+		unsigned index = IDX(tun, bnr);
+
+		if (index < NUMTERM) {
+			t = &terminal[index];
+			switch (t->bufstate) {
+			case readready:
+				u->d_result = RD_24_READ;
+				break;
+			case writeready:
+				u->d_result = RD_21_END;
+				break;
+			case inputbusy:
+			case outputbusy:
+				u->d_result = RD_20_ERR;
+				break;
+			case idle:
+				break;
+			case notready:
+				u->d_result = RD_20_ERR | RD_18_NRDY;
+			}
+			// abnornal flag?
+			if (t->abnormal)
+				u->d_result |= RD_25_ABNORMAL;
+			// clear pending IRQ
+			t->interrupt = false;
+		}
+	}
+
+	// return actual terminal and buffer numbers in word count
+	u->d_wc = (tun << 5) | bnr;
+}
+
+/***********************************************************************
 * access the DCC
 ***********************************************************************/
 void dcc_access(IOCU *u) {
-	// terminal unit and buffer number are win word count
-	unsigned tun = (u->d_wc >> 5) & 0xf;
-	unsigned bnr = (u->d_wc >> 0) & 0xf;
-	unsigned idx;
-	TERMINAL_T *t;
-
 	// interrogate command
 	BIT iro = u->d_control & CD_30_MI ? true : false;
 
@@ -543,234 +648,14 @@ void dcc_access(IOCU *u) {
 	// type of access
 	if (iro) {
 		// interrogate
-
-		// tun == 0: general query
-		if (tun == 0) {
-			// search if any terminal needs service
-			terminal_search(&tun, &bnr);
-		}
-		// any found or specific query?
-		if (tun > 0) {
-			idx = IDX(tun, bnr);
-			if (idx < NUMTERM) {
-				t = &terminal[idx];
-				switch (t->bufstate) {
-				case readready:
-					u->d_result = RD_24_READ;
-					break;
-				case writeready:
-					u->d_result = RD_21_END;
-					break;
-				case inputbusy:
-				case outputbusy:
-					u->d_result = RD_20_ERR;
-					break;
-				case idle:
-					break;
-				default:
-					u->d_result = RD_20_ERR | RD_18_NRDY;
-				}
-				// abnornal flag?
-				if (t->abnormal)
-					u->d_result |= RD_25_ABNORMAL;
-				// clear pending IRQ
-				t->interrupt = false;
-			}
-		}
+		dcc_interrogate(u);
 	} else if (reading) {
-		// read buffer
-		idx = IDX(tun, bnr);
-		if (idx < NUMTERM && (t = &terminal[idx])->connected) {
-			int count;
-			char *p = t->buffer;
-			BIT gmset = false;
-			p[BUFLEN] = 0; // fake max
-
-			// connected - action depends on buffer state
-			switch (t->bufstate) {
-			case readready:
-				if (dtrace)
-					printf("+LINE %u/%u READ \"", tun, bnr);
-
-				// do whole words (8 characters) while we have more data
-				while (*p >= ' ' || !gmset) {
-					for (count=0; count<8; count++) {
-						// note that p stays on the invalid char
-						// causing the rest of the word to be filled with
-						// GM
-						if (*p >= ' ') {
-							// printable char
-							if (dtrace)
-								printf("%c", *p);
-							if (t->type == line && *p == '?')
-								t->abnormal = true;
-							u->ib = translatetable_ascii2bic[*p++ & 0x7f];
-						} else {
-							// EOL or other char, fill word with GM
-							u->ib = 037;
-							gmset = true;
-						}
-						put_ib(u);
-					}
-					// store the complete word
-					main_write_inc(u);
-				}
-				if (dtrace)
-					printf("\"\n");
-
-				// abnormal flag?
-				if (t->abnormal)
-					u->d_result |= RD_25_ABNORMAL;
-				// reset IRQ
-				t->bufstate = idle;
-				t->abnormal = false;
-				t->interrupt = false;
-				break;
-			case writeready:
-				u->d_result = RD_21_END;
-				break;
-			case inputbusy:
-			case outputbusy:
-				u->d_result = RD_21_END | RD_20_ERR;
-				break;
-			default:
-				u->d_result = RD_21_END | RD_20_ERR | RD_18_NRDY;
-			}
-		} else {
-			// not connected
-			u->d_result = RD_21_END | RD_20_ERR | RD_18_NRDY;
-		}
+		// read sysbuf
+		dcc_read(u);
 	} else {
-		// write buffer
-		idx = IDX(tun, bnr);
-		if (idx < NUMTERM && (t = &terminal[idx])->connected) {
-			char buffer[BUFLEN];
-			char *p = buffer;
-			char c;
-			int chars = 0;
-			BIT disc = false;
-			// connected - action depends on buffer state
-			switch (t->bufstate) {
-			case idle:
-			case writeready:
-				if (dtrace)
-					printf("+LINE %u/%u WRIT \"", tun, bnr);
-
-			loop:	main_read_inc(u);
-				for (int count=0; count<8 && chars<BUFLEN; count++) {
-					get_ob(u);
-					c = translatetable_bic2ascii[u->ob];
-					if (t->type == line) {
-						// some BIC codes have special meanings on output, handle those
-						switch (u->ob) {
-						case 016: // BIC: greater than
-							if (dtrace)
-								printf("<xon>");
-							*p++ = 0x11;
-							break;
-						case 017: // BIC: greater or equal
-							if (dtrace)
-								printf("<dis>");
-							disc = true;
-							break;
-						case 036: // BIC: less than
-							if (dtrace)
-								printf("<ro>");
-							*p++ = 0xff;
-							break;
-						case 037: // BIC: left arrow
-							if (dtrace)
-								printf("<eom>");
-							t->fullbuffer = false;
-							goto done;
-						case 057: // BIC: less or equal
-							if (dtrace)
-								printf("<cr>");
-							*p++ = '\r';
-							break;
-						case 074: // BIC: not equal
-							if (dtrace)
-								printf("<lf>");
-							*p++ = '\n';
-							break;
-						default:
-							if (dtrace)
-								printf("%c", c);
-							*p++ = c;
-						}
-					} else {
-						// buffer end ?
-						if (c == EOM) {
-							t->fullbuffer = false;
-							t->outmode = false;
-							goto done;
-						}
-						if (dtrace)
-							printf("%c", c);
-						if (c == MODE) {
-							t->outmode = !t->outmode;
-						} else if (t->outmode) {
-							*p++ = c;
-						} else {
-							*p++ = c & 0x1f;
-							// count EOTs
-							if (c == 0x24) {
-								if (++t->eotcount >= 3)
-									disc = true;
-							} else {
-								t->eotcount = 0;
-							}
-						}
-					}
-					chars++;
-				}
-				if (chars < BUFLEN)
-					goto loop;
-				t->fullbuffer = true;
-
-			done:	if (dtrace)
-					printf("\"\n");
-				if (telnet_session_write(&t->session, buffer, p - buffer) < 0)
-					goto closing;
-				if (disc) {
-					if (ctrace) {
-						sprintf(t->buffer, "+TELNET(%d) CANDE DISC\n", t->session.socket);
-						spo_print(t->buffer);
-					}
-					sleep(1);
-			closing:	telnet_session_close(&t->session);
-					goto wrapup;
-				}
-				// set IRQ
-				t->bufstate = outputbusy;
-				t->timer = 0;
-				t->abnormal = false;
-			wrapup:	// abnormal flag?
-				if (t->abnormal)
-					u->d_result = RD_25_ABNORMAL;
-				// buffer full flag?
-				if (t->fullbuffer)
-					u->d_result |= RD_23_ETYPE;
-				//t->interrupt = true;
-				break;
-			case readready:
-				u->d_result = RD_21_END;
-				break;
-			case inputbusy:
-			case outputbusy:
-				u->d_result = RD_21_END | RD_20_ERR;
-				break;
-			default:
-				u->d_result = RD_21_END | RD_20_ERR | RD_18_NRDY;
-			}
-		} else {
-			// not connected
-			u->d_result = RD_21_END | RD_20_ERR | RD_18_NRDY;
-		}
+		// write sysbuf
+		dcc_write(u);
 	}
-
-	// return actual terminal and buffer numbers in word count
-	u->d_wc = (tun << 5) | bnr;
 
 #if TRACE_DCC
 	print_ior(stdout, u);
