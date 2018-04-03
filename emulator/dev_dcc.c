@@ -67,7 +67,7 @@ static TELNET_SERVER_T server[NUMSERV];
 // server[2]: Port 9023 - BLOCK type terminals (B9352 with external ANSI)
 static unsigned portno[NUMSERV] = {23, 8023, 9023};
 static enum ld ldno[NUMSERV] = {ld_teletype, ld_contention, ld_contention};
-static enum em emno[NUMSERV] = {em_none, em_none, em_teletype};
+static enum em emno[NUMSERV] = {em_none, em_ansi, em_teletype};
 
 /***********************************************************************
 * misc variables
@@ -187,13 +187,11 @@ static BIT terminal_search(unsigned *ptun, unsigned *pbnr) {
 
 		// trigger late output IRQ
 		if (t->bufstate == outputbusy) {
-			if (++t->timer > TIMEOUT) {
-				// now send/interpret the data
-				if (t->ld == ld_teletype)
-					teletype_emulation_write(t);
-				else
-					b9352_emulation_write(t);
-			}
+			// now send/interpret the data
+			if (t->ld == ld_teletype)
+				teletype_emulation_write(t);
+			else
+				b9352_emulation_write(t);
 		}
 
 		// is this requiring service now?
@@ -230,14 +228,14 @@ int dcc_init(const char *option) {
 			TERMINAL_T *t = terminal+index;
 			memset(t, 0, sizeof(TERMINAL_T));
 			telnet_session_clear(&t->session);
-			if (circ_create(&t->inbuf, INBUFSIZE) < 0) {
-				perror("cannot create inbuf");
-				exit(2);
-			}
-			if (circ_create(&t->outbuf, OUTBUFSIZE) < 0) {
-				perror("cannot create outbuf");
-				exit(2);
-			}
+			//if (circ_create(&t->inbuf, INBUFSIZE) < 0) {
+			//	perror("cannot create inbuf");
+			//	exit(2);
+			//}
+			//if (circ_create(&t->outbuf, OUTBUFSIZE) < 0) {
+			//	perror("cannot create outbuf");
+			//	exit(2);
+			//}
 		}
 	}
 	ready = true;
@@ -279,11 +277,14 @@ static void new_connection(int newsocket, struct sockaddr_in *addr, enum ld ld, 
 					TUN(index), BNR(index), newsocket, host, port);
 				spo_print(buf);
 			}
-			circ_clear(&t->inbuf);
-			circ_clear(&t->outbuf);
+			//circ_clear(&t->inbuf);
+			//circ_clear(&t->outbuf);
 			telnet_session_open(&(t->session), newsocket);
+			memset(t->scrbuf, ' ', sizeof t->scrbuf);
 			t->sysidx = 0;
 			t->keyidx = 0;
+			t->scridx = 0;
+			t->scridy = 0;
 			t->lfpending = false;
 			t->paused = false;
 			t->eotcount = 0;
@@ -531,7 +532,6 @@ static void dcc_write(IOCU *u) {
 		printf("+WRIT %u/%u |", tun, bnr);
 
 	t->sysidx = 0;	// start of sysbuf
-	t->bufstate = outputbusy;
 
 	// we keep copying data to sysbuf until:
 	// we reach SYSBUFSIZE chars -> fullbuffer = true
@@ -567,7 +567,6 @@ done:	if (dtrace)
 		printf("|\n");
 
 	// set flags
-	t->timer = 0;
 	t->abnormal = false;
 	if (t->abnormal)
 		u->d_result = RD_25_ABNORMAL;
@@ -575,6 +574,8 @@ done:	if (dtrace)
 		u->d_result |= RD_23_ETYPE;
 
 	// data is now going to be sent...
+	t->bufstate = outputbusy;
+
 	// the sending is concluded in "terminal_search"
 }
 

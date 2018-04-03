@@ -33,7 +33,6 @@
 #include "common.h"
 #include "io.h"
 #include "telnetd.h"
-#include "circbuffer.h"
 #include "dcc.h"
 
 /***********************************************************************

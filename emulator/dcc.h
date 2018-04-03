@@ -22,6 +22,11 @@
 #define	EOM	'~'	// (BIC: left arow) Marks (premature) Buffer End
 #define	MODE	'!'	// (BIC: not equal) toggles Control/Printable Mode
 			// at Line Discipline "contention"
+/***********************************************************************
+* defines for screen resolution and storage
+***********************************************************************/
+#define	COLS	80	// number of characters per row
+#define	ROWS	25	// number of rows
 
 /***********************************************************************
 * ASCII control codes
@@ -128,10 +133,12 @@ typedef struct terminal {
 	int sysidx;			// number of chars in sysbuf
 	enum bufstate bufstate;		// current state of sysbuf
 	BIT fullbuffer;
-	// input ring buffer (to system)
-	CIRCBUFFER_T inbuf;
-	// output ring buffer (from system)
-	CIRCBUFFER_T outbuf;
+	// input buffer
+	char inbuf[SYSBUFSIZE];		// buffer simulating line from terminal
+	int inidx;
+	// output buffer
+	char outbuf[SYSBUFSIZE];	// buffer simulating line to terminal
+	int outidx;
 	// keyboard edit buffer
 	char keybuf[KEYBUFSIZE];	// buffer for keyboard editing
 	int keyidx;			// number of chars in keybuf
@@ -152,6 +159,9 @@ typedef struct terminal {
 	// supervisory values
 	int eotcount;
 	int timer;
+	// screen buffer
+	char scrbuf[ROWS*COLS];		// screen buffer
+	int scridx, scridy;		// index into screen (cursor position, zero based)
 } TERMINAL_T;
 
 /***********************************************************************
