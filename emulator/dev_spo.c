@@ -59,7 +59,7 @@ static const char *auto_trigger1 = "ESPOL/DISK= ";
 static const char *auto_trigger2 = " EOJ";
 #endif
 #ifdef USECAN
-static unsigned canspo = false;
+static unsigned canspo = 0;	// 0 for OFF, CANid for ON
 #endif
 #ifdef TIMESTAMP
 static unsigned timestamp = false;
@@ -74,7 +74,7 @@ void spo_print(const char *buf) {
 #ifdef USECAN
 	// send message to "real SPO"
 	if (canspo)
-		can_send_string(30, buf);
+		can_send_string(canspo, buf);
 #endif
 }
 
@@ -113,17 +113,21 @@ static int set_autoexec(const char *v, void *) {
 * specify canspo on/off
 ***********************************************************************/
 static int set_canspo(const char *v, void *) {
-	if (strcasecmp(v, "ON") == 0) {
+	if (isdigit(v[0])) {
+		canspo = atoi(v);
+		if (canspo < 1 || canspo > 126) {
+			canspo = 0;
+			goto help;
+		}
 		// wait for SPO to become ready
-		while (!can_ready(30)) {
+		while (!can_ready(canspo)) {
 			spo_print("$WAITING FOR SPO READY\r\n");
 			sleep(1);
 		}
-		canspo = true;
 	} else if (strcasecmp(v, "OFF") == 0) {
-		canspo = false;
+		canspo = 0;
 	} else {
-		spo_print("$SPECIFY ON OR OFF\r\n");
+help:		spo_print("$SPECIFY CANID(1..126) OR OFF\r\n");
 		return 2; // FATAL
 	}
 	return 0; // OK
@@ -201,7 +205,7 @@ BIT spo_ready(unsigned index) {
 #ifdef USECAN
 	else {
 		// check whether a complete line has been received from the CANbus SPO
-		spoinp = can_receive_string(30, spoinbuf, sizeof spoinbuf);
+		spoinp = can_receive_string(canspo, spoinbuf, sizeof spoinbuf);
 	}
 #endif
 

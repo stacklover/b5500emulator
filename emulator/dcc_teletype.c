@@ -74,16 +74,40 @@ void teletype_emulation_write(TERMINAL_T *t) {
 	t->bufstate = t->fullbuffer ? writeready : idle;
 	t->interrupt = true;
 
-	// try to write
-	iptr = telnet_session_write(&t->session, buf, p-buf);
+	switch (t->pc) {
+	case pc_telnet:
+		// try to write
+		iptr = telnet_session_write(&t->session, buf, p-buf);
 
-	// reason to disconnect?
-	if (disc || iptr != (p-buf)) {
-		if (disc && dtrace) {
+		// reason to disconnect?
+		if (disc || iptr != (p-buf)) {
+			if (disc && dtrace) {
+				sprintf(buf, "+DISC REQ (%d)\n", t->session.socket);
+				spo_print(buf);
+			}
+			telnet_session_close(&t->session);
+		}
+		break;
+	case pc_canopen:
+		// write to CANopen
+		*p = 0;
+		iptr = can_send_string(t->canid, buf);
+
+		// reason to disconnect?
+		if (disc) {
 			sprintf(buf, "+DISC REQ (%d)\n", t->session.socket);
 			spo_print(buf);
+			t->interrupt = true;
+			t->abnormal = true;
+			t->fullbuffer = false;
+			t->bufstate = notready;
+			t->connected = false;
+			t->sysbuf[0] = 0;
+			t->sysidx = 0;
 		}
-		telnet_session_close(&t->session);
+		break;
+	default:
+		;
 	}
 }
 
@@ -92,17 +116,33 @@ void teletype_emulation_write(TERMINAL_T *t) {
 * Check for data from TELNET client
 ***********************************************************************/
 int teletype_emulation_poll(TERMINAL_T *t) {
-	char ibuf[10], obuf[30], ch;
+	char obuf[KEYBUFSIZE*2], ch;
 	int cnt, idx, odx;
 
 	// teletype: only try to receive if sysbuf is idle or inputbusy
 	if (t->bufstate != idle && t->bufstate != inputbusy)
 		return 0;
 
-	// check for data available
-	cnt = telnet_session_read(&t->session, ibuf, sizeof ibuf);
-	if (cnt <= 0) // non recoverable error or no data
-		return cnt;
+	switch (t->pc) {
+	case pc_telnet:
+		// check for data available
+		cnt = telnet_session_read(&t->session, t->keybuf, KEYBUFSIZE);
+		if (cnt <= 0) // non recoverable error or no data
+			return cnt;
+		break;
+	case pc_canopen:
+		if (can_receive_string(t->canid, t->keybuf, KEYBUFSIZE) != NULL) {
+			// got something
+			cnt = strlen(t->keybuf);
+			t->keybuf[cnt++] = CR;
+		} else {
+			// nothing received
+			return 0;
+		}
+		break;
+	default:
+		return -1;
+	}
 
 	// mark sysbuf as busy and prepare it
 	if (t->bufstate == idle) {
@@ -113,7 +153,7 @@ int teletype_emulation_poll(TERMINAL_T *t) {
 	// loop over all what we received
 	odx = 0;
 	for (idx=0; idx<cnt; idx++) {
-		ch = ibuf[idx];
+		ch = t->keybuf[idx];
 		switch (ch) {
 		case CR:
 			// end of line
@@ -124,8 +164,14 @@ int teletype_emulation_poll(TERMINAL_T *t) {
 			obuf[odx++] = CR;
 			obuf[odx++] = LF;
 			// line complete - leave this function
-			if (telnet_session_write(&t->session, obuf, odx) < 0)
-				return -1;
+			switch (t->pc) {
+			case pc_telnet:
+				if (telnet_session_write(&t->session, obuf, odx) < 0)
+					return -1;
+				break;
+			default:
+				;
+			}
 			return idx;
 		case BS:
 		case RUBOUT:
@@ -161,9 +207,16 @@ int teletype_emulation_poll(TERMINAL_T *t) {
 	}
 
 	// anything to send?
-	if (odx > 0)
-		if (telnet_session_write(&t->session, obuf, odx) < 0)
-			return -1;
+	if (odx > 0) {
+		switch (t->pc) {
+		case pc_telnet:
+			if (telnet_session_write(&t->session, obuf, odx) < 0)
+				return -1;
+			break;
+		default:
+			;
+		}
+	}
 
 	// release sysbuf when empty again
 	if (t->sysidx == 0) {

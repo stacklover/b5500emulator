@@ -162,12 +162,41 @@ static int get_status(const char *v, void *) {
 	return 0; // OK
 }
 
+#ifdef USECAN
+/***********************************************************************
+* specify canid on/off
+***********************************************************************/
+static int set_can(const char *v, void *) {
+	if (isdigit(v[0])) {
+		terminal[0].canid = atoi(v);
+		if (terminal[0].canid < 1 || terminal[0].canid > 126) {
+			terminal[0].canid = 0;
+			goto help;
+		}
+		// wait for SPO to become ready
+		while (!can_ready(terminal[0].canid)) {
+			spo_print("$WAITING FOR TERMINAL READY\r\n");
+			sleep(1);
+		}
+	} else if (strcasecmp(v, "OFF") == 0) {
+		terminal[0].canid = 0;
+	} else {
+help:		spo_print("$SPECIFY CANID(1..126) OR OFF\r\n");
+		return 2; // FATAL
+	}
+	return 0; // OK
+}
+#endif
+
 /***********************************************************************
 * command table
 ***********************************************************************/
 static const command_t dcc_commands[] = {
 	{"DCC", NULL},
 	{"TELNET", set_telnet},
+#ifdef USECAN
+	{"CAN", set_can},
+#endif
 	{"CTRACE", set_ctrace},
 	{"DTRACE", set_dtrace},
 	{"ETRACE", set_etrace},
@@ -228,14 +257,14 @@ int dcc_init(const char *option) {
 			TERMINAL_T *t = terminal+index;
 			memset(t, 0, sizeof(TERMINAL_T));
 			telnet_session_clear(&t->session);
-			//if (circ_create(&t->inbuf, INBUFSIZE) < 0) {
-			//	perror("cannot create inbuf");
-			//	exit(2);
-			//}
-			//if (circ_create(&t->outbuf, OUTBUFSIZE) < 0) {
-			//	perror("cannot create outbuf");
-			//	exit(2);
-			//}
+			if (index == 0) {
+				// index = 0 is typetype via CANopen
+				t->pc = pc_canopen;
+				t->canid = 0;
+			} else {
+				// all the rest are via TELNET server
+				t->pc = pc_telnet;
+			}
 		}
 	}
 	ready = true;
@@ -260,7 +289,7 @@ static void new_connection(int newsocket, struct sockaddr_in *addr, enum ld ld, 
 
 	// determine terminal range
 	if (ld == ld_teletype) {
-		beg = 0;
+		beg = 0;	// 0 reserved for teletype via CANopen (hardwired for now)
 		end = 15;
 	} else {
 		beg = 16;
@@ -270,15 +299,13 @@ static void new_connection(int newsocket, struct sockaddr_in *addr, enum ld ld, 
 	// find a free terminal to handle this
 	for (index = beg; index <= end && index < NUMTERM; index++) {
 		t = &terminal[index];
-		if (!t->connected) {
+		if (t->pc == pc_telnet && !t->connected) {
 			// free terminal found
 			if (ctrace) {
 				sprintf(buf, "+FROM %u/%u (%d) %s:%u\r\n",
 					TUN(index), BNR(index), newsocket, host, port);
 				spo_print(buf);
 			}
-			//circ_clear(&t->inbuf);
-			//circ_clear(&t->outbuf);
 			telnet_session_open(&(t->session), newsocket);
 			memset(t->scrbuf, ' ', sizeof t->scrbuf);
 			t->sysidx = 0;
@@ -345,9 +372,44 @@ static void dcc_test_incoming(void) {
 	// check for input from any connection
 	for (index = 0; index < NUMTERM; index++) {
 		t = &terminal[index];
+		// check for CANopen ready/unready
+		if (t->pc == pc_canopen) {
+			BIT ready = (t->canid > 0) && can_ready(t->canid);
+			if (ready && !t->connected && can_receive_string(t->canid, buf, sizeof buf) != NULL) {
+				// CAN became ready
+				memset(t->scrbuf, ' ', sizeof t->scrbuf);
+				t->sysidx = 0;
+				t->keyidx = 0;
+				t->scridx = 0;
+				t->scridy = 0;
+				t->lfpending = false;
+				t->paused = false;
+				t->eotcount = 0;
+				t->abnormal = true;
+				t->bufstate = writeready;
+				t->ld = ld_teletype;
+				t->em = em_none;
+				t->lds = lds_idle;
+				t->inmode = false;
+				t->outmode = false;
+				t->outlastwasmode = false;
+				t->eotcount = 0;
+				t->connected = true;
+				t->interrupt = true;
+			} else if (!ready && t->connected) {
+				// CAN became unready
+				t->interrupt = true;
+				t->abnormal = true;
+				t->fullbuffer = false;
+				t->bufstate = notready;
+				t->connected = false;
+				t->sysbuf[0] = 0;
+				t->sysidx = 0;
+			}
+		}
 		if (t->connected) {
-			if (t->session.socket > 2) {
-				// socket is open
+			if ((t->pc == pc_telnet && t->session.socket > 2) || (t->pc == pc_canopen && t->canid > 0)) {
+				// socket is open OR canid given
 				// depending on line discipline the action is different
 				if (t->ld == ld_teletype)
 					cnt = teletype_emulation_poll(t);
@@ -356,7 +418,7 @@ static void dcc_test_incoming(void) {
 				if (cnt < 0)
 					goto isclosed;
 			} else {
-isclosed:			// socket is closed
+isclosed:			// socket is closed OR canid not given
 				if (ctrace) {
 					sprintf(buf, "+CLSD %u/%u\r\n",
 						TUN(index), BNR(index));

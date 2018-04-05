@@ -44,6 +44,7 @@ static struct itimerspec its;
 typedef struct can {
 	char	buf[CANSTRINGLENGTH];
 	int	ready;
+	int	space;
 	char	*string;
 	char	*p;
 	struct timeval last_ready;
@@ -98,19 +99,23 @@ loop:
 			}
 		} else if (cob == MSGID_TPDO4(0)) {
 			// TPDO4: received data
-			for (int j=1; j<frame.can_dlc; j++) {
-				char ch = frame.data[j];
-				if (ch == '\r') {
-					// return
-					*can[id].p = 0;	// close input
-					can_send_string(id, "\r\n");
-					can[id].string = can[id].buf;
-					can[id].p = can[id].buf;
-				} else if (ch >= ' ') {
-					// enter char
-					*can[id].p++ = ch;
-					*can[id].p = 0;
-					//can_send_string(id, can[id].p-1);
+			can[id].space = frame.data[0] & 0x7f;
+			// process chars if buffer is not busy
+			if (can[id].string == NULL) {
+				for (int j=1; j<frame.can_dlc; j++) {
+					char ch = frame.data[j];
+					if (ch == '\r') {
+						// return
+						*can[id].p = 0;	// close input
+						can_send_string(id, "\r\n");
+						can[id].string = can[id].buf;
+						can[id].p = can[id].buf;
+					} else if (ch >= ' ') {
+						// enter char
+						*can[id].p++ = ch;
+						*can[id].p = 0;
+						//can_send_string(id, can[id].p-1);
+					}
 				}
 			}
 		}
@@ -165,7 +170,9 @@ int can_send_string(unsigned id, const char *data)
 				frame.can_dlc++;
 			}
 			can_write(canfd, frame);
-			usleep(300000);
+			do {
+				usleep(300000);
+			} while (can[id].space < 100);
 		}
 		return p - data;
 	}

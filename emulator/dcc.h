@@ -113,7 +113,8 @@ enum lds {
 ***********************************************************************/
 enum ld {
 	ld_teletype=0,	// no protocol, except input buffer editing
-	ld_contention};	// burroughs contention (half duplex)
+	ld_contention,	// burroughs contention (half duplex)
+	ld_multipoint};	// burroughs multipoint (party line)
 
 /***********************************************************************
 * the terminal emulation
@@ -124,42 +125,59 @@ enum em {
 	em_ansi};	// emulate B9352 for external ANSI terminal
 
 /***********************************************************************
+* the physical connection
+***********************************************************************/
+enum pc {
+	pc_none=0,	// no connection
+	pc_serial,	// via tty device
+	pc_canopen,	// via CANopen
+	pc_telnet};	// via TELNET server
+
+/***********************************************************************
 * the complete terminal state
 ***********************************************************************/
 typedef struct terminal {
+// physical connection
+	enum pc pc;			// physical connection
+	// pc = pc_serial
+	int serial_handle;		// handle of open tty device
+	// pc = pc_canopen
+	unsigned canid;			// canif of terminal
+	// pc = pc_telnet
 	TELNET_SESSION_T session;	// TELNET state values
-	// system communication buffer
+// system communication buffer
 	char sysbuf[SYSBUFSIZE];	// buffer with raw data from/to system
 	int sysidx;			// number of chars in sysbuf
 	enum bufstate bufstate;		// current state of sysbuf
 	BIT fullbuffer;
-	// input buffer
+// input buffer
 	char inbuf[SYSBUFSIZE];		// buffer simulating line from terminal
 	int inidx;
-	// output buffer
+// output buffer
 	char outbuf[SYSBUFSIZE];	// buffer simulating line to terminal
 	int outidx;
-	// keyboard edit buffer
+// keyboard edit buffer
 	char keybuf[KEYBUFSIZE];	// buffer for keyboard editing
 	int keyidx;			// number of chars in keybuf
-	// line discipline/emulation
+	BIT escaped;
+// line discipline/emulation
 	enum ld ld;			// line discipline
 	enum em em;			// emulation
 	enum lds lds;			// line discipline state
 	BIT lfpending;
 	BIT paused;
-	// status bits
+// status bits
 	BIT connected;
 	BIT interrupt;
 	BIT abnormal;
-	// control escape mode
+// control escape mode
 	BIT inmode;
 	BIT outmode;
 	BIT outlastwasmode;
-	// supervisory values
+// supervisory values
 	int eotcount;
 	int timer;
-	// screen buffer
+// screen buffer
 	char scrbuf[ROWS*COLS];		// screen buffer
 	int scridx, scridy;		// index into screen (cursor position, zero based)
 } TERMINAL_T;

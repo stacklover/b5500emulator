@@ -190,6 +190,49 @@ static void convert8to6(TERMINAL_T *t) {
 }
 
 /***********************************************************************
+* Redisplay memory on ANSI terminal
+***********************************************************************/
+static void redisplay(TERMINAL_T *t, int row1, int row2) {
+	int row, col;
+	char ch;
+	char buf[COLS+20];
+	char *p = buf;
+
+	for (row = row1; row <= row2; row++) {
+		// move cursor to begin of line
+		p = buf + sprintf(buf, _GOTO_, row+1, 1);
+		for (col = 0; col < COLS; col++) {
+			ch = t->scrbuf[row*COLS+col];
+			if (row == ROWS-1 && col == COLS-1) {
+				// cannot use last char of last line
+				break;
+			}
+			if (ch == CR) {
+				// end of line
+				// just clear the rest of the line (or the whole line)
+				p += sprintf(p, _PARA_ _EREOL_);
+				break;
+			} else if (ch == ETX) {
+				p += sprintf(p, _STAR_);
+			} else if (ch == RS) {
+				p += sprintf(p, _SO_ _LE_);
+			} else if (ch == US) {
+				p += sprintf(p, _GE_ _SI_);
+			} else {
+				*p++ = ch;
+			}
+			if (p-buf > COLS) {
+				telnet_session_write(&t->session, buf, p-buf);
+				p = buf;
+			}
+		}
+	}
+	// move cursor to its last position
+	p += sprintf(p, _GOTO_, t->scridy+1, t->scridx+1);
+	telnet_session_write(&t->session, buf, p-buf);
+}
+
+/***********************************************************************
 * wrap cursor to be in bounds
 ***********************************************************************/
 static void cursorwrap(TERMINAL_T *t) {
@@ -211,6 +254,10 @@ static void cursorwrap(TERMINAL_T *t) {
 		len = sprintf(buf, _LF_);
 		len = telnet_session_write(&t->session, buf, len);
 		t->scridy = ROWS-1;
+		// copy screen up one line
+		memcpy(t->scrbuf, t->scrbuf+COLS, (ROWS-1)*COLS);
+		// clear last line
+		memset(t->scrbuf+(ROWS-1)*COLS, ' ', COLS);
 	}
 	while (t->scridy < 0) {
 		t->scridy += ROWS;
@@ -236,7 +283,7 @@ static void cursormove(TERMINAL_T *t) {
 static void erasetoeol(TERMINAL_T *t) {
 	char buf[20];
 	int len;
-	//memset(t->scrbuf[t->scridy], ' ', ROWS - t->scridx);
+	memset(t->scrbuf+t->scridy*COLS+t->scridx, ' ', COLS - t->scridx);
 	len = sprintf(buf, _EREOL_);
 	len = telnet_session_write(&t->session, buf, len);
 }
@@ -248,7 +295,7 @@ static void erasescreen(TERMINAL_T *t) {
 	char buf[20];
 	int len;
 	t->scridx = t->scridy = 0;
-	//memset(t->scrbuf, ' ', ROWS*COLS);
+	memset(t->scrbuf, ' ', ROWS*COLS);
 	len = sprintf(buf, _HOME_ _CLS_);
 	len = telnet_session_write(&t->session, buf, len);
 }
@@ -271,7 +318,7 @@ static void store(TERMINAL_T *t, char ch) {
 		len = sprintf(buf, "%c", ch);
 	}
 	len = telnet_session_write(&t->session, buf, len);
-	//t->scrbuf[t->scridy][t->scridx] = ch;
+	t->scrbuf[t->scridy*COLS+t->scridx] = ch;
 	t->scridx++;
 	cursorwrap(t);
 }
@@ -520,12 +567,72 @@ finish:
 }
 
 /***********************************************************************
+* ANSI interpret ESC sequence
+***********************************************************************/
+static void interpret_esc(TERMINAL_T *t) {
+	t->keybuf[t->keyidx] = 0; // close the string
+	printf("ESC%s -> ", t->keybuf);
+	if (t->keybuf[0] == 'O') {
+		if (       t->keybuf[1] == 'P') {
+			printf("F1");
+			redisplay(t, 0, ROWS-1);
+		} else if (t->keybuf[1] == 'Q') {
+			printf("F2");
+		} else if (t->keybuf[1] == 'R') {
+			printf("F3");
+		} else if (t->keybuf[1] == 'S') {
+			printf("F4");
+		} else {
+			printf("?1?");
+		}
+	} else if (t->keybuf[0] == '[') {
+		if (       t->keybuf[1] == 'A') {
+			printf("^");
+			t->scridy--;
+			cursorwrap(t);
+			cursormove(t);
+		} else if (t->keybuf[1] == 'B') {
+			printf("v");
+			t->scridy++;
+			cursorwrap(t);
+			cursormove(t);
+		} else if (t->keybuf[1] == 'C') {
+			printf(">");
+			t->scridx++;
+			cursorwrap(t);
+			cursormove(t);
+		} else if (t->keybuf[1] == 'D') {
+			printf("<");
+			t->scridx--;
+			cursorwrap(t);
+			cursormove(t);
+		} else if (t->keybuf[1] == 'P') {
+			printf("PAUSE");
+		} else if (isdigit(t->keybuf[1])) {
+			// scan the number
+			char *p;
+			unsigned number = strtoul(t->keybuf+1, &p, 10);
+			if (*p == '~') {
+				printf("KEY%u", number);
+			} else {
+				printf("?3?");
+			}
+		} else {
+			printf("?2?");
+		}
+	} else {
+		printf("?4?");
+	}
+	printf("\n");
+}
+
+/***********************************************************************
 * B9352 Emulation Poll
 * Check for data from TELNET client
 ***********************************************************************/
 int b9352_emulation_poll(TERMINAL_T *t) {
 	char ibuf[10], obuf[30], ch;
-	int cnt, idx, odx;
+	int cnt, idx, odx = 0;
 
 	// simple case with no emulation, assemble into keybuf
 	// until terminal char found
@@ -582,10 +689,9 @@ int b9352_emulation_poll(TERMINAL_T *t) {
 	if (cnt <= 0) // non recoverable error or no data
 		return cnt;
 
-	// teletype emulation, simple line editing in keybuf
-	if (true || t->em == em_teletype) {
+	// emulation dependant
+	if (t->em == em_teletype) {
 		// teletype emulation, simple line editing in keybuf
-		odx = 0;
 		// loop over all what we received
 		for (idx=0; idx<cnt; idx++) {
 			ch = ibuf[idx];
@@ -602,7 +708,7 @@ int b9352_emulation_poll(TERMINAL_T *t) {
 					//obuf[odx++] = LF;
 				}
 				// line complete - leave this loop
-				goto finish;
+				goto finish1;
 			case BS:
 			case RUBOUT:
 				// backspace
@@ -636,13 +742,86 @@ int b9352_emulation_poll(TERMINAL_T *t) {
 			}
 		}
 
-finish:
+finish1:
 		if (telnet_session_write(&t->session, obuf, odx) < 0)
 			return -1;
 
 		return idx;	
 	} else {
 		// B9352 terminal emulation with external ANSI terminal
+		// loop over all what we received
+		for (idx=0; idx<cnt; idx++) {
+			ch = ibuf[idx];
+			if (ch == CR) {
+				// transmit from last control to next control
+				int cursor = t->scridy * COLS + t->scridx;
+				int linestart = (cursor / COLS) * COLS;
+				int lineend = linestart + (COLS - 1);
+				int startpos = cursor;
+				int endpos = cursor;
+				// abort any escape sequence
+				t->escaped = false;
+				// data to keybuf
+				while (startpos > linestart && t->scrbuf[startpos-1] >= ' ')
+					startpos--; 
+				while (endpos < lineend && t->scrbuf[endpos+1] >= ' ')
+					endpos++; 
+				t->keyidx = endpos - startpos + 1;
+				memcpy(t->keybuf, t->scrbuf + startpos, t->keyidx);
+				// mark send ready
+				t->lds = lds_sendrdy;
+				// reposition cursor
+				// leave this loop
+				goto finish2;
+			} else if (ch == ESC) {
+				// Escape sequence (re)start
+				t->escaped = true;
+				t->keyidx = 0;
+			} else if (t->escaped) {
+				// char to keybuf
+				t->keybuf[t->keyidx++] = ch;
+				if (ch < ' ' || ch >= 0x7f) {
+					// abort escape sequence, if its another ESC, restart
+					if (ch == ESC)
+						t->keyidx = 0;
+					else
+						t->escaped = false;
+				} else if (t->keyidx == 1) {
+					// after ESC must be in this range:
+					if (ch >= 0x40 && ch <= 0x5f) {
+						if (ch != '[' && ch != 'O')
+							goto esc_complete;
+					} else {
+						// illegal, abort it
+						t->escaped = false;
+					}
+				} else if (ch >= 0x40 && ch <= 0x7e) {
+esc_complete:				// escape sequence is complete
+					// interpret escape sequence here
+					interpret_esc(t);
+					t->keyidx = 0;
+					t->escaped = false;
+				}
+				// all other chars are assumed part of the sequence
+				// and collection will continue
+			} else if (ch >= ' ' && ch < 0x7f) {
+				// if printable
+				ch = translatetable_ascii2bic[ch&0x7f];
+				ch = translatetable_bic2ascii[ch&0x7f];
+				printf("printable: %c\n", ch);
+				store(t, ch);
+			} else if (ch == 0x08) {
+				printf("<X]\n");
+			} else if (ch == 0x09) {
+				printf("-->\n");
+			} else if (ch == 0x7f) {
+				printf("~\n");
+			} else {
+				printf("scrap:%02x\n", ch);
+			}
+		}
+finish2:
+		return idx;	
 	}
 
 	// default exit
