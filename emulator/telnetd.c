@@ -192,10 +192,16 @@ int telnet_session_write(TELNET_SESSION_T *t, const char *buf, int len) {
 	if (t->socket > 2) {	// prevent accidential use of std files
 		int cnt = write(t->socket, buf, len);
 		if (cnt < 0) {	// cnt < 0 : error occured
-			if (errno == EAGAIN)
+			if (errno == EAGAIN) {
+				printf("telnet_session_write: EAGAIN\n");
 				return 0;	// recoverable
+			}
 			telnet_session_close(t);
 			return -1;
+		}
+		if (cnt != len) {
+			printf("telnet_session_write: not all written: %d of %d\n",
+				cnt, len);
 		}
 		return cnt;
 	}

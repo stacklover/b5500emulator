@@ -39,8 +39,8 @@
 /***********************************************************************
 * ANSI control codes
 ***********************************************************************/
-#define _SO_	"\033[7m"	// inverse display on
-#define _SI_	"\033[27m"	// inverse display off
+#define _SO_	"\033[22m"	// bold display off
+#define _SI_	"\033[1m"	// bold display on
 #define	_EREOL_	"\033[K"	// erase to end of line
 #define	_EREOS_	"\033[J"	// erase to end of screen
 #define	_BS_	"\010"		// backup one char
@@ -54,12 +54,15 @@
 /***********************************************************************
 * Special UTF-8 characters
 ***********************************************************************/
-#define	_STAR_	"~" //"\302\244"
-#define	_LE_	"{" //"\302\253"
-//#define	_NOT_	"!" //"\302\254"
-#define	_PARA_	"^" //"\302\266"
-#define	_GE_	"}" //"\302\273"
-//#define	_MULT_	"x" //"\303\230"
+#define	_CRSYM_		_SI_ "^" _SO_ //"\302\266"
+#define	_ETXSYM_	"~" //"\302\244"
+#define	_RSSYM_		"_" //
+#define	_USSYM_		"_" //
+#define	_LE_		"{" //"\302\253"
+#define	_GE_		"}" //"\302\273"
+#define	_NOT_		"!" //"\302\254"
+#define	_MULT_		"x" //"\303\230"
+#define	FILLCHAR	' '
 
 /***********************************************************************
 * Convert sysbuf from 6 Bit BIC(in ASCII) to outbuf 8 Bit ASCII
@@ -140,7 +143,7 @@ static void convert8to6(TERMINAL_T *t) {
 		ch = t->inbuf[ptr++];
 		if (etrace)
 			printf("[%02x]", ch);
-		if (ch >= ' ') {
+		if (ch >= 0x20) {
 			// printable char
 			// change mode if current mode is control...
 			if (!t->inmode) {
@@ -168,7 +171,7 @@ static void convert8to6(TERMINAL_T *t) {
 			}
 			// convert control char to ASCII printable
 			if (t->sysidx < SYSBUFSIZE)
-				t->sysbuf[t->sysidx++] = ch + ' ';
+				t->sysbuf[t->sysidx++] = ch + 0x20;
 		}
 	} // while
 	// make sure we finish in control mode
@@ -202,7 +205,7 @@ static void redisplay(TERMINAL_T *t, int row1, int row2) {
 		// move cursor to begin of line
 		p = buf + sprintf(buf, _GOTO_, row+1, 1);
 		for (col = 0; col < COLS; col++) {
-			ch = t->scrbuf[row*COLS+col];
+			ch = t->scrbuf[row*COLS + col];
 			if (row == ROWS-1 && col == COLS-1) {
 				// cannot use last char of last line
 				break;
@@ -210,10 +213,11 @@ static void redisplay(TERMINAL_T *t, int row1, int row2) {
 			if (ch == CR) {
 				// end of line
 				// just clear the rest of the line (or the whole line)
-				p += sprintf(p, _PARA_ _EREOL_);
-				break;
+				//p += sprintf(p, _CRSYM_ _EREOL_);
+				//break;
+				p += sprintf(p, _CRSYM_);
 			} else if (ch == ETX) {
-				p += sprintf(p, _STAR_);
+				p += sprintf(p, _ETXSYM_);
 			} else if (ch == RS) {
 				p += sprintf(p, _SO_ _LE_);
 			} else if (ch == US) {
@@ -236,9 +240,6 @@ static void redisplay(TERMINAL_T *t, int row1, int row2) {
 * wrap cursor to be in bounds
 ***********************************************************************/
 static void cursorwrap(TERMINAL_T *t) {
-	char buf[20];
-	int len;
-
 	while (t->scridx < 0) {
 		t->scridx += COLS;
 		t->scridy--;
@@ -251,13 +252,13 @@ static void cursorwrap(TERMINAL_T *t) {
 		// scroll up one line
 		if (etrace)
 			printf("scroll up!\n");
-		len = sprintf(buf, _LF_);
-		len = telnet_session_write(&t->session, buf, len);
 		t->scridy = ROWS-1;
 		// copy screen up one line
-		memcpy(t->scrbuf, t->scrbuf+COLS, (ROWS-1)*COLS);
+		memmove(t->scrbuf, t->scrbuf + COLS, t->scridy*COLS);
 		// clear last line
-		memset(t->scrbuf+(ROWS-1)*COLS, ' ', COLS);
+		memset(t->scrbuf + t->scridy*COLS, FILLCHAR, COLS);
+		// re-paint full screen
+		redisplay(t, 0, t->scridy);
 	}
 	while (t->scridy < 0) {
 		t->scridy += ROWS;
@@ -283,7 +284,7 @@ static void cursormove(TERMINAL_T *t) {
 static void erasetoeol(TERMINAL_T *t) {
 	char buf[20];
 	int len;
-	memset(t->scrbuf+t->scridy*COLS+t->scridx, ' ', COLS - t->scridx);
+	memset(t->scrbuf + t->scridy*COLS + t->scridx, FILLCHAR, COLS - t->scridx);
 	len = sprintf(buf, _EREOL_);
 	len = telnet_session_write(&t->session, buf, len);
 }
@@ -295,9 +296,31 @@ static void erasescreen(TERMINAL_T *t) {
 	char buf[20];
 	int len;
 	t->scridx = t->scridy = 0;
-	memset(t->scrbuf, ' ', ROWS*COLS);
+	memset(t->scrbuf, FILLCHAR, ROWS*COLS);
 	len = sprintf(buf, _HOME_ _CLS_);
 	len = telnet_session_write(&t->session, buf, len);
+}
+
+/***********************************************************************
+* insert blank at cursor position, move rest to right
+***********************************************************************/
+static void char_insert(TERMINAL_T *t) {
+	memmove(t->scrbuf + t->scridy*COLS + t->scridx + 1,
+		t->scrbuf + t->scridy*COLS + t->scridx,
+		COLS-t->scridx-1);
+	t->scrbuf[t->scridy*COLS + t->scridx] = FILLCHAR;
+	redisplay(t, t->scridy, t->scridy);
+}
+
+/***********************************************************************
+* delete character at cursor position, move rest to left
+***********************************************************************/
+static void char_delete(TERMINAL_T *t) {
+	memmove(t->scrbuf + t->scridy*COLS + t->scridx,
+		t->scrbuf + t->scridy*COLS + t->scridx + 1,
+		COLS-t->scridx-1);
+	t->scrbuf[t->scridy*COLS + COLS - 1] = FILLCHAR;
+	redisplay(t, t->scridy, t->scridy);
 }
 
 /***********************************************************************
@@ -307,9 +330,9 @@ static void store(TERMINAL_T *t, char ch) {
 	char buf[20];
 	int len;
 	if (ch == CR) {
-		len = sprintf(buf, _SO_ _PARA_ _SI_);
+		len = sprintf(buf, _SO_ _CRSYM_ _SI_);
 	} else if (ch == ETX) {
-		len = sprintf(buf, _SO_ _STAR_ _SI_);
+		len = sprintf(buf, _SO_ _ETXSYM_ _SI_);
 	} else if (ch == RS) {
 		len = sprintf(buf, _SO_ _LE_);
 	} else if (ch == US) {
@@ -486,7 +509,7 @@ void b9352_emulation_write(TERMINAL_T *t) {
 						*op++ = BEL;
 						break;
 					default:
-						if (ch >= ' ') {
+						if (ch >= 0x20) {
 							if (t->lfpending) {
 								*op++ = LF;
 								t->lfpending = false;
@@ -571,59 +594,61 @@ finish:
 ***********************************************************************/
 static void interpret_esc(TERMINAL_T *t) {
 	t->keybuf[t->keyidx] = 0; // close the string
-	printf("ESC%s -> ", t->keybuf);
+	//printf("ESC%s -> ", t->keybuf);
 	if (t->keybuf[0] == 'O') {
 		if (       t->keybuf[1] == 'P') {
-			printf("F1");
+			//printf("F1");
 			redisplay(t, 0, ROWS-1);
 		} else if (t->keybuf[1] == 'Q') {
-			printf("F2");
+			//printf("F2");
 		} else if (t->keybuf[1] == 'R') {
-			printf("F3");
+			//printf("F3");
 		} else if (t->keybuf[1] == 'S') {
-			printf("F4");
+			//printf("F4");
 		} else {
-			printf("?1?");
+			//printf("?1?");
 		}
 	} else if (t->keybuf[0] == '[') {
 		if (       t->keybuf[1] == 'A') {
-			printf("^");
+			//printf("^");
 			t->scridy--;
 			cursorwrap(t);
 			cursormove(t);
 		} else if (t->keybuf[1] == 'B') {
-			printf("v");
+			//printf("v");
 			t->scridy++;
 			cursorwrap(t);
 			cursormove(t);
 		} else if (t->keybuf[1] == 'C') {
-			printf(">");
+			//printf(">");
 			t->scridx++;
 			cursorwrap(t);
 			cursormove(t);
 		} else if (t->keybuf[1] == 'D') {
-			printf("<");
+			//printf("<");
 			t->scridx--;
 			cursorwrap(t);
 			cursormove(t);
 		} else if (t->keybuf[1] == 'P') {
-			printf("PAUSE");
+			//printf("PAUSE");
 		} else if (isdigit(t->keybuf[1])) {
 			// scan the number
 			char *p;
 			unsigned number = strtoul(t->keybuf+1, &p, 10);
 			if (*p == '~') {
-				printf("KEY%u", number);
+				//printf("KEY%u", number);
+				if (number == 2)
+					char_insert(t);
 			} else {
-				printf("?3?");
+				//printf("?3?");
 			}
 		} else {
-			printf("?2?");
+			//printf("?2?");
 		}
 	} else {
-		printf("?4?");
+		//printf("?4?");
 	}
-	printf("\n");
+	//printf("\n");
 }
 
 /***********************************************************************
@@ -675,7 +700,7 @@ int b9352_emulation_poll(TERMINAL_T *t) {
 	if (t->lds == lds_sendrdy && t->bufstate == idle) {
 		if (etrace)
 			printf("[ENQ]");
-		t->sysbuf[0] = ENQ + ' ';
+		t->sysbuf[0] = ENQ + 0x20;
 		t->sysidx = 1;
 		t->abnormal = false;
 		t->bufstate = readready;
@@ -716,7 +741,7 @@ int b9352_emulation_poll(TERMINAL_T *t) {
 					t->keyidx--;
 					// echo
 					obuf[odx++] = BS;
-					obuf[odx++] = ' ';
+					obuf[odx++] = FILLCHAR;
 					obuf[odx++] = BS;
 				}
 				break;
@@ -729,7 +754,7 @@ int b9352_emulation_poll(TERMINAL_T *t) {
 				obuf[odx++] = LF;
 				break;
 			default:
-				if (ch >= ' ' && ch <= 0x7e && t->keyidx < KEYBUFSIZE) {
+				if (ch >= 0x20 && ch <= 0x7e && t->keyidx < KEYBUFSIZE) {
 					// if printable, add to keybuf
 					ch = translatetable_ascii2bic[ch&0x7f];
 					ch = translatetable_bic2ascii[ch&0x7f];
@@ -762,9 +787,9 @@ finish1:
 				// abort any escape sequence
 				t->escaped = false;
 				// data to keybuf
-				while (startpos > linestart && t->scrbuf[startpos-1] >= ' ')
+				while (startpos > linestart && t->scrbuf[startpos-1] >= 0x20)
 					startpos--; 
-				while (endpos < lineend && t->scrbuf[endpos+1] >= ' ')
+				while (endpos < lineend && t->scrbuf[endpos+1] >= 0x20)
 					endpos++; 
 				t->keyidx = endpos - startpos + 1;
 				memcpy(t->keybuf, t->scrbuf + startpos, t->keyidx);
@@ -780,7 +805,7 @@ finish1:
 			} else if (t->escaped) {
 				// char to keybuf
 				t->keybuf[t->keyidx++] = ch;
-				if (ch < ' ' || ch >= 0x7f) {
+				if (ch < 0x20 || ch >= 0x7f) {
 					// abort escape sequence, if its another ESC, restart
 					if (ch == ESC)
 						t->keyidx = 0;
@@ -804,20 +829,25 @@ esc_complete:				// escape sequence is complete
 				}
 				// all other chars are assumed part of the sequence
 				// and collection will continue
-			} else if (ch >= ' ' && ch < 0x7f) {
+			} else if (ch >= 0x20 && ch < 0x7f) {
 				// if printable
 				ch = translatetable_ascii2bic[ch&0x7f];
 				ch = translatetable_bic2ascii[ch&0x7f];
-				printf("printable: %c\n", ch);
+				//printf("printable: %c\n", ch);
 				store(t, ch);
 			} else if (ch == 0x08) {
-				printf("<X]\n");
+				//printf("<X]\n");
+				if (t->scridx > 0) {
+					t->scridx--;
+					char_delete(t);
+				}
 			} else if (ch == 0x09) {
-				printf("-->\n");
+				//printf("-->\n");
 			} else if (ch == 0x7f) {
-				printf("~\n");
+				//printf("~\n");
+				char_delete(t);
 			} else {
-				printf("scrap:%02x\n", ch);
+				//printf("scrap:%02x\n", ch);
 			}
 		}
 finish2:
