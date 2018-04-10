@@ -52,7 +52,7 @@
 #define	ESC	0x1b	// escape
 #define	RS	0x1e	// "shift out" - protected area start
 #define	US	0x1f	// "shift in" - protected area end
-#define	RUBOUT	0xff	// rubout - punch all holes on tape
+#define	RUBOUT	0x7f	// rubout - punch all holes on tape
 
 // tnr/bnr to index and back
 #define	IDX(tnr,bnr)	(((tun)-1)*16+(bnr))
@@ -190,25 +190,31 @@ extern BIT dtrace;
 extern BIT ctrace;
 
 /***********************************************************************
-* xxx emulation write:
+* line discipline write:
 * called when the sysbuf has been written to
 ***********************************************************************/
-extern void teletype_emulation_write(TERMINAL_T *t);
-extern void b9352_emulation_write(TERMINAL_T *t);
+extern void ld_write_teletype(TERMINAL_T *t);
+extern void ld_write_contention(TERMINAL_T *t);
 
 /***********************************************************************
-* xxx emulation poll:
+* line discipline poll:
 * called cyclically. should check for
-* - TELNET reception
+* status changes and user input
 ***********************************************************************/
-extern int teletype_emulation_poll(TERMINAL_T *t);
-extern int b9352_emulation_poll(TERMINAL_T *t);
+extern int ld_poll_teletype(TERMINAL_T *t);
+extern int ld_poll_contention(TERMINAL_T *t);
 
 /***********************************************************************
 * dcc input ready
 * called when the sysbuf is input ready
 ***********************************************************************/
 extern void dcc_input_ready(TERMINAL_T *t);
+
+/***********************************************************************
+* B9352 emulation input/output
+***********************************************************************/
+extern int b9352_input(TERMINAL_T *t, char ch);
+extern int b9352_output(TERMINAL_T *t, char ch);
 
 #endif	//_DCC_H_
 

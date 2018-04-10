@@ -36,10 +36,10 @@
 #include "dcc.h"
 
 /***********************************************************************
-* Teletype Emulation Write (data in sysbuf)
+* line discipline teletype (data in sysbuf)
 * Returns number of bytes used or -1 on non-recoverable error
 ***********************************************************************/
-void teletype_emulation_write(TERMINAL_T *t) {
+void ld_write_teletype(TERMINAL_T *t) {
 	int iptr;
 	char ch;
 	char buf[SYSBUFSIZE];
@@ -112,10 +112,10 @@ void teletype_emulation_write(TERMINAL_T *t) {
 }
 
 /***********************************************************************
-* Teletype Emulation Poll
-* Check for data from TELNET client
+* line discipline teletype
+* check for status changes or for data from client
 ***********************************************************************/
-int teletype_emulation_poll(TERMINAL_T *t) {
+int ld_poll_teletype(TERMINAL_T *t) {
 	char obuf[KEYBUFSIZE*2], ch;
 	int cnt, idx, odx;
 

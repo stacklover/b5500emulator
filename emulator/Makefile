@@ -65,8 +65,9 @@ OBJEMULATOR2 =	$(ODIR)/emulator2.o $(ODIR)/init_shares.o \
 		$(ODIR)/dev_lp.o \
 		$(ODIR)/dev_dk.o \
 		$(ODIR)/dev_dcc.o \
-		$(ODIR)/dcc_b9352.o \
 		$(ODIR)/dcc_teletype.o \
+		$(ODIR)/dcc_contention.o \
+		$(ODIR)/dcc_b9352_ansi.o \
 		$(ODIR)/translatetables.o \
 		$(ODIR)/instr_table.o \
 		$(ODIR)/circbuffer.o \

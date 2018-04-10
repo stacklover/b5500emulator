@@ -62,12 +62,12 @@ static TERMINAL_T terminal[NUMTERM];
 * the TELNET servers
 ***********************************************************************/
 static TELNET_SERVER_T server[NUMSERV];
-// server[0]: Port   23 - LINE type terminals (TELETYPE)
-// server[1]: Port 8023 - BLOCK type terminals (B9352)
-// server[2]: Port 9023 - BLOCK type terminals (B9352 with external ANSI)
+// server[0]: Port   23 - LINE type terminals (B9353 as TELETYPE)
+// server[1]: Port 8023 - BLOCK type terminals (B9352 with external ANSI)
+// server[2]: Port 9023 - BLOCK type terminals (B9352 with protocol)
 static unsigned portno[NUMSERV] = {23, 8023, 9023};
-static enum ld ldno[NUMSERV] = {ld_teletype, ld_contention, ld_contention};
-static enum em emno[NUMSERV] = {em_none, em_ansi, em_teletype};
+static enum ld ldno[NUMSERV] = {ld_contention, ld_contention, ld_contention};
+static enum em emno[NUMSERV] = {em_teletype, em_ansi, em_none};
 
 /***********************************************************************
 * misc variables
@@ -218,9 +218,9 @@ static BIT terminal_search(unsigned *ptun, unsigned *pbnr) {
 		if (t->bufstate == outputbusy) {
 			// now send/interpret the data
 			if (t->ld == ld_teletype)
-				teletype_emulation_write(t);
+				ld_write_teletype(t);
 			else
-				b9352_emulation_write(t);
+				ld_write_contention(t);
 		}
 
 		// is this requiring service now?
@@ -412,9 +412,9 @@ static void dcc_test_incoming(void) {
 				// socket is open OR canid given
 				// depending on line discipline the action is different
 				if (t->ld == ld_teletype)
-					cnt = teletype_emulation_poll(t);
+					cnt = ld_poll_teletype(t);
 				else
-					cnt = b9352_emulation_poll(t);
+					cnt = ld_poll_contention(t);
 				if (cnt < 0)
 					goto isclosed;
 			} else {
