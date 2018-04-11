@@ -57,10 +57,11 @@
 /***********************************************************************
 * Special UTF-8 characters
 ***********************************************************************/
-#define	_CRSYM_		"~" //"\302\266"
-#define	_ETXSYM_	"|" //"\302\244"
-#define	_RSSYM_		"^" //
-#define	_USSYM_		"^" //
+#define	_CRSYM_		_SO_ "~" _SI_ _EREOL_
+#define	_ETXSYM_	_SO_ "|" _SI_ _EREOL_
+#define	_RSSYM_		_SO_ "<" _SI_
+#define	_USSYM_		_SO_ ">" _SI_
+
 #define	_LE_		"{" //"\302\253"
 #define	_GE_		"}" //"\302\273"
 #define	_NOT_		"!" //"\302\254"
@@ -70,26 +71,22 @@
 /***********************************************************************
 * Redisplay memory on ANSI terminal
 ***********************************************************************/
+#define BUFLEN 40	// make sure it can hold the escape sequences!
 static void redisplay(TERMINAL_T *t, int row1, int row2) {
-	int row, col;
-	char ch;
-	char buf[COLS+20];
+	char buf[BUFLEN];
 	char *p = buf;
 
-	for (row = row1; row <= row2; row++) {
+	for (int row = row1; row <= row2; row++) {
 		// move cursor to begin of line
 		p = buf + sprintf(buf, _GOTO_, row+1, 1);
-		for (col = 0; col < COLS; col++) {
-			ch = t->scrbuf[row*COLS + col];
+		char *q = t->scrbuf + row * COLS;
+		for (int col = 0; col < COLS; col++) {
+			char ch = *q++;
 			if (row == ROWS-1 && col == COLS-1) {
 				// cannot use last char of last line
-				break;
+				continue;
 			}
 			if (ch == CR) {
-				// end of line
-				// just clear the rest of the line (or the whole line)
-				//p += sprintf(p, _CRSYM_ _EREOL_);
-				//break;
 				p += sprintf(p, _CRSYM_);
 			} else if (ch == ETX) {
 				p += sprintf(p, _ETXSYM_);
@@ -100,7 +97,7 @@ static void redisplay(TERMINAL_T *t, int row1, int row2) {
 			} else {
 				*p++ = ch;
 			}
-			if (p-buf > COLS) {
+			if (p > buf) {
 				telnet_session_write(&t->session, buf, p-buf);
 				p = buf;
 			}
@@ -125,8 +122,6 @@ static void cursorwrap(TERMINAL_T *t) {
 	}
 	if (t->scridy == ROWS) {
 		// scroll up one line
-		if (etrace)
-			printf("scroll up!\n");
 		t->scridy = ROWS-1;
 		// copy screen up one line
 		memmove(t->scrbuf, t->scrbuf + COLS, t->scridy*COLS);
@@ -205,13 +200,13 @@ static void store(TERMINAL_T *t, char ch) {
 	char buf[20];
 	int len;
 	if (ch == CR) {
-		len = sprintf(buf, _SO_ _CRSYM_ _SI_);
+		len = sprintf(buf, _CRSYM_);
 	} else if (ch == ETX) {
-		len = sprintf(buf, _SO_ _ETXSYM_ _SI_);
+		len = sprintf(buf, _ETXSYM_);
 	} else if (ch == RS) {
-		len = sprintf(buf, _SO_ _LE_);
+		len = sprintf(buf, _RSSYM_);
 	} else if (ch == US) {
-		len = sprintf(buf, _GE_ _SI_);
+		len = sprintf(buf, _USSYM_);
 	} else {
 		len = sprintf(buf, "%c", ch);
 	}
@@ -394,6 +389,11 @@ int b9352_input(TERMINAL_T *t, char ch) {
 
 		// mark send ready
 		t->lds = lds_sendrdy;
+
+		// move cursor to end of string
+		t->scridx = endpos - linestart;
+		cursorwrap(t);
+		cursormove(t);
 
 		// leave this loop
 		return true;

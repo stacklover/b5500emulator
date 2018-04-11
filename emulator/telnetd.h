@@ -1,5 +1,5 @@
 /***********************************************************************
-* telnet daemon
+* telnet server
 ************************************************************************
 * Copyright (c) 2018, Reinhard Meyer, DL5UY
 * Licensed under the MIT License,
@@ -43,24 +43,30 @@
 #define	TN_IAC	255
 
 // options
-#define	TN_ECHO	1
+#define	TN_ECHO		1
+#define	TN_LINEWIDTH	8
+#define	TN_PAGELENGTH	9
+#define	TN_LINEMODE	22
+#define	TN_WINDOWSIZE	31
 
 /***********************************************************************
 * the TELNET stuff
 ***********************************************************************/
 enum escape {
 	none=0,
-	had_iac,
-	had_will,
-	had_wont,
-	had_do,
-	had_dont,
+	had_cmd,
 	had_sub};
 
 typedef struct telnet_session {
 	int		socket;
+	// negotiation
+	int		lastchar;
 	enum escape	escape;
+	char		subbuf[20];
+	unsigned	subidx;
+	// negotiated values
 	int		is_fullduplex;
+	unsigned	cols, rows;
 } TELNET_SESSION_T;
 
 typedef struct telnet_server {

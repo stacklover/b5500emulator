@@ -45,13 +45,9 @@ static BIT convert6to8(TERMINAL_T *t) {
 	char ch;
 	BIT disc = false;
 
-	if (etrace)
-		printf("converting sysbuf 6 to 8 (%d)\n", t->sysidx);
 	t->outidx = 0;
 	for (iptr=0; iptr<t->sysidx; iptr++) {
 		ch = t->sysbuf[iptr];
-		if (etrace)
-			printf("%02x ", ch);
 		// MODE char toggles mode
 		if (ch == MODE) {
 			t->outmode = !t->outmode;
@@ -90,8 +86,6 @@ static BIT convert6to8(TERMINAL_T *t) {
 	t->bufstate = t->fullbuffer ? writeready : idle;
 	t->interrupt = true;
 
-	if (etrace)
-		printf("=>(%d)\n", t->outidx);
 	return disc;
 }
 
@@ -102,9 +96,6 @@ static void convert8to6(TERMINAL_T *t) {
 	int ptr;
 	char ch;
 
-	if (etrace)
-		printf("converting inbuf 8 to sysbuf 6 (%d)", t->inidx);
-
 	// clear and reserve sysbuf now
 	t->bufstate = inputbusy;
 	t->sysidx = 0;
@@ -113,8 +104,6 @@ static void convert8to6(TERMINAL_T *t) {
 	ptr = 0;
 	while (ptr < t->inidx) {
 		ch = t->inbuf[ptr++];
-		if (etrace)
-			printf("[%02x]", ch);
 		if (ch >= 0x20) {
 			// printable char
 			// change mode if current mode is control...
@@ -159,9 +148,6 @@ static void convert8to6(TERMINAL_T *t) {
 	t->abnormal = false;
 	t->bufstate = readready;
 	t->interrupt = true;
-
-	if (etrace)
-		printf("=>(%d)\n", t->sysidx);
 }
 
 /***********************************************************************
@@ -199,7 +185,7 @@ void ld_write_contention(TERMINAL_T *t) {
 
 	// here we run the terminal end of the line discipline
 	if (etrace)
-		printf("interpreting outbuf(%d)\n", t->outidx);
+		printf("+DATA(%u) ", t->session.socket);
 	ptr = 0;
 	while (ptr < t->outidx && !error) {
 		ch = t->outbuf[ptr++];
@@ -224,6 +210,19 @@ void ld_write_contention(TERMINAL_T *t) {
 					t->inidx += t->keyidx;
 					t->inbuf[t->inidx++] = ETX;
 
+					if (etrace) {
+						int i;
+						char chx;
+						printf("[STX]");
+						for (i = 1; i < t->inidx-1; i++) {
+							chx = t->inbuf[i];
+							if (isprint(chx))
+								printf("%c", chx);
+							else
+								printf("<%02x>", chx);
+						}
+						printf("[ETX]");
+					}
 					// mark keybuf empty
 					t->keyidx = 0;
 
@@ -306,6 +305,12 @@ void ld_write_contention(TERMINAL_T *t) {
 		} else {
 			if (t->lds == lds_recvdata) {
 				// send to terminal
+				if (etrace) {
+					if (isprint(ch))
+						printf("%c", ch);
+					else
+						printf("<%02x>", ch);
+				}
 				error = b9352_output(t, ch);
 			} else {
 				// chars outside STX/ETX
@@ -323,10 +328,6 @@ finish:
 		}
 		telnet_session_close(&t->session);
 	}
-
-// conclude debug and leave
-	if (etrace)
-		printf("\n");
 }
 
 /***********************************************************************

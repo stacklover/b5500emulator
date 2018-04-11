@@ -288,8 +288,8 @@ static void new_connection(int newsocket, struct sockaddr_in *addr, enum ld ld, 
 	port = ntohs(addr->sin_port);
 
 	// determine terminal range
-	if (ld == ld_teletype) {
-		beg = 0;	// 0 reserved for teletype via CANopen (hardwired for now)
+	if (em == em_teletype) {
+		beg = 1;	// 0 reserved for teletype via CANopen (hardwired for now)
 		end = 15;
 	} else {
 		beg = 16;
