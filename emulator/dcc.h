@@ -164,8 +164,6 @@ typedef struct terminal {
 	enum ld ld;			// line discipline
 	enum em em;			// emulation
 	enum lds lds;			// line discipline state
-	BIT lfpending;
-	BIT paused;
 // status bits
 	BIT connected;
 	BIT interrupt;
@@ -180,6 +178,10 @@ typedef struct terminal {
 // screen buffer
 	char scrbuf[ROWS*COLS];		// screen buffer
 	int scridx, scridy;		// index into screen (cursor position, zero based)
+	BIT lfpending;
+	BIT paused;
+	BIT utf8mode;
+	BIT insertmode;
 } TERMINAL_T;
 
 /***********************************************************************

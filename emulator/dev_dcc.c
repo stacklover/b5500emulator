@@ -314,6 +314,8 @@ static void new_connection(int newsocket, struct sockaddr_in *addr, enum ld ld, 
 			t->scridy = 0;
 			t->lfpending = false;
 			t->paused = false;
+			t->utf8mode = false;
+			t->insertmode = true;
 			t->eotcount = 0;
 			t->abnormal = true;
 			t->bufstate = writeready;
@@ -384,6 +386,8 @@ static void dcc_test_incoming(void) {
 				t->scridy = 0;
 				t->lfpending = false;
 				t->paused = false;
+				t->utf8mode = false;
+				t->insertmode = true;
 				t->eotcount = 0;
 				t->abnormal = true;
 				t->bufstate = writeready;

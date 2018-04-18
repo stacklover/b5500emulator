@@ -41,23 +41,82 @@ static char negotiate[] = {
 	TN_IAC, TN_WILL, TN_ECHO,	// server echo on
 	TN_IAC, TN_DONT, TN_LINEMODE,	// client linemode off
 	TN_IAC, TN_DO, TN_WINDOWSIZE,	// client window size - expect answer here
+	TN_IAC, TN_DO, TN_TERMTYPE,	// terminal type - expect answer here
+};
+
+static char request_termtype[] = {
+	TN_IAC, TN_SUB, TN_TERMTYPE, 1, TN_IAC, TN_END,
 };
 
 /***********************************************************************
 * TELNET Escape Interpret
 ***********************************************************************/
 static void telnet_escape_interpret(TELNET_SESSION_T *t) {
-	if (t->subbuf[1] == TN_ECHO) {
-		if (t->subbuf[0] == TN_DO) {
+#if 0
+	unsigned i;
+
+	for (i = 0; i < t->subidx; i++)
+		printf("_%u", t->subbuf[i]);
+	printf("\n");
+#endif
+	switch (t->subbuf[1]) { // which OPTION
+	case TN_ECHO:
+		switch (t->subbuf[0]) { // which response
+		case TN_DO:
 			t->is_fullduplex = true;
-		} else if (t->subbuf[0] == TN_DONT) {
+			printf("+FULLDUPLEX=%u\n", t->is_fullduplex);
+			t->success_mask |= (1 << TN_ECHO);
+			break;
+		case TN_DONT:
 			t->is_fullduplex = false;
+			printf("+FULLDUPLEX=%u\n", t->is_fullduplex);
+			t->success_mask |= 1;	// failure
+			break;
+		default:
+			return;
 		}
-	} else if (t->subbuf[1] == TN_WINDOWSIZE) {
-		if (t->subbuf[0] == TN_SUB && t->subidx == 6) {
-			t->cols = (t->subbuf[2] << 8) | t->subbuf[3];
-			t->rows = (t->subbuf[4] << 8) | t->subbuf[5];
+		break;
+	case TN_TERMTYPE:
+		switch (t->subbuf[0]) { // which response
+		case TN_WILL:
+			if (write(t->socket, request_termtype, sizeof request_termtype) != sizeof request_termtype) {
+				perror("telnet_session_write(request_termtype)");
+				close(t->socket);
+				t->socket = -1;
+				return;
+			}
+			break;
+		case TN_WONT:
+			printf("+TERMINAL TYPE DENIED\n");
+			t->success_mask |= 1;	// failure
+			break;
+		case TN_SUB:
+			t->subbuf[t->subidx] = 0;
+			strncpy(t->type, t->subbuf+1, TN_TYPE_BUFLEN);
+			t->type[TN_TYPE_BUFLEN-1] = 0;
+			printf("+TERMINAL TYPE=%s\n", t->type);
+			t->success_mask |= (1 << TN_TERMTYPE);
+			break;
+		default:
+			return;
 		}
+		break;
+	case TN_WINDOWSIZE:
+		switch (t->subbuf[0]) { // which response
+		case TN_SUB:
+			if (t->subidx == 6) {
+				t->cols = (t->subbuf[2] << 8) | t->subbuf[3];
+				t->rows = (t->subbuf[4] << 8) | t->subbuf[5];
+				t->success_mask |= (1 << TN_WINDOWSIZE);
+			} else return;
+			break;
+		default:
+			return;
+		}
+		printf("+WINDOW SIZE=%ux%u\n", t->cols, t->rows);
+		break;
+	default:
+		return;
 	}
 }
 
@@ -131,9 +190,9 @@ static int telnet_escape_check(TELNET_SESSION_T *t, char *buf, int len) {
 int telnet_session_open(TELNET_SESSION_T *t, int sock) {
 	t->socket = sock;
 	t->escape = none;
-	t->is_fullduplex = false;
+	t->is_fullduplex = true;
 	t->cols = t->rows = 0;
-	// try to negotiate ECHO ON, LINEMODE OFF and get WINDOWSIZE
+	// try to negotiate ECHO ON, LINEMODE OFF and get WINDOWSIZE and get TERMINALTYPE
 	if (write(t->socket, negotiate, sizeof negotiate) != sizeof negotiate) {
 		perror("telnet_session_write(negotiate)");
 		close(t->socket);

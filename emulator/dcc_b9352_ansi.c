@@ -39,11 +39,13 @@
 #include "circbuffer.h"
 #include "dcc.h"
 
+#define	USE_UTF8	1
+
 /***********************************************************************
 * ANSI terminal control codes
 ***********************************************************************/
-#define _SO_	"\033[22m"	// bold display off
-#define _SI_	"\033[1m"	// bold display on
+#define _SI_	"\033[22m"	// bold display off
+#define _SO_	"\033[1m"	// bold display on
 #define	_EREOL_	"\033[K"	// erase to end of line
 #define	_EREOS_	"\033[J"	// erase to end of screen
 #define	_BS_	"\010"		// backup one char
@@ -62,10 +64,17 @@
 #define	_RSSYM_		_SO_ "<" _SI_
 #define	_USSYM_		_SO_ ">" _SI_
 
-#define	_LE_		"{" //"\302\253"
-#define	_GE_		"}" //"\302\273"
-#define	_NOT_		"!" //"\302\254"
-#define	_MULT_		"x" //"\303\230"
+#define	_CRSYM8_	"○" _EREOL_
+#define	_ETXSYM8_	"◊" _EREOL_
+#define	_RSSYM8_	"◄"
+#define	_USSYM8_	"►"
+
+#define	_LE8_		"≤"
+#define	_GE8_		"≥"
+#define	_NOT8_		"≠"
+#define	_MULT8_		"x"
+#define	_LEFTARROW8_	"←"
+
 #define	FILLCHAR	' '
 
 /***********************************************************************
@@ -86,17 +95,39 @@ static void redisplay(TERMINAL_T *t, int row1, int row2) {
 				// cannot use last char of last line
 				continue;
 			}
-			if (ch == CR) {
-				p += sprintf(p, _CRSYM_);
-			} else if (ch == ETX) {
-				p += sprintf(p, _ETXSYM_);
-			} else if (ch == RS) {
-				p += sprintf(p, _RSSYM_);
-			} else if (ch == US) {
-				p += sprintf(p, _USSYM_);
-			} else {
+
+			switch (ch) {
+			case CR:
+				if (t->utf8mode) p += sprintf(p, _CRSYM8_); else p += sprintf(p, _CRSYM_);
+				break;
+			case ETX:
+				if (t->utf8mode) p += sprintf(p, _ETXSYM8_); else p += sprintf(p, _ETXSYM_);
+				break;
+			case RS:
+				if (t->utf8mode) p += sprintf(p, _RSSYM8_); else p += sprintf(p, _RSSYM_);
+				break;
+			case US:
+				if (t->utf8mode) p += sprintf(p, _USSYM8_); else p += sprintf(p, _USSYM_);
+				break;
+			case '{':
+				if (t->utf8mode) p += sprintf(p, _LE8_); else *p++ = ch;
+				break;
+			case '}':
+				if (t->utf8mode) p += sprintf(p, _GE8_); else *p++ = ch;
+				break;
+			case '!':
+				if (t->utf8mode) p += sprintf(p, _NOT8_); else *p++ = ch;
+				break;
+			case '|':
+				if (t->utf8mode) p += sprintf(p, _MULT8_); else *p++ = ch;
+				break;
+			case '~':
+				if (t->utf8mode) p += sprintf(p, _LEFTARROW8_); else *p++ = ch;
+				break;
+			default:
 				*p++ = ch;
 			}
+
 			if (p > buf) {
 				telnet_session_write(&t->session, buf, p-buf);
 				p = buf;
@@ -198,19 +229,41 @@ static void char_delete(TERMINAL_T *t) {
 ***********************************************************************/
 static void store(TERMINAL_T *t, char ch) {
 	char buf[20];
-	int len;
-	if (ch == CR) {
-		len = sprintf(buf, _CRSYM_);
-	} else if (ch == ETX) {
-		len = sprintf(buf, _ETXSYM_);
-	} else if (ch == RS) {
-		len = sprintf(buf, _RSSYM_);
-	} else if (ch == US) {
-		len = sprintf(buf, _USSYM_);
-	} else {
-		len = sprintf(buf, "%c", ch);
+	char *p = buf;
+
+	switch (ch) {
+	case CR:
+		if (t->utf8mode) p += sprintf(p, _CRSYM8_); else p += sprintf(p, _CRSYM_);
+		break;
+	case ETX:
+		if (t->utf8mode) p += sprintf(p, _ETXSYM8_); else p += sprintf(p, _ETXSYM_);
+		break;
+	case RS:
+		if (t->utf8mode) p += sprintf(p, _RSSYM8_); else p += sprintf(p, _RSSYM_);
+		break;
+	case US:
+		if (t->utf8mode) p += sprintf(p, _USSYM8_); else p += sprintf(p, _USSYM_);
+		break;
+	case '{':
+		if (t->utf8mode) p += sprintf(p, _LE8_); else *p++ = ch;
+		break;
+	case '}':
+		if (t->utf8mode) p += sprintf(p, _GE8_); else *p++ = ch;
+		break;
+	case '!':
+		if (t->utf8mode) p += sprintf(p, _NOT8_); else *p++ = ch;
+		break;
+	case '|':
+		if (t->utf8mode) p += sprintf(p, _MULT8_); else *p++ = ch;
+		break;
+	case '~':
+		if (t->utf8mode) p += sprintf(p, _LEFTARROW8_); else *p++ = ch;
+		break;
+	default:
+		*p++ = ch;
 	}
-	len = telnet_session_write(&t->session, buf, len);
+
+	telnet_session_write(&t->session, buf, p - buf);
 	t->scrbuf[t->scridy*COLS+t->scridx] = ch;
 	t->scridx++;
 	cursorwrap(t);
@@ -298,62 +351,77 @@ int b9352_output(TERMINAL_T *t, char ch) {
 * ANSI interpret ESC sequence
 ***********************************************************************/
 static void interpret_esc(TERMINAL_T *t) {
+	char *p;
+	unsigned number;
+
 	t->keybuf[t->keyidx] = 0; // close the string
-	//printf("ESC%s -> ", t->keybuf);
-	if (t->keybuf[0] == 'O') {
-		if (       t->keybuf[1] == 'P') {
-			//printf("F1");
+	switch (t->keybuf[0]) {
+	case 'O': // DEC specific?
+		switch (t->keybuf[1]) {
+		case 'P': // F1
 			redisplay(t, 0, ROWS-1);
-		} else if (t->keybuf[1] == 'Q') {
-			//printf("F2");
-		} else if (t->keybuf[1] == 'R') {
-			//printf("F3");
-		} else if (t->keybuf[1] == 'S') {
-			//printf("F4");
-		} else {
-			//printf("?1?");
+			return;
+		case 'Q': // F2
+			t->utf8mode = !t->utf8mode;
+			redisplay(t, 0, ROWS-1);
+			return;
+		case 'R': // F3
+			return;
+		case 'S': // F4
+			return;
+		default:
+			;
 		}
-	} else if (t->keybuf[0] == '[') {
-		if (       t->keybuf[1] == 'A') {
-			//printf("^");
+		break;
+	case '[': // ANSI
+		switch (t->keybuf[1]) {
+		case 'A': // CURSOR UP
 			t->scridy--;
 			cursorwrap(t);
 			cursormove(t);
-		} else if (t->keybuf[1] == 'B') {
-			//printf("v");
+			return;
+		case 'B': // CURSOR DOWN
 			t->scridy++;
 			cursorwrap(t);
 			cursormove(t);
-		} else if (t->keybuf[1] == 'C') {
-			//printf(">");
+			return;
+		case 'C': // CURSOR RIGHT
 			t->scridx++;
 			cursorwrap(t);
 			cursormove(t);
-		} else if (t->keybuf[1] == 'D') {
-			//printf("<");
+			return;
+		case 'D': // CURSOR LEFT
 			t->scridx--;
 			cursorwrap(t);
 			cursormove(t);
-		} else if (t->keybuf[1] == 'P') {
-			//printf("PAUSE");
-		} else if (isdigit(t->keybuf[1])) {
+			return;
+		case 'P': // PAUSE
+			return;
+		case '0': case '1': case '2': case '3': case '4':
+		case '5': case '6': case '7': case '8': case '9': // NUMBER
 			// scan the number
-			char *p;
-			unsigned number = strtoul(t->keybuf+1, &p, 10);
+			number = strtoul(t->keybuf+1, &p, 10);
 			if (*p == '~') {
-				//printf("KEY%u", number);
-				if (number == 2)
-					char_insert(t);
-			} else {
-				//printf("?3?");
+				switch (number) {
+				case 2: // INSERT
+					t->insertmode = !t->insertmode;
+					return;
+				case 3: // DELETE
+					char_delete(t);
+					return;
+				default:
+					;
+				}
 			}
-		} else {
-			//printf("?2?");
+			break;
+		default:
+			;
 		}
-	} else {
-		//printf("?4?");
+	default:
+		;
 	}
-	//printf("\n");
+
+	printf("ESC%s unknown\n", t->keybuf);
 }
 
 /***********************************************************************
@@ -390,8 +458,14 @@ int b9352_input(TERMINAL_T *t, char ch) {
 		// mark send ready
 		t->lds = lds_sendrdy;
 
+#if 1
+		// move cursor to start of next line
+		t->scridx = 0;
+		t->scridy++;
+#else
 		// move cursor to end of string
 		t->scridx = endpos - linestart;
+#endif
 		cursorwrap(t);
 		cursormove(t);
 
@@ -428,13 +502,7 @@ esc_complete:				// escape sequence is complete
 		}
 		// all other chars are assumed part of the sequence
 		// and collection will continue
-	} else if (isprint(ch)) {
-		// if printable
-		ch = translatetable_ascii2bic[ch&0x7f];
-		ch = translatetable_bic2ascii[ch&0x7f];
-		//printf("printable: %c\n", ch);
-		store(t, ch);
-	} else if (ch == BS) {
+	} else if (ch == BS || ch == RUBOUT) {
 		//printf("<X]\n");
 		if (t->scridx > 0) {
 			t->scridx--;
@@ -442,11 +510,14 @@ esc_complete:				// escape sequence is complete
 		}
 	} else if (ch == TAB) {
 		//printf("-->\n");
-	} else if (ch == RUBOUT) {
-		//printf("~\n");
-		char_delete(t);
 	} else {
-		//printf("scrap:%02x\n", ch);
+		// convert to printable
+		ch = translatetable_ascii2bic[ch&0x7f];
+		ch = translatetable_bic2ascii[ch&0x7f];
+		//printf("printable: %c\n", ch);
+		if (t->insertmode)
+			char_insert(t);
+		store(t, ch);
 	}
 
 	return false;

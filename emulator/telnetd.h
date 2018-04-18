@@ -47,7 +47,10 @@
 #define	TN_LINEWIDTH	8
 #define	TN_PAGELENGTH	9
 #define	TN_LINEMODE	22
+#define	TN_TERMTYPE	24
 #define	TN_WINDOWSIZE	31
+
+#define	TN_TYPE_BUFLEN	20
 
 /***********************************************************************
 * the TELNET stuff
@@ -65,8 +68,10 @@ typedef struct telnet_session {
 	char		subbuf[20];
 	unsigned	subidx;
 	// negotiated values
+	unsigned	success_mask;
 	int		is_fullduplex;
 	unsigned	cols, rows;
+	char		type[TN_TYPE_BUFLEN];
 } TELNET_SESSION_T;
 
 typedef struct telnet_server {
