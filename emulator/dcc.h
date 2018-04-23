@@ -15,7 +15,7 @@
 #define	_DCC_H_
 
 #define NUMTERM 32
-#define	NUMSERV 3
+#define	NUMSERV 2
 #define TRACE_DCC 0
 
 // Special Codes 
@@ -97,7 +97,7 @@ enum bufstate {
 	writeready};	// sysbuf awaits further data
 
 /***********************************************************************
-* the line discipline state
+* the contention line discipline state
 ***********************************************************************/
 enum lds {
 	lds_idle=0,	// idle (after receiving EOT
@@ -112,16 +112,15 @@ enum lds {
 * the line discipline used
 ***********************************************************************/
 enum ld {
-	ld_teletype=0,	// no protocol, except input buffer editing
-	ld_contention,	// burroughs contention (half duplex)
-	ld_multipoint};	// burroughs multipoint (party line)
+	ld_teletype=0,	// teletype discipline, except input buffer editing
+	ld_contention};	// burroughs contention (half duplex)
 
 /***********************************************************************
-* the terminal emulation
+* the terminal emulation (used with ld_contention only)
 ***********************************************************************/
 enum em {
-	em_none=0,	// no emulation
-	em_teletype,	// emulate B9352 for line oriented (TELETYPE)
+	em_none=0,	// no emulation, send/receive raw data
+	em_teletype,	// emulate B9352 for external TELETYPE
 	em_ansi};	// emulate B9352 for external ANSI terminal
 
 /***********************************************************************
@@ -134,11 +133,22 @@ enum pc {
 	pc_telnet};	// via TELNET server
 
 /***********************************************************************
+* the physical connection state
+***********************************************************************/
+enum pcs {
+	pcs_disconnected=0,	// not connected
+	pcs_pending,		// connected, pending further verification
+	pcs_connected,		// connected and also connected to system
+	pcs_failed};		// connection failed and will be closed
+
+/***********************************************************************
 * the complete terminal state
 ***********************************************************************/
 typedef struct terminal {
+	char name[10];			// printable name
 // physical connection
 	enum pc pc;			// physical connection
+	enum pcs pcs;			// physical connection state
 	// pc = pc_serial
 	int serial_handle;		// handle of open tty device
 	// pc = pc_canopen
@@ -164,7 +174,7 @@ typedef struct terminal {
 	enum ld ld;			// line discipline
 	enum em em;			// emulation
 	enum lds lds;			// line discipline state
-// status bits
+// status bits to system
 	BIT connected;
 	BIT interrupt;
 	BIT abnormal;
@@ -192,6 +202,33 @@ extern BIT dtrace;
 extern BIT ctrace;
 
 /***********************************************************************
+* physical connection by TELNET
+***********************************************************************/
+extern void pc_telnet_init(void);
+extern void pc_telnet_poll(BIT telnet);
+extern void pc_telnet_poll_terminal(TERMINAL_T *t);
+extern int pc_telnet_read(TERMINAL_T *t, char *buf, int len);
+extern int pc_telnet_write(TERMINAL_T *t, char *buf, int len);
+
+/***********************************************************************
+* physical connection by CANopen
+***********************************************************************/
+extern void pc_canopen_init(void);
+extern void pc_canopen_poll(void);
+extern void pc_canopen_poll_terminal(TERMINAL_T *t);
+extern int pc_canopen_read(TERMINAL_T *t, char *buf, int len);
+extern int pc_canopen_write(TERMINAL_T *t, char *buf, int len);
+
+/***********************************************************************
+* physical connection by SERIAL
+***********************************************************************/
+extern void pc_serial_init(void);
+extern void pc_serial_poll(void);
+extern void pc_serial_poll_terminal(TERMINAL_T *t);
+extern int pc_serial_read(TERMINAL_T *t, char *buf, int len);
+extern int pc_serial_write(TERMINAL_T *t, char *buf, int len);
+
+/***********************************************************************
 * line discipline write:
 * called when the sysbuf has been written to
 ***********************************************************************/
@@ -211,6 +248,14 @@ extern int ld_poll_contention(TERMINAL_T *t);
 * called when the sysbuf is input ready
 ***********************************************************************/
 extern void dcc_input_ready(TERMINAL_T *t);
+
+/***********************************************************************
+* dcc find free terminal
+***********************************************************************/
+extern TERMINAL_T *dcc_find_free_terminal(enum ld ld);
+extern void dcc_init_terminal(TERMINAL_T *t);
+extern void dcc_report_connect(TERMINAL_T *t);
+extern void dcc_report_disconnect(TERMINAL_T *t);
 
 /***********************************************************************
 * B9352 emulation input/output

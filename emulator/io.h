@@ -167,8 +167,8 @@ extern void print_ior(FILE *fp, IOCU*);
 #ifdef USECAN
 /* CAN bus devices */
 extern void can_init(const char *busname);
-extern int can_send_string(unsigned id, const char *data);
-extern char *can_receive_string(unsigned id, char *data, int maxlen);
+extern int can_write(unsigned id, const char *buf, int len);
+extern int can_read(unsigned id, char *buf, int maxlen);
 extern int can_ready(unsigned id);
 #endif
 

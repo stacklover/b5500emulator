@@ -42,12 +42,14 @@ static struct sigevent sev;
 static struct itimerspec its;
 
 typedef struct can {
+	// input buffer
 	char	buf[CANSTRINGLENGTH];
+	int	bufidx;
+	// peer ready
 	int	ready;
-	int	space;
-	char	*string;
-	char	*p;
 	struct timeval last_ready;
+	// peer status
+	int	space;
 } CAN_T;
 
 static CAN_T can[128];
@@ -100,22 +102,11 @@ loop:
 		} else if (cob == MSGID_TPDO4(0)) {
 			// TPDO4: received data
 			can[id].space = frame.data[0] & 0x7f;
-			// process chars if buffer is not busy
-			if (can[id].string == NULL) {
-				for (int j=1; j<frame.can_dlc; j++) {
-					char ch = frame.data[j];
-					if (ch == '\r') {
-						// return
-						*can[id].p = 0;	// close input
-						can_send_string(id, "\r\n");
-						can[id].string = can[id].buf;
-						can[id].p = can[id].buf;
-					} else if (ch >= ' ') {
-						// enter char
-						*can[id].p++ = ch;
-						*can[id].p = 0;
-						//can_send_string(id, can[id].p-1);
-					}
+			// process chars into buffer
+			for (int j=1; j<frame.can_dlc; j++) {
+				char ch = frame.data[j];
+				if (can[id].bufidx < CANSTRINGLENGTH-1) {
+					can[id].buf[can[id].bufidx++] = ch;
 				}
 			}
 		}
@@ -153,45 +144,56 @@ int can_ready(unsigned id) {
 }
 
 /***********************************************************************
-* send string to CANBUS (0 terminated)
+* WRITE to CANBUS
 ***********************************************************************/
-int can_send_string(unsigned id, const char *data)
+int can_write(unsigned id, const char *buf, int len)
 {
 	// possible at all?
 	if (canfd >= 0 && can[id].ready > 0) {
-		const char *p = data;
+		const char *p = buf;
 		struct can_frame frame;
 		frame.can_id = MSGID_RPDO4(id);
-		while (*p) {
+		while (len) {
 			frame.can_dlc = 1;
 			frame.data[0] = 0x80;
-			while (*p && frame.can_dlc <= 7) {
+			while (len && frame.can_dlc <= 7) {
 				frame.data[frame.can_dlc] = *p++;
 				frame.can_dlc++;
+				len--;
 			}
 			can_write(canfd, frame);
 			do {
 				usleep(300000);
 			} while (can[id].space < 100);
 		}
-		return p - data;
+		return p - buf;
 	}
 	return 0;
 }
 
 /***********************************************************************
-* receive string from CANBUS (0 terminated)
+* READ from CANBUS
 ***********************************************************************/
-char *can_receive_string(unsigned id, char *data, int maxlen)
+int can_read(unsigned id, char *buf, int maxlen)
 {
 	// possible at all?
-	if (can[id].string) {
-		strncpy (data, can[id].string, maxlen-1);
-		data[maxlen-1] = 0;
-		can[id].string = NULL;
-		return data;
+	if (canfd >= 0 && can[id].ready > 0) {
+		int cnt = can[id].bufidx;
+		if (cnt < 0 || cnt >= CANSTRINGLENGTH) {
+			printf("can_read: invalid buffer index %d - resetting\n", cnt);
+			can[id].bufidx = 0;
+			return 0;
+		}
+		if (cnt > maxlen)
+			cnt = maxlen;
+		if (cnt < 1)
+			return cnt;
+		memmove(buf, can[id].buf, cnt);
+		can[id].bufidx -= cnt;
+		memmove(can[id].buf, can[id].buf + cnt, can[id].bufidx);
+		return cnt;
 	}
-	return NULL;
+	return -1;
 }
 
 /***********************************************************************
@@ -202,8 +204,7 @@ void can_init(const char *busname)
 	int i;
 	for (i=0; i<128; i++) {
 		can[i].ready = 0;
-		can[i].string = NULL;
-		can[i].p = can[i].buf;
+		can[i].bufidx = 0;
 		can[i].last_ready.tv_sec = 0;
 		can[i].last_ready.tv_usec = 0;
 	}

@@ -67,7 +67,7 @@ typedef struct telnet_session {
 	enum escape	escape;
 	char		subbuf[20];
 	unsigned	subidx;
-	// negotiated values
+	// negotiated terminal values
 	unsigned	success_mask;
 	int		is_fullduplex;
 	unsigned	cols, rows;

@@ -41,3 +41,7 @@ disk/*
 # original B5500 tapes since they are not public
 tapes/B5500*
 
+# cards
+cards/*
+
+

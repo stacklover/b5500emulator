@@ -29,6 +29,11 @@
 ************************************************************************
 * 2018-02-14  R.Meyer
 *   Frame from dev_spo.c
+* 2018-04-19  R.Meyer
+*   new connection acceptance method to filter out non-compatible clients
+* 2018-04-21  R.Meyer
+*   factored out all physcial connection (PC), all line discipline(LD)
+*   and all emulation (EM) functionality to spearate files
 ***********************************************************************/
 
 #include <stdio.h>
@@ -54,20 +59,23 @@
 #include "dcc.h"
 
 /***********************************************************************
+* string constants
+***********************************************************************/
+static const char *pc_name[] = {
+	"NONE", "SERIAL", "CANOPEN", "TELNET"};
+static const char *pcs_name[] = {
+	"DISCONNECTED", "PENDING", "CONNECTED", "FAILED"};
+static const char *ld_name[] = {
+	"TELETYPE", "CONTENTION"};
+static const char *em_name[] = {
+	"NONE", "TELETYPE", "ANSI"};
+static const char *bufstate_name[] = {
+	"NOTREADY", "IDLE", "INPUTBUSY", "READREADY", "OUTPUTBUSY", "WRITEREADY"};
+
+/***********************************************************************
 * the terminals
 ***********************************************************************/
 static TERMINAL_T terminal[NUMTERM];
-
-/***********************************************************************
-* the TELNET servers
-***********************************************************************/
-static TELNET_SERVER_T server[NUMSERV];
-// server[0]: Port   23 - LINE type terminals (B9353 as TELETYPE)
-// server[1]: Port 8023 - BLOCK type terminals (B9352 with external ANSI)
-// server[2]: Port 9023 - BLOCK type terminals (B9352 with protocol)
-static unsigned portno[NUMSERV] = {23, 8023, 9023};
-static enum ld ldno[NUMSERV] = {ld_contention, ld_contention, ld_contention};
-static enum em emno[NUMSERV] = {em_teletype, em_ansi, em_none};
 
 /***********************************************************************
 * misc variables
@@ -143,19 +151,39 @@ static int set_telnet(const char *v, void *) {
 * get status
 ***********************************************************************/
 static int get_status(const char *v, void *) {
-	char buf[OUTBUFSIZE];
 	TERMINAL_T *t;
 	unsigned index;
+	char buf[OUTBUFSIZE];
+	char *p = buf;
+
+	sprintf(buf, "STATN BUFSTATE   IRQ ABN FBF CONTYPE CONSTATE  LINEDISCIP EMLATION CONNECTION\r\n"); 
+	spo_print(buf);
 
 	// list all connected terminals
 	for (index = 0; index < NUMTERM; index++) {
 		t = &terminal[index];
-		if (t->connected) {
-			sprintf(buf,"%u/%u S=%d DE=%d%d B=%d I=%u A=%u F=%u\r\n",
-				TUN(index), BNR(index),
-				t->session.socket, (int)t->ld, (int)t->em,
-				(int)t->bufstate,
-				t->interrupt, t->abnormal, t->fullbuffer);
+		// list all entries that are not in disconnected state
+		if (t->pcs > pcs_disconnected) {
+			p = buf;
+			p += sprintf(p, "%-5.5s %-10.10s I=%u A=%u F=%u %-7.7s %-9.9s %-10.10s %-8.8s",
+				t->name,
+				bufstate_name[t->bufstate],
+				t->interrupt, t->abnormal, t->fullbuffer,
+				pc_name[t->pc], pcs_name[t->pcs], ld_name[t->ld], em_name[t->em]);
+			switch (t->pc) {
+			case pc_none:
+				p += sprintf(p, "\r\n");
+				break;
+			case pc_serial:
+				p += sprintf(p, " H=%d\r\n", t->serial_handle);
+				break;
+			case pc_canopen:
+				p += sprintf(p, " C=%d\r\n", t->canid);
+				break;
+			case pc_telnet:
+				p += sprintf(p, " S=%d\r\n", t->session.socket);
+				break;
+			}
 			spo_print(buf);
 		}
 	}
@@ -168,18 +196,13 @@ static int get_status(const char *v, void *) {
 ***********************************************************************/
 static int set_can(const char *v, void *) {
 	if (isdigit(v[0])) {
-		terminal[0].canid = atoi(v);
-		if (terminal[0].canid < 1 || terminal[0].canid > 126) {
-			terminal[0].canid = 0;
+		terminal[15].canid = atoi(v);
+		if (terminal[15].canid < 1 || terminal[15].canid > 126) {
+			terminal[15].canid = 0;
 			goto help;
 		}
-		// wait for SPO to become ready
-		while (!can_ready(terminal[0].canid)) {
-			spo_print("$WAITING FOR TERMINAL READY\r\n");
-			sleep(1);
-		}
 	} else if (strcasecmp(v, "OFF") == 0) {
-		terminal[0].canid = 0;
+		terminal[15].canid = 0;
 	} else {
 help:		spo_print("$SPECIFY CANID(1..126) OR OFF\r\n");
 		return 2; // FATAL
@@ -203,6 +226,18 @@ static const command_t dcc_commands[] = {
 	{"STATUS", get_status},
 	{NULL, NULL},
 };
+
+/***********************************************************************
+* initialize terminal structure to safe defaults
+***********************************************************************/
+void dcc_init_terminal(TERMINAL_T *t) {
+	memset(t->scrbuf, ' ', sizeof t->scrbuf);
+	t->sysidx = 0; t->keyidx = 0; t->scridx = 0; t->scridy = 0;
+	t->lfpending = false; t->paused = false; t->utf8mode = false;
+	t->insertmode = true;
+	t->inmode = false; t->outmode = false;
+	t->outlastwasmode = false; t->eotcount = 0;
+}
 
 /***********************************************************************
 * Find a terminal that needs service
@@ -238,6 +273,25 @@ static BIT terminal_search(unsigned *ptun, unsigned *pbnr) {
 }
 
 /***********************************************************************
+* Find a terminal that needs service
+***********************************************************************/
+TERMINAL_T *dcc_find_free_terminal(enum ld ld) {
+	unsigned index;
+	TERMINAL_T *t;
+
+	// find a free terminal to handle this
+	for (index = 0; index < NUMTERM; index++) {
+		t = &terminal[index];
+		if (t->ld == ld && t->pcs == pcs_disconnected) {
+			// free terminal found
+			return t;
+		}
+	}
+	// no free terminal found
+	return NULL;
+}
+
+/***********************************************************************
 * Initialize command from argv scanner or special SPO input
 ***********************************************************************/
 int dcc_init(const char *option) {
@@ -247,23 +301,26 @@ int dcc_init(const char *option) {
 		// ignore all SIGPIPEs
 		signal(SIGPIPE, SIG_IGN);
 
-		// init server data structures
-		for (index=0; index<NUMSERV; index++) {
-			telnet_server_clear(server+index);
-		}
+		// init server etc data structures
+		pc_telnet_init();
+		pc_serial_init();
+		pc_canopen_init();
 
 		// init terminal data structures
 		for (index=0; index<NUMTERM; index++) {
 			TERMINAL_T *t = terminal+index;
 			memset(t, 0, sizeof(TERMINAL_T));
-			telnet_session_clear(&t->session);
-			if (index == 0) {
-				// index = 0 is typetype via CANopen
+			sprintf(t->name, "%02u/%02u", TUN(index), BNR(index));
+			// TODO: this next part is kindy hacky, should be
+			// TODO: parametrized
+			// TODO: preferable read SYSDISK-MAKER.CARD...
+			if (index < 15) {
+				t->ld = ld_teletype;
+			} else if (index == 15) {
+				t->ld = ld_teletype;
 				t->pc = pc_canopen;
-				t->canid = 0;
 			} else {
-				// all the rest are via TELNET server
-				t->pc = pc_telnet;
+				t->ld = ld_contention;
 			}
 		}
 	}
@@ -272,170 +329,50 @@ int dcc_init(const char *option) {
 }
 
 /***********************************************************************
-* handle new incoming TELNET session
+* report connect to system
 ***********************************************************************/
-static void new_connection(int newsocket, struct sockaddr_in *addr, enum ld ld, enum em em) {
-	static const char *msg = "\r\nB5500 TIME SHARING - BUSY\r\nPLEASE CALL BACK LATER\r\n";
-	socklen_t addrlen = sizeof(*addr);
-	char host[40];
-	unsigned port;
-	int index, beg, end;
-	TERMINAL_T *t;
-	char buf[OUTBUFSIZE];
-
-	// get the peer info
-	getnameinfo((struct sockaddr*)addr, addrlen, host, sizeof(host), NULL, 0, 0);
-	port = ntohs(addr->sin_port);
-
-	// determine terminal range
-	if (em == em_teletype) {
-		beg = 1;	// 0 reserved for teletype via CANopen (hardwired for now)
-		end = 15;
-	} else {
-		beg = 16;
-		end = NUMTERM-1;
-	}
-
-	// find a free terminal to handle this
-	for (index = beg; index <= end && index < NUMTERM; index++) {
-		t = &terminal[index];
-		if (t->pc == pc_telnet && !t->connected) {
-			// free terminal found
-			if (ctrace) {
-				sprintf(buf, "+FROM %u/%u (%d) %s:%u\r\n",
-					TUN(index), BNR(index), newsocket, host, port);
-				spo_print(buf);
-			}
-			telnet_session_open(&(t->session), newsocket);
-			memset(t->scrbuf, ' ', sizeof t->scrbuf);
-			t->sysidx = 0;
-			t->keyidx = 0;
-			t->scridx = 0;
-			t->scridy = 0;
-			t->lfpending = false;
-			t->paused = false;
-			t->utf8mode = false;
-			t->insertmode = true;
-			t->eotcount = 0;
-			t->abnormal = true;
-			t->bufstate = writeready;
-			t->ld = ld;
-			t->em = em;
-			t->lds = lds_idle;
-			t->inmode = false;
-			t->outmode = false;
-			t->outlastwasmode = false;
-			t->eotcount = 0;
-			t->connected = true;
-			t->interrupt = true;
-			return;
-		}
-	}
-	// nothing found
-	if (ctrace) {
-		sprintf(buf, "+BUSY %u/%u (%d)\r\n",
-			TUN(index), BNR(index), newsocket);
-		spo_print(buf);
-	}
-	write(newsocket, msg, strlen(msg));
-	close(newsocket);
+void dcc_report_connect(TERMINAL_T *t) {
+	// do not report again
+	if (!t->connected)
+		t->interrupt = true;
+	t->fullbuffer = false; t->bufstate = writeready;
+	t->abnormal = true; t->connected = true;
+	t->sysbuf[0] = 0; t->sysidx = 0;
 }
 
 /***********************************************************************
-* handle TELNET server
+* report disconnect to system
 ***********************************************************************/
-static void dcc_test_incoming(void) {
-	int newsocket = -1, cnt;
-	struct sockaddr_in addr;
+void dcc_report_disconnect(TERMINAL_T *t) {
+	// do not report again
+	if (t->connected)
+		 t->interrupt = true;
+	t->fullbuffer = false; t->bufstate = notready;
+	t->abnormal = true; t->connected = false;
+	t->sysbuf[0] = 0; t->sysidx = 0;
+}
+
+/***********************************************************************
+* handle servers, connections and terminals
+***********************************************************************/
+static void dcc_poll(void) {
 	unsigned index;
-	char buf[OUTBUFSIZE];
 	TERMINAL_T *t;
 
-	// start/stop servers
-	for (index=0; index<NUMSERV; index++) {
-		if (telnet && server[index].socket <= 2) {
-			// server needs to be started
-			telnet_server_start(server+index, portno[index]);
-		} else if (!telnet && server[index].socket > 2) {
-			// server needs to be stopped
-			telnet_server_stop(server+index);
-		}
-	}
+	// poll servers etc.
+	pc_telnet_poll(telnet);
+	pc_serial_poll();
+	pc_canopen_poll();
 
-	// poll servers for new connections
-	for (index=0; index<NUMSERV; index++) {
-		if (server[index].socket > 2) {
-			newsocket = telnet_server_poll(server+index, &addr);
-			if (newsocket > 0)
-				new_connection(newsocket, &addr, ldno[index], emno[index]);
-		}
-	}
-	
-	// check for input from any connection
+	// poll existing connections
 	for (index = 0; index < NUMTERM; index++) {
 		t = &terminal[index];
-		// check for CANopen ready/unready
-		if (t->pc == pc_canopen) {
-			BIT ready = (t->canid > 0) && can_ready(t->canid);
-			if (ready && !t->connected && can_receive_string(t->canid, buf, sizeof buf) != NULL) {
-				// CAN became ready
-				memset(t->scrbuf, ' ', sizeof t->scrbuf);
-				t->sysidx = 0;
-				t->keyidx = 0;
-				t->scridx = 0;
-				t->scridy = 0;
-				t->lfpending = false;
-				t->paused = false;
-				t->utf8mode = false;
-				t->insertmode = true;
-				t->eotcount = 0;
-				t->abnormal = true;
-				t->bufstate = writeready;
-				t->ld = ld_teletype;
-				t->em = em_none;
-				t->lds = lds_idle;
-				t->inmode = false;
-				t->outmode = false;
-				t->outlastwasmode = false;
-				t->eotcount = 0;
-				t->connected = true;
-				t->interrupt = true;
-			} else if (!ready && t->connected) {
-				// CAN became unready
-				t->interrupt = true;
-				t->abnormal = true;
-				t->fullbuffer = false;
-				t->bufstate = notready;
-				t->connected = false;
-				t->sysbuf[0] = 0;
-				t->sysidx = 0;
-			}
-		}
-		if (t->connected) {
-			if ((t->pc == pc_telnet && t->session.socket > 2) || (t->pc == pc_canopen && t->canid > 0)) {
-				// socket is open OR canid given
-				// depending on line discipline the action is different
-				if (t->ld == ld_teletype)
-					cnt = ld_poll_teletype(t);
-				else
-					cnt = ld_poll_contention(t);
-				if (cnt < 0)
-					goto isclosed;
-			} else {
-isclosed:			// socket is closed OR canid not given
-				if (ctrace) {
-					sprintf(buf, "+CLSD %u/%u\r\n",
-						TUN(index), BNR(index));
-					spo_print(buf);
-				}
-				t->interrupt = true;
-				t->abnormal = true;
-				t->fullbuffer = false;
-				t->bufstate = notready;
-				t->connected = false;
-				t->sysbuf[0] = 0;
-				t->sysidx = 0;
-			}
+		switch (t->pc) {
+		case pc_telnet: pc_telnet_poll_terminal(t); break;
+		case pc_serial: pc_serial_poll_terminal(t); break;
+		case pc_canopen: pc_canopen_poll_terminal(t); break;
+		default:
+			;
 		}
 	}
 }
@@ -449,8 +386,8 @@ BIT dcc_ready(unsigned index) {
 	if (!ready)
 		dcc_init("");
 
-	// test if incoming connection or data
-	dcc_test_incoming();
+	// do ALL the polling first
+	dcc_poll();
 
 	// check for a signal ready sysbuf
 	if (terminal_search(NULL, NULL)) {
@@ -463,7 +400,7 @@ BIT dcc_ready(unsigned index) {
 }
 
 /***********************************************************************
-* read (from inbuf to system)
+* read (from sysbuf to system)
 ***********************************************************************/
 static void dcc_read(IOCU *u) {
 	// terminal unit and buffer number are in "word count" field of IOCW
@@ -508,7 +445,7 @@ static void dcc_read(IOCU *u) {
 	// now do the read
 
 	if (dtrace)
-		printf("+READ %u/%u |", tun, bnr);
+		printf("+READ %s |", t->name);
 
 	ptr = 0;
 	gmset = false;
@@ -595,7 +532,7 @@ static void dcc_write(IOCU *u) {
 
 	// now do the write
 	if (dtrace)
-		printf("+WRIT %u/%u |", tun, bnr);
+		printf("+WRIT %s |", t->name);
 
 	t->sysidx = 0;	// start of sysbuf
 

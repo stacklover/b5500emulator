@@ -7,11 +7,14 @@
 ************************************************************************
 * b5500 data communication emulation (DCC)
 *
-* This emulates a B9352 Terminal
+* LINE DISCIPLINE CONTENTION
 *
 ************************************************************************
 * 2018-04-01  R.Meyer
 *   Frame from dev_dcc.c
+* 2018-04-21  R.Meyer
+*   factored out all physcial connection (PC), all line discipline(LD)
+*   and all emulation (EM) functionality to spearate files
 ***********************************************************************/
 
 #include <stdio.h>
@@ -158,34 +161,17 @@ void ld_write_contention(TERMINAL_T *t) {
 	int ptr;
 	char ch;
 	BIT error = false;
-	char obuf[30];
+	//char obuf[30];
 
 	// convert sysbuf to outbuf, release sysbuf
 	BIT disc = convert6to8(t);
-
-	// if no emulation, just send via TELNET
-	if (t->em == em_none) {
-		// try to write
-		ptr = telnet_session_write(&t->session, t->outbuf, t->outidx);
-
-		// reason to disconnect?
-		if (disc || ptr != t->outidx) {
-			if (disc && dtrace) {
-				sprintf(obuf, "+DISC REQ (%d)\n", t->session.socket);
-				spo_print(obuf);
-			}
-			telnet_session_close(&t->session);
-		}
-
-		return;
-	}
 
 	// reset inbuf index
 	t->inidx = 0;
 
 	// here we run the terminal end of the line discipline
 	if (etrace)
-		printf("+DATA(%u) ", t->session.socket);
+		printf("+DATA ");
 	ptr = 0;
 	while (ptr < t->outidx && !error) {
 		ch = t->outbuf[ptr++];
@@ -323,10 +309,10 @@ finish:
 	// reason to disconnect?
 	if (disc || error) {
 		if (disc && dtrace) {
-			sprintf(obuf, "+DISC REQ (%d)\n", t->session.socket);
-			spo_print(obuf);
+			sprintf(t->outbuf, "+DISC REQ %s\r\n", t->name);
+			spo_print(t->outbuf);
 		}
-		telnet_session_close(&t->session);
+		t->pcs = pcs_failed;
 	}
 }
 
@@ -336,7 +322,7 @@ finish:
 ***********************************************************************/
 int ld_poll_contention(TERMINAL_T *t) {
 	char ibuf[10], ch;
-	int cnt, idx;
+	int cnt = 0, idx;
 
 	// simple case with no emulation, assemble into keybuf
 	// until terminal char found
@@ -346,7 +332,13 @@ int ld_poll_contention(TERMINAL_T *t) {
 			return 0;
 
 		// check for data available
-		cnt = telnet_session_read(&t->session, ibuf, sizeof ibuf);
+		switch (t->pc) {
+		case pc_telnet: cnt = pc_telnet_read(t, ibuf, sizeof ibuf); break;
+		case pc_serial: cnt = pc_serial_read(t, ibuf, sizeof ibuf); break;
+		case pc_canopen: cnt = pc_canopen_read(t, ibuf, sizeof ibuf); break;
+		default: return -1;
+		}
+
 		if (cnt <= 0) // non recoverable error or no data
 			return cnt;
 

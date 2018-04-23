@@ -7,7 +7,7 @@
 ************************************************************************
 * b5500 data communication emulation (DCC)
 *
-* This emulates a B9352 Terminal on an ANSI Terminal
+* This emulates a B9352 Terminal on a TELETYPE or an ANSI Terminal
 *
 * t->em == em_teletype: output is line oriented
 * t->em == em_ansi: behaviour is basically true to the original B9352
@@ -15,6 +15,9 @@
 ************************************************************************
 * 2018-04-01  R.Meyer
 *   Frame from dev_dcc.c
+* 2018-04-21  R.Meyer
+*   factored out all physcial connection (PC), all line discipline(LD)
+*   and all emulation (EM) functionality to spearate files
 ***********************************************************************/
 
 #include <stdio.h>
@@ -277,71 +280,81 @@ int b9352_output(TERMINAL_T *t, char ch) {
 	char *op = obuf;
 	int cnt = 0;
 
-	switch (ch) {
-	case DC1: // DC1 = clear from current to end of line
-		erasetoeol(t);
-		break;
-	case BS: // BS = one position left
-		t->scridx--;
-		cursorwrap(t);
-		cursormove(t);
-		break;
-	case DC4: // DC4 = home position, no clear
-		if (t->em == em_teletype) {
-			// teletype emulation
-			t->paused = true;
-			*op++ = BEL;
-			t->scridx = 0;
-			cursormove(t);
-		} else {
-			t->scridx = t->scridy = 0;
-			cursormove(t);
-		}
-		break;
-	case DC3: // DC3 = one position up
-		t->scridy--;
-		cursorwrap(t);
-		cursormove(t);
-		break;
-	case LF: // LF = one position down
-		t->scridy++;
-		cursorwrap(t);
-		cursormove(t);
-		break;
-	case CR: // CR = move cursor to start of next line
-		store(t, CR);
-		t->scridx = 0;
-		t->scridy++;
-		cursorwrap(t);
-		cursormove(t);
-		break;
-	case FF: // FF = clear screen and cursor home
-		if (t->em == em_teletype) {
-			// teletype emulation
-			t->scridx = 0;
-			t->scridy++;
+	if (t->em == em_teletype) {
+		if (isprint(ch) || ch == CR || ch == LF)
+			*op++ = ch;
+	} else {
+		switch (ch) {
+		case DC1: // DC1 = clear from current to end of line
+			erasetoeol(t);
+			break;
+		case BS: // BS = one position left
+			t->scridx--;
 			cursorwrap(t);
+			cursormove(t);
+			break;
+		case DC4: // DC4 = home position, no clear
+			if (true) {
+				// teletype emulation
+				t->paused = true;
+				*op++ = BEL;
+				t->scridx = 0;
+				cursormove(t);
+			} else {
+				t->scridx = t->scridy = 0;
+				cursormove(t);
+			}
+			break;
+		case DC3: // DC3 = one position up
+			t->scridy--;
+			cursorwrap(t);
+			cursormove(t);
+			break;
+		case LF: // LF = one position down
 			t->scridy++;
 			cursorwrap(t);
 			cursormove(t);
-		} else {
-			t->scridx = t->scridy = 0;
+			break;
+		case CR: // CR = move cursor to start of next line
+			store(t, CR);
+			t->scridx = 0;
+			t->scridy++;
+			cursorwrap(t);
 			cursormove(t);
-			erasescreen(t);
-		}
-		break;
-	case NUL: // NUL = time fill, no effect on screen
-		break;
-	default:
-		if (isprint(ch) || ch == ETX || ch == RS || ch == US) {
-			store(t, ch);
-		} else {
-			printf("<%02x>", ch);
+			break;
+		case FF: // FF = clear screen and cursor home
+			if (true) {
+				// teletype emulation
+				t->scridx = 0;
+				t->scridy++;
+				cursorwrap(t);
+				t->scridy++;
+				cursorwrap(t);
+				cursormove(t);
+			} else {
+				t->scridx = t->scridy = 0;
+				cursormove(t);
+				erasescreen(t);
+			}
+			break;
+		case NUL: // NUL = time fill, no effect on screen
+			break;
+		default:
+			if (isprint(ch) || ch == ETX || ch == RS || ch == US) {
+				store(t, ch);
+			} else {
+				printf("<%02x>", ch);
+			}
 		}
 	}
 
 	// try to write to terminal
-	cnt = telnet_session_write(&t->session, obuf, op-obuf);
+	switch (t->pc) {
+	case pc_serial: cnt = write(t->serial_handle, obuf, op-obuf); break;
+	case pc_canopen: cnt = can_write(t->canid, obuf, op-obuf); break;
+	case pc_telnet: cnt = telnet_session_write(&t->session, obuf, op-obuf); break;
+	default: cnt = 0;
+	}
 
 	// reason to disconnect?
 	return cnt != (op-obuf);
