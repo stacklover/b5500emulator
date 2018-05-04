@@ -371,17 +371,10 @@ static void interpret_esc(TERMINAL_T *t) {
 	switch (t->keybuf[0]) {
 	case 'O': // DEC specific?
 		switch (t->keybuf[1]) {
-		case 'P': // F1
-			redisplay(t, 0, ROWS-1);
-			return;
-		case 'Q': // F2
-			t->utf8mode = !t->utf8mode;
-			redisplay(t, 0, ROWS-1);
-			return;
-		case 'R': // F3
-			return;
-		case 'S': // F4
-			return;
+		case 'P': goto F1;
+		case 'Q': goto F2;
+		case 'R': goto F3;
+		case 'S': goto F4;
 		default:
 			;
 		}
@@ -422,6 +415,17 @@ static void interpret_esc(TERMINAL_T *t) {
 				case 3: // DELETE
 					char_delete(t);
 					return;
+				case 11: F1: // F1
+					redisplay(t, 0, ROWS-1);
+					return;
+				case 12: F2: // F2
+					t->utf8mode = !t->utf8mode;
+					redisplay(t, 0, ROWS-1);
+					return;
+				case 13: F3: // F3
+					break;
+				case 14: F4: // F4
+					break;
 				default:
 					;
 				}
@@ -471,15 +475,24 @@ int b9352_input(TERMINAL_T *t, char ch) {
 		// mark send ready
 		t->lds = lds_sendrdy;
 
-#if 1
 		// move cursor to start of next line
 		t->scridx = 0;
 		t->scridy++;
-#else
-		// move cursor to end of string
-		t->scridx = endpos - linestart;
-#endif
 		cursorwrap(t);
+#if 1
+		// skip protected fields
+		linestart = t->scridy * COLS;
+		lineend = linestart + COLS;
+		cursor = linestart;
+		// are we on protected field right now?
+		if (t->scrbuf[cursor] == RS) {
+			// search for US
+			while (t->scrbuf[cursor] != US && cursor < lineend - 2)
+				cursor++;
+			cursor++;
+			t->scridx = cursor - linestart;
+		}
+#endif
 		cursormove(t);
 
 		// leave this loop

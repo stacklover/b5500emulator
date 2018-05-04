@@ -133,7 +133,7 @@ void ld_write_teletype(TERMINAL_T *t) {
 	// disconnect requested?
 	if (disc) {
 		if (dtrace) {
-			sprintf(t->outbuf, "+DISC REQ %s\r\n", t->name);
+			sprintf(t->outbuf, "+DREQ %s\r\n", t->name);
 			spo_print(t->outbuf);
 		}
 		t->pcs = pcs_failed;
@@ -167,7 +167,9 @@ int ld_poll_teletype(TERMINAL_T *t) {
 		// make any sequence of CR,LF codes behave like a single CR
 		if (ch == CR || ch == LF) {
 			// prevent further line ending chars of that sequence from causing action
-			if (t->escaped) ch = NUL; else ch = CR;
+			if (t->escaped)
+				continue;
+			ch = CR;
 			t->escaped = true;
 		} else {
 			t->escaped = false;

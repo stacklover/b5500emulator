@@ -138,6 +138,7 @@ enum pc {
 enum pcs {
 	pcs_disconnected=0,	// not connected
 	pcs_pending,		// connected, pending further verification
+	pcs_aborted,		// connected, now aborted
 	pcs_connected,		// connected and also connected to system
 	pcs_failed};		// connection failed and will be closed
 

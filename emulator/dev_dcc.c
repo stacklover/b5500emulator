@@ -64,7 +64,7 @@
 static const char *pc_name[] = {
 	"NONE", "SERIAL", "CANOPEN", "TELNET"};
 static const char *pcs_name[] = {
-	"DISCONNECTED", "PENDING", "CONNECTED", "FAILED"};
+	"DISCONNECTED", "PENDING", "ABORTED", "CONNECTED", "FAILED"};
 static const char *ld_name[] = {
 	"TELETYPE", "CONTENTION"};
 static const char *em_name[] = {
@@ -156,7 +156,8 @@ static int get_status(const char *v, void *) {
 	char buf[OUTBUFSIZE];
 	char *p = buf;
 
-	sprintf(buf, "STATN BUFSTATE   IRQ ABN FBF CONTYPE CONSTATE  LINEDISCIP EMLATION CONNECTION\r\n"); 
+	sprintf(buf, "STATN BUFSTATE   IRQ ABN FBF CONTYPE CONSTATE  "
+			"LINEDISCIP EMLATION CONNECTION\r\n"); 
 	spo_print(buf);
 
 	// list all connected terminals
@@ -165,11 +166,14 @@ static int get_status(const char *v, void *) {
 		// list all entries that are not in disconnected state
 		if (t->pcs > pcs_disconnected) {
 			p = buf;
-			p += sprintf(p, "%-5.5s %-10.10s I=%u A=%u F=%u %-7.7s %-9.9s %-10.10s %-8.8s",
+			p += sprintf(p,
+				"%-5.5s %-10.10s I=%u A=%u F=%u %-7.7s "
+					"%-9.9s %-10.10s %-8.8s",
 				t->name,
 				bufstate_name[t->bufstate],
 				t->interrupt, t->abnormal, t->fullbuffer,
-				pc_name[t->pc], pcs_name[t->pcs], ld_name[t->ld], em_name[t->em]);
+				pc_name[t->pc], pcs_name[t->pcs],
+				ld_name[t->ld], em_name[t->em]);
 			switch (t->pc) {
 			case pc_none:
 				p += sprintf(p, "\r\n");
@@ -181,7 +185,10 @@ static int get_status(const char *v, void *) {
 				p += sprintf(p, " C=%d\r\n", t->canid);
 				break;
 			case pc_telnet:
-				p += sprintf(p, " S=%d\r\n", t->session.socket);
+				p += sprintf(p, " S=%d (%s %ux%u)\r\n",
+					t->session.socket,
+					t->session.type,
+					t->session.cols, t->session.rows);
 				break;
 			}
 			spo_print(buf);

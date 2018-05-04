@@ -70,9 +70,8 @@ static void new_connection(int newsocket, struct sockaddr_in *addr, enum ld ld, 
 	if (t != NULL) {
 		// free terminal found
 		if (ctrace) {
-			sprintf(buf, "+FROM %s:%u (%d) -> %s P",
-				host, port, newsocket, t->name);
-			spo_print(buf);
+			t->outidx = sprintf(t->outbuf, "+NEWC %s %s:%u (%d)",
+				t->name, host, port, newsocket);
 		}
 		dcc_init_terminal(t);
 		telnet_session_clear(&t->session);
@@ -98,7 +97,6 @@ static void new_connection(int newsocket, struct sockaddr_in *addr, enum ld ld, 
 void pc_telnet_poll_terminal(TERMINAL_T *t) {
 	static const char *msg = "\r\nB5500 TIME SHARING - YOUR TELNET CLIENT IS NOT COMPATIBLE\r\n";
 	int cnt = -1;
-	char buf[OUTBUFSIZE];
 
 	switch (t->pcs) {
 	case pcs_disconnected:
@@ -108,24 +106,33 @@ void pc_telnet_poll_terminal(TERMINAL_T *t) {
 		// connection is pending
 		// poll receive to make negotiation run
 		// (we are not interested in any data yet)
-		cnt = telnet_session_read(&t->session, buf, sizeof buf);
+		cnt = telnet_session_read(&t->session, t->inbuf, sizeof t->inbuf);
 		if (cnt < 0) {
 			// socket closed by peer
-			printf(" F");
-			t->pcs = pcs_failed;
+			t->outidx += sprintf(t->outbuf+t->outidx, " CLOSED\r\n");
+			if (ctrace)
+				spo_print(t->outbuf);
+			t->pcs = pcs_aborted;
 		} else if (t->session.success_mask & 1) {
 			// negotiations have come up with a bad
 			// send message
 			telnet_session_write(&t->session, msg, strlen(msg));
-			printf(" F");
-			t->pcs = pcs_failed;
+			t->outidx += sprintf(t->outbuf+t->outidx, " FAILED\r\n");
+			if (ctrace)
+				spo_print(t->outbuf);
+			t->pcs = pcs_aborted;
 		} else if ((t->session.success_mask & (1u << TN_TERMTYPE)) &&
 			   (t->session.success_mask & (1u << TN_WINDOWSIZE))) {
 			// all negotiations succeeded
 			// report it to system
-			dcc_report_connect(t);
-			printf(" C\n");
+			t->outidx += sprintf(t->outbuf+t->outidx, " CONNECTED %s %ux%u\r\n",
+				t->session.type, t->session.cols, t->session.rows);
+			if (ctrace)
+				spo_print(t->outbuf);
 			t->pcs = pcs_connected;
+			dcc_report_connect(t);
+		} else {
+			// keep waiting
 		}
 		break;
 	case pcs_connected:
@@ -139,15 +146,21 @@ void pc_telnet_poll_terminal(TERMINAL_T *t) {
 			break;
 		}
 		if (cnt < 0) {
-			printf(" F");
+			// socket closed by peer
 			t->pcs = pcs_failed;
 		}
 		break;
+	case pcs_aborted:
+		telnet_session_close(&t->session);
+		t->pcs = pcs_disconnected;
+		t->pc = pc_none;
+		break;
+
 	case pcs_failed:
 		if (ctrace) {
-			sprintf(buf, "+CLSD %s\r\n",
+			t->outidx = sprintf(t->outbuf, "+CLSD %s\r\n",
 				t->name);
-			spo_print(buf);
+			spo_print(t->outbuf);
 		}
 		telnet_session_close(&t->session);
 		dcc_report_disconnect(t);

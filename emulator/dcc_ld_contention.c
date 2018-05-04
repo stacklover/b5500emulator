@@ -171,7 +171,7 @@ void ld_write_contention(TERMINAL_T *t) {
 
 	// here we run the terminal end of the line discipline
 	if (etrace)
-		printf("+DATA ");
+		printf("+DATA %s ", t->name);
 	ptr = 0;
 	while (ptr < t->outidx && !error) {
 		ch = t->outbuf[ptr++];
@@ -222,7 +222,7 @@ void ld_write_contention(TERMINAL_T *t) {
 
 					// ACK for our data or unexpected
 					if (etrace)
-						printf("[EOT]\n");
+						printf("[EOT]");
 
 					// prepare response
 					t->inbuf[t->inidx++] = EOT;
@@ -242,7 +242,7 @@ void ld_write_contention(TERMINAL_T *t) {
 
 				// EOT and we got nothing to send
 				if (etrace)
-					printf("[EOT]\n");
+					printf("[EOT]");
 
 				// prepare response
 				t->inbuf[t->inidx++] = EOT;
@@ -262,7 +262,7 @@ void ld_write_contention(TERMINAL_T *t) {
 			} else if (ch == ETX) {
 				// data ends
 				if (etrace)
-					printf("<ETX>[ACK]\n");
+					printf("<ETX>[ACK]");
 
 				// prepare response
 				t->inbuf[t->inidx++] = ACK;
@@ -306,10 +306,13 @@ void ld_write_contention(TERMINAL_T *t) {
 	} // while
 
 finish:
+	if (etrace)
+		printf("\n");
+
 	// reason to disconnect?
 	if (disc || error) {
 		if (disc && dtrace) {
-			sprintf(t->outbuf, "+DISC REQ %s\r\n", t->name);
+			sprintf(t->outbuf, "+DREQ %s\r\n", t->name);
 			spo_print(t->outbuf);
 		}
 		t->pcs = pcs_failed;
@@ -370,7 +373,7 @@ int ld_poll_contention(TERMINAL_T *t) {
 	// keybuf ready for sending and sysbuf idle?
 	if (t->lds == lds_sendrdy && t->bufstate == idle) {
 		if (etrace)
-			printf("[ENQ]");
+			printf("+DATA %s [ENQ]\n", t->name);
 		t->sysbuf[0] = ENQ + 0x20;
 		t->sysidx = 1;
 		t->abnormal = false;
