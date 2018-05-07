@@ -114,8 +114,10 @@ extern void main_read(IOCU *u);
 extern void main_read_inc(IOCU *u);
 extern void main_write(IOCU *u);
 extern void main_write_inc(IOCU *u);
+extern void main_write_dec(IOCU *u);
 extern void get_ob(IOCU *u);
 extern void put_ib(IOCU *u);
+extern void put_ib_reverse(IOCU *u);
 
 /* Supervisory Console (SPO) */
 extern void spo_print(const char *buf);
@@ -132,6 +134,12 @@ extern void cr_term(void);
 extern BIT cr_ready(unsigned index);
 extern void cr_read(IOCU*);
 
+/* Card Punches (CPx) */
+extern int cp_init(const char *info);
+extern void cp_term(void);
+extern BIT cp_ready(unsigned index);
+extern void cp_write(IOCU*);
+
 /* Line Printers (LPx) */
 extern int lp_init(const char *info);
 extern void lp_term(void);
@@ -143,6 +151,12 @@ extern int mt_init(const char *info);
 extern void mt_term(void);
 extern BIT mt_ready(unsigned index);
 extern void mt_access(IOCU*);
+
+/* Magnetic Tapes V2 (MTx) */
+extern int mt2_init(const char *info);
+extern void mt2_term(void);
+extern BIT mt2_ready(unsigned index);
+extern void mt2_access(IOCU*);
 
 /* Disk Control Units (DKx) */
 extern int dk_init(const char *info);

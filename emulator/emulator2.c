@@ -629,6 +629,8 @@ int handle_option(const char *option) {
                 return spo_init(option); /* console emulation options */
 	} else if (strncasecmp(option, "cr", 2) == 0) {
                 return cr_init(option);  /* card reader emulation options */
+	} else if (strncasecmp(option, "cp", 2) == 0) {
+                return cp_init(option);  /* card punch emulation options */
 	} else if (strncasecmp(option, "mt", 2) == 0) {
                 return mt_init(option); /* tape emulation options */
 	} else if (strncasecmp(option, "dk", 2) == 0) {

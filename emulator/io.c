@@ -79,6 +79,11 @@ void main_write_inc(IOCU *u) {
 	u->d_addr = (u->d_addr+1) & MASKMEM;
 }
 
+void main_write_dec(IOCU *u) {
+	MAIN[u->d_addr & MASKMEM] = u->w & MASK_WORD48;
+	u->d_addr = (u->d_addr-1) & MASKMEM;
+}
+
 /***********************************************************************
 * Sequential character accesses using input/output buffer of a unit
 ***********************************************************************/
@@ -90,6 +95,11 @@ void get_ob(IOCU *u) {
 void put_ib(IOCU *u) {
 	u->w = (u->w << 6) & MASK_WORD48;
 	u->w |= u->ib & 077;
+}
+
+void put_ib_reverse(IOCU *u) {
+	u->w = (u->w >> 6) & MASK_WORD48;
+	u->w |= (WORD48)(u->ib & 077) << 42;
 }
 
 /***********************************************************************
@@ -124,7 +134,7 @@ const UNIT unit[32][2] = {
         /*07*/ {{"MTD", 47-44, 3, mt_ready, mt_access, NULL},  {"MTD", 47-44, 3, mt_ready, mt_access, NULL}},
         /*08*/ {{"DRB", 47-30, 1},                             {"DRB", 47-30, 1}},
         /*09*/ {{"MTE", 47-43, 4, mt_ready, mt_access, NULL},  {"MTE", 47-43, 4, mt_ready, mt_access, NULL}},
-        /*10*/ {{"CPA", 47-25, 0},                             {"CRA", 47-24, 0, cr_ready, cr_read, NULL}},
+        /*10*/ {{"CPA", 47-25, 0, cp_ready, cp_write, NULL},   {"CRA", 47-24, 0, cr_ready, cr_read, NULL}},
         /*11*/ {{"MTF", 47-42, 5, mt_ready, mt_access, NULL},  {"MTF", 47-42, 5, mt_ready, mt_access, NULL}},
         /*12*/ {{"DKB", 47-28, 1, dk_ready, dk_access, NULL},  {"DKB", 47-28, 1, dk_ready, dk_access, NULL}},
         /*13*/ {{"MTH", 47-41, 6, mt_ready, mt_access, NULL},  {"MTH", 47-41, 6, mt_ready, mt_access, NULL}},

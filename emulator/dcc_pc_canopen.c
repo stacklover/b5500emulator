@@ -76,6 +76,7 @@ void pc_canopen_poll_terminal(TERMINAL_T *t) {
 			t->pcs = pcs_failed;
 		}
 		break;
+	case pcs_aborted:
 	case pcs_failed:
 		if (ctrace) {
 			sprintf(buf, "+CLSD %s\r\n",

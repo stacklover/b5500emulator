@@ -1,7 +1,7 @@
 /***********************************************************************
 * b5500emulator
 ************************************************************************
-* Copyright (c) 2017, Reinhard Meyer, DL5UY
+* Copyright (c) 2018, Reinhard Meyer, DL5UY
 * Licensed under the MIT License,
 *       see LICENSE
 ************************************************************************
@@ -11,6 +11,8 @@
 *   Factored out from emulator.c
 * 2018-03-16  R.Meyer
 *   Changed old ACCESSOR method to main_*_inc functions
+* 2018-05-05  R.Meyer
+*   Converted to Input/Output Buffer
 ***********************************************************************/
 
 #include <stdio.h>
@@ -27,25 +29,28 @@
 
 #define TAPES 16
 #define NAMELEN 100
-#define	TBUFLEN	164
+#define	TBUFLEN	8192
 
 /***********************************************************************
 * for each supported tape drive
 ***********************************************************************/
 static struct mt {
-	char	filename[NAMELEN];
-	FILE	*fp;
-	BIT	ready;
-	char	tbuf[TBUFLEN];
-	char	*tbufp;
-        int	line, lastpos;
-	BIT	eof;
+	char	filename[NAMELEN];	// external filename
+	FILE	*fp;			// file handle
+	int	reclen;			// length of record in tbuf
+        int	pos;			// position in file
+	int	recpos;			// position of record begin
+	BIT	ready;			// unit is ready
+	BIT	eof;			// unit has encountered an eof
+	BIT	writering;		// unit has write ring
+	char	tbuf[TBUFLEN];		// tape buffer
 } mt[TAPES];
 
 /***********************************************************************
 * optional open file to write debugging traces into
 ***********************************************************************/
 static FILE *trace = NULL;
+
 static struct mt *mtx = NULL;
 
 /***********************************************************************
@@ -72,27 +77,34 @@ static int set_mttrace(const char *v, void *) {
 }
 
 /***********************************************************************
-* specify or close the file for emulation
+* specify or close the file for emulation (read/write)
 ***********************************************************************/
 static int set_mtfile(const char *v, void *) {
 	if (!mtx) {
 		printf("mt not specified\n");
 		return 2; // FATAL
 	}
+
+	// if open, close current file
+	if (mtx->fp) {
+		fclose(mtx->fp);
+	}
+
+	mtx->fp = NULL;
+	mtx->reclen = 0;
+	mtx->pos = 0;
+	mtx->recpos = 0;
+	mtx->ready = false;
+	mtx->eof = true;
+	mtx->writering = false;
+
 	strncpy(mtx->filename, v, NAMELEN);
 	mtx->filename[NAMELEN-1] = 0;
-
-	// if we are ready, close current file
-	if (mtx->ready) {
-		fclose(mtx->fp);
-		mtx->fp = NULL;
-		mtx->ready = false;
-	}
 
 	// now open the new file, if any name was given
 	// if none given, the drive just stays unready
 	if (mtx->filename[0]) {
-		mtx->fp = fopen(mtx->filename, "r"); // currently tapes are always read only
+		mtx->fp = fopen(mtx->filename, "r+");	// read/write
 		if (mtx->fp) {
 			mtx->ready = true;
 			mtx->eof = false;
@@ -103,6 +115,63 @@ static int set_mtfile(const char *v, void *) {
 			return 2; // FATAL
 		}
 	}
+	return 0; // OK
+}
+
+/***********************************************************************
+* specify or close the file for emulation (create and read/write)
+***********************************************************************/
+static int set_mtnewfile(const char *v, void *) {
+	if (!mtx) {
+		printf("mt not specified\n");
+		return 2; // FATAL
+	}
+
+	// if open, close current file
+	if (mtx->fp) {
+		fclose(mtx->fp);
+	}
+
+	mtx->fp = NULL;
+	mtx->reclen = 0;
+	mtx->pos = 0;
+	mtx->recpos = 0;
+	mtx->ready = false;
+	mtx->eof = true;
+	mtx->writering = false;
+
+	strncpy(mtx->filename, v, NAMELEN);
+	mtx->filename[NAMELEN-1] = 0;
+
+	// now open the new file, if any name was given
+	// if none given, the drive just stays unready
+	if (mtx->filename[0]) {
+		mtx->fp = fopen(mtx->filename, "w+");	// create or truncate, then read/write
+		if (mtx->fp) {
+			mtx->ready = true;
+			mtx->eof = false;
+			mtx->writering = true;		// implicitly writeable
+			return 0; // OK
+		} else {
+			// cannot open
+			perror(mtx->filename);
+			return 2; // FATAL
+		}
+	}
+	return 0; // OK
+}
+
+/***********************************************************************
+* set the writering flag
+***********************************************************************/
+static int set_mtwritering(const char *v, void *) {
+	if (!mtx) {
+		printf("mt not specified\n");
+		return 2; // FATAL
+	}
+
+	mtx->writering = true;
+
 	return 0; // OK
 }
 
@@ -128,6 +197,8 @@ static const command_t mt_commands[] = {
 	{"mtt",		set_mt, (void *) 15},
 	{"trace",	set_mttrace},
 	{"file",	set_mtfile},
+	{"newfile",	set_mtnewfile},
+	{"writering",	set_mtwritering},
 	{NULL,		NULL},
 };
 
@@ -153,18 +224,18 @@ BIT mt_ready(unsigned index) {
 ***********************************************************************/
 void mt_access(IOCU *u) {
         unsigned words;
-        BIT mi, binary, tapedir, usewc, read;
+        BIT mi, binary, reverse, usewc, read;
 
-        int i, cp=42;
+        int i;
+	int cc;		// character counter
         BIT first;
-        WORD48 w;
         int lastchar;
         int lp;
 	struct mt *mtx;
 
         mi = (u->d_control & CD_30_MI) ? true : false;
         binary = (u->d_control & CD_27_BINARY) ? true : false;
-        tapedir = (u->d_control & CD_26_DIR) ? true : false;
+        reverse = (u->d_control & CD_26_DIR) ? true : false;
         usewc = (u->d_control & CD_25_USEWC) ? true : false;
         read = (u->d_control & CD_24_READ) ? true : false;
 
@@ -175,48 +246,54 @@ void mt_access(IOCU *u) {
 
         u->d_result = 0;
 
+	cc = 0;
+
         if (!mtx->ready) {
                 u->d_result = RD_18_NRDY;
                 goto retresult;
         }
 
-        // now analyze valid combinations
-        if (mi && tapedir && !read) {
-                // rewind
-                mtx->line = 0;
+	/***************************************************************
+	* REWIND
+	***************************************************************/
+        if (mi && reverse && !read) {
+                if (trace) fprintf(trace, " REWIND\n");
+                mtx->pos = 0;
                 mtx->eof = false;
-                if (trace)
-                        fprintf(trace, " REWIND\n");
                 goto retresult;
         }
-        if (!mi && tapedir && read) {
-                // read reverse
-                if (trace)
-                        fprintf(trace, " FAKE READ REVERSE\n");
-                if (mtx->lastpos >= 0) {
-                        mtx->line = mtx->lastpos;
-                        mtx->lastpos = -1;
-                        if (mi || words == 0) {
+
+	/***************************************************************
+	* READ REVERSE
+	***************************************************************/
+        if (!mi && reverse && read) {
+                if (trace) fprintf(trace, " %s READ REVERSE %u WORDS to %05o\n\t",
+					binary ? "BINARY" : "ALPHA", words, u->d_addr);
+                if (mtx->recpos >= 0) {
+                        mtx->pos = mtx->recpos;
+                        mtx->recpos = -1;
+                        if (mi || words == 0) { // TODO: mi can never be true here!
                                 // no data transfer - we are good
                                 goto retresult;
                         }
                 }
-                // oh crap - we really ought to read backwards here
+                // oh crap... - we really ought to read backwards here
                 // return read error
                 printf("*\tREAD BACKWARDS NOT POSSIBLE\n");
                 u->d_result = RD_20_ERR;
                 goto retresult;
         }
-        if (!mi && !tapedir && read) {
-                // read forward
-                mtx->lastpos = mtx->line;
-                fseek(mtx->fp, mtx->line, SEEK_SET);
+
+	/***************************************************************
+	* READ (FORWARD)
+	***************************************************************/
+        if (!mi && !reverse && read) {
+                if (trace) fprintf(trace, " %s READ %u WORDS to %05o\n\t",
+					binary ? "BINARY" : "ALPHA", words, u->d_addr);
+                mtx->recpos = mtx->pos;
+                fseek(mtx->fp, mtx->pos, SEEK_SET);
                 first = true;
-                w = 0ll;
-                cp = 42;
                 lastchar = -1;
-                if (trace)
-                        fprintf(trace, " READ %u WORDS to %05o\n\t'", words, u->d_addr);
                 lp = 0;
                 while (1) {
                         i = fgetc(mtx->fp);
@@ -251,7 +328,7 @@ void mt_access(IOCU *u) {
                                 }
                         }
                         // record position
-                        mtx->line++;
+                        mtx->pos++;
                         lastchar = i;
 
                         first = false;
@@ -262,7 +339,7 @@ void mt_access(IOCU *u) {
                                         fprintf(trace,"'\n\t'");
                                         lp = 0;
                                 }
-                                fprintf(trace, "%c", translatetable_bic2ascii[i & 0x3f]);
+                                fprintf(trace, "%c", translatetable_bic2ascii[i & 077]);
                                 lp++;
                         }
 
@@ -270,16 +347,15 @@ void mt_access(IOCU *u) {
                                 // translate external BCL as ASCII to BIC??
                         }
 
-                        w |= (WORD48)(i & 0x3f) << cp;
-                        cp -= 6;
-                        if (cp < 0) {
+			u->ib = i & 077;
+			put_ib(u);
+			cc++;
+                        if (cc >= 8) {
                                 if (words > 0) {
-                                        u->w = w;
                                         words--;
 					main_write_inc(u);
                                 }
-                                w = 0ll;
-                                cp = 42;
+				cc = 0;
                         }
                 } /* while(1) */
 
@@ -287,25 +363,37 @@ recend:         // record end reached
                 if (trace)
                         fprintf(trace, "'\n");
                 // store possible partial filled word
-                if (words > 0 && cp != 42) {
-                        u->w = w;
+                if (words > 0 && cc > 0) {
+			u->ib = 0;
+			for (i=cc; i < 8; i++)
+				put_ib(u);
                         words--;
 			main_write_inc(u);
                 }
                 // return good result
                 if (trace)
-                        fprintf(trace, "\tWORDS REMAINING=%u LAST CHAR=%u\n", words, (42-cp)/6);
+                        fprintf(trace, "\tWORDS REMAINING=%u LAST CHAR=%u\n", words, cc);
                 goto retresult;
         }
+
+	/***************************************************************
+	* WRITE
+	***************************************************************/
         if (!read) {
-                // write??
-                // return no ring status
-                if (trace)
-                        fprintf(trace, " WRITE BUT NO WRITE RING\n");
-                u->d_result = RD_20_ERR | RD_22_MAE;
-                goto retresult;
+                if (trace) fprintf(trace, " %s WRITE %u WORDS to %05o\n\t",
+					binary ? "BINARY" : "ALPHA", words, u->d_addr);
+		if (!mtx->writering) {
+		        // return no ring status
+		        if (trace)
+		                fprintf(trace, " WRITE BUT NO WRITE RING\n");
+		        u->d_result = RD_20_ERR | RD_22_MAE;
+		        goto retresult;
+		}
         }
-        // what's left...
+
+	/***************************************************************
+	* UNSUPPORTED
+	***************************************************************/
         printf("*\ttape operation not implemented %016llo\n", u->w);
         // return good result
         if (trace)
@@ -317,7 +405,7 @@ retresult:
 	else
 		u->d_wc = 0;
 retresult2:
-	u->d_wc = (42-cp)/6;
+	u->d_wc = cc;
 }
 
 
