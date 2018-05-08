@@ -22,7 +22,7 @@
 #include <strings.h>
 #include "common.h"
 
-void b5500_pdp_text(CPU *cpu)
+void b5500_pdp_text1(CPU *cpu)
 {
 	int i;
 	//       * * * * * * * * * * * * * * * * * * * * * * * * * * *
@@ -267,4 +267,53 @@ void b5500_pdp_text(CPU *cpu)
 		cpu->cycleCount, cpu->totalCycles);
 #endif
 }
+
+void b5500_pdp_text2(CPU *cpu)
+{
+	printf("%s X=%013llo J=%02o  Q=%o%o%o%o%o%o%o%o%o R=%05o  \n",
+		cpu->id, cpu->rX, cpu->rJ,
+		cpu->bQ09F, cpu->bQ08F, cpu->bQ07F,
+		cpu->bQ06F, cpu->bQ05F, cpu->bQ04F,
+		cpu->bQ03F, cpu->bQ02F, cpu->bQ01F,
+		cpu->rR);
+
+	printf("A=%016llo AROF=%o GH=%02o Y=%02o M=%05o  \n",
+		cpu->rA, cpu->bAROF, cpu->rGH, cpu->rY, cpu->rM);
+
+	printf("B=%016llo BROF=%o KV=%02o Z=%02o S=%05o  \n",
+		cpu->rB, cpu->bBROF, cpu->rKV, cpu->rZ, cpu->rS);
+
+	printf("P=%016llo PROF=%o T=%04o.%o C:L=%05o:%o  \n",
+		cpu->rP, cpu->bPROF, cpu->rT, cpu->bTROF,
+		cpu->rC, cpu->rL);
+
+	printf("VARF=%o CWMF=%o MSFF=%o NCSF=%o SALF=%o   F=%05o  \n",
+		cpu->bVARF, cpu->bCWMF, cpu->bMSFF, cpu->bNCSF,
+		cpu->bSALF, cpu->rF);
+
+	printf("MRAF=%o MWOF=%o MROF=%o HLTF=%o CCCF=%o EIHF=%o  \n",
+		cpu->bMRAF, cpu->bMWOF, cpu->bMROF, cpu->bHLTF,
+		cpu->bCCCF, cpu->bEIHF);
+
+	printf("I=$%02x E=%02o N=%02o TM=$%02x  \n",
+		cpu->rI, cpu->rE, cpu->rN, cpu->rTM);
+}
+
+void b5500_ccdp_text2(volatile CENTRAL_CONTROL *cc)
+{
+	printf("CC IAR=%02o TM=%02o ADxF=%o%o%o%o HP2F=%o P2BF=%o CLS=%o\n",
+		cc->IAR, cc->TM,
+		cc->AD1F, cc->AD2F, cc->AD3F, cc->AD4F,
+		cc->HP2F, cc->P2BF, cc->CLS);
+}
+
+void b5500_iodp_text2(IOCU *io)
+{
+	printf("IO W=%016llo IB=%02o OB=%02o CALLS=%010u  \n",
+		io->w, io->ib, io->ob, io->calls);
+
+	printf("   D=(UNIT=%02d WC=%04d CONTROL=%03o RESULT=%04o ADDR=%05o)  \n",
+		io->d_unit, io->d_wc, io->d_control, io->d_result, io->d_addr);
+}
+
 

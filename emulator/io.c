@@ -35,11 +35,6 @@
 //static FILE *traceio = NULL;
 
 /***********************************************************************
-* the four I/O control units
-***********************************************************************/
-IOCU IO[4];
-
-/***********************************************************************
 * ready/initialized flag
 ***********************************************************************/
 static BIT ready;
@@ -162,7 +157,7 @@ const UNIT unit[32][2] = {
 * actual I/O is done here
 ***********************************************************************/
 static void perform_io(int cu, WORD48 iocw) {
-	IOCU *u = IO + (cu-1);
+	IOCU *u = IO[cu-1];
 
 	// iocw is passed by W register
 	u->w = iocw;
@@ -337,7 +332,7 @@ loop:
 ***********************************************************************/
 static int io_status(const char *v, void *) {
 	printf("$CALLS: %u %u %u %u\n",
-		IO[0].calls, IO[1].calls, IO[2].calls, IO[3].calls);
+		IO[0]->calls, IO[1]->calls, IO[2]->calls, IO[3]->calls);
 	return 0; // OK
 }
 

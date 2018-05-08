@@ -204,6 +204,58 @@ typedef struct cpu {
         BIT             XXXbusy;        // CPU is busy (not used anymore, replaced by "bHLTF")
 } CPU;
 
+/***********************************************************************
+* structure defining I/O control units
+***********************************************************************/
+typedef struct iocu {
+	WORD48		w;		// W register
+	WORD5		d_unit;		// D register, UNIT
+	WORD10		d_wc;		// D register, WORD COUNT
+#define WD_37_MEMPAR	0100		// TAPE - Mem. Parity
+#define WD_36_BLANK	0040		// TAPE - Blank Tape
+#define WD_35_BOT	0020		// TAPE - Begin of Tape
+#define WD_34_EOT	0010		// TAPE - End of Tape
+#define WD_333231_CHARS	0007		// TAPE - Chars in last word
+	WORD7		d_control;	// D register, CONTROL
+#define CD_30_MI	0100		// memory inhibit/interrogate
+#define CD_29		0040
+#define CD_28		0020
+#define CD_27_BINARY	0010		// binary mode (0=alpha)
+#define CD_26_DIR	0004		// tape reverse
+#define CD_25_USEWC	0002		// use word counter
+#define CD_24_READ	0001		// read mode (0=write)
+	WORD10		d_result;	// D register, RESULT
+#define RD_25_ABNORMAL	01000		// DCC abnormal condition
+#define RD_24_READ	00400		// read mode (0=write)
+#define RD_23_ETYPE	00200		// ending type
+#define RD_22_MAE	00100		// Memory Access Error
+#define RD_21_END	00040		// unit specific END
+#define RD_20_ERR	00020		// unit specific ERR
+#define RD_19_PAR	00010		// unit specific PAR
+#define RD_18_NRDY	00004		// not ready
+#define RD_17_PE	00002		// descriptor parity error
+#define RD_16_BUSY	00001		// busy
+	ADDR15		d_addr;		// D register, MEMORY ADDRESS
+	// buffer registers
+	WORD6		ib;		// input buffer
+	WORD6		ob;		// output buffer
+	// statistics
+	unsigned	calls;
+} IOCU;
+
+/***********************************************************************
+* structure defining physical units (emulated or real)
+***********************************************************************/
+typedef struct unit {
+	const char	*name;		// printable unit name
+	const unsigned	readybit;	// B5500 bit number of ready status bit in TUS
+	const unsigned	index;		// enumeration of several units of same type
+	BIT	(*isready)(unsigned);	// function to check for ready
+	void	(*ioaccess)(IOCU*);	// function to actually perform IO
+	// handling functions (not yet used, may need reconsideration)
+	BIT	(*load)(void);		// function to load from this unit
+} UNIT;
+
 /*
  * structure defining interrupts
  */
@@ -219,6 +271,10 @@ typedef struct irq {
 #define SHM_CPUA        (('C'<<24)|('P'<<16)|('U'<<8)|'A')  // shared data of cpu A
 #define SHM_CPUB        (('C'<<24)|('P'<<16)|('U'<<8)|'B')  // shared data of cpu B
 #define SHM_CC          (('C'<<24)|('C'<<16)|('_'<<8)|'_')  // shared data of Central Control
+#define SHM_IOC1        (('I'<<24)|('O'<<16)|('C'<<8)|'1')  // shared data of I/O control unit 1
+#define SHM_IOC2        (('I'<<24)|('O'<<16)|('C'<<8)|'2')  // shared data of I/O control unit 2
+#define SHM_IOC3        (('I'<<24)|('O'<<16)|('C'<<8)|'3')  // shared data of I/O control unit 3
+#define SHM_IOC4        (('I'<<24)|('O'<<16)|('C'<<8)|'4')  // shared data of I/O control unit 4
 #define MSG_CPUA        (('C'<<24)|('P'<<16)|('U'<<8)|'A')  // messages to cpu A
 #define MSG_CPUB        (('C'<<24)|('P'<<16)|('U'<<8)|'B')  // messages to cpu B
 #define MSG_IOCU        (('I'<<24)|('O'<<16)|('C'<<8)|'U')  // messages to I/O control unit(s)
@@ -241,13 +297,16 @@ typedef struct irq {
 #define MSG_STOP        103     // CC to CPU: stop()
 #define MSG_PRESET      104     // CC to CPU: preset()
 
-/*
- * global (IPC) memory areas
- */
+/***********************************************************************
+* global (IPC) memory areas
+***********************************************************************/
 extern volatile WORD48 *MAIN;
 extern CPU	*P[2];
 extern volatile CENTRAL_CONTROL *CC;
+extern IOCU	*IO[4];
 extern int	msg_cpu[2];	// messages to P1 and P2
+extern int	msg_iocu;	// messages to IOCU(s)
+extern const UNIT unit[32][2];
 
 /*
  * special memory locations (absolute addresses)
@@ -468,7 +527,10 @@ extern void num_right_shift_cnt(NUM *, int);
 extern void num_normalize(NUM *, int);
 extern void num_round(NUM *);
 
-extern void b5500_pdp_text(CPU *);
+extern void b5500_pdp_text1(CPU *);
+extern void b5500_pdp_text2(CPU *);
+extern void b5500_ccdp_text2(volatile CENTRAL_CONTROL *);
+extern void b5500_iodp_text2(IOCU *);
 extern void b5500_init_shares(void);
 
 /* A & B adjustments, stack operations */

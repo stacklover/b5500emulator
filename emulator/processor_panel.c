@@ -25,16 +25,26 @@
 
 int main(int argc, char	*argv[])
 {
+	int i;
 	b5500_init_shares();
 
 	printf("\033[2J");
 	while (1) {
 		printf("\033[H");
-		b5500_pdp_text(P[0]);
-		printf("IAR=%02o TM=%02o ADxF=%o%o%o%o\n",
-			CC->IAR, CC->TM,
-			CC->AD1F, CC->AD2F, CC->AD3F, CC->AD4F);
-		//sleep(1);
+		for (i=0; i<2; i++) {
+			b5500_pdp_text2(P[i]);
+			printf("\n");
+		}
+
+		b5500_ccdp_text2(CC);
+		printf("\n");
+
+		for (i=0; i<4; i++) {
+			b5500_iodp_text2(IO[i]);
+			printf("\n");
+		}
+
+		sleep(1);
 	}
 	return 0;
 }
