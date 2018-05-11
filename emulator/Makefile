@@ -64,6 +64,7 @@ OBJEMULATOR2 =	$(ODIR)/emulator2.o $(ODIR)/init_shares.o \
 		$(ODIR)/dev_cp.o \
 		$(ODIR)/dev_mt.o \
 		$(ODIR)/dev_lp.o \
+		$(ODIR)/dev_dr.o \
 		$(ODIR)/dev_dk.o \
 		$(ODIR)/dev_dcc.o \
 		$(ODIR)/dcc_ld_teletype.o \

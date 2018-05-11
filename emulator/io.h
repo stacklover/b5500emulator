@@ -29,16 +29,21 @@
 * --- UUU UUW WWW WWW WWW CCC CCC CRR RRR RRR AAA AAA AAA AAA AAA (General)
 * octet numbers         FEDCBA9876543210
 ***********************************************************************/
+#define MASK_IODDRUMOP	01000000000000000LL
 #define MASK_IODUNIT	00760000000000000LL
 #define MASK_IODWCNT	00017770000000000LL
 #define MASK_IODCONTROL	00000007740000000LL
 #define MASK_IODRESULT	00000000037700000LL
 #define MASK_IODADDR	00000000000077777LL
+#define MASK_IODDRUMAD	00000007777700000LL
+#define SHFT_IODDRUMOP	45
 #define SHFT_IODUNIT	40
 #define SHFT_IODWCNT	30
 #define SHFT_IODCONTROL	23
 #define SHFT_IODRESULT	15
+#define SHFT_IODDRUMAD	15
 #define SHFT_IODADDR	0
+
 #define MASK_DSKFILADR	00077777777777777LL // disk file address
 
 /***********************************************************************
@@ -98,6 +103,12 @@ extern int mt2_init(const char *info);
 extern void mt2_term(void);
 extern BIT mt2_ready(unsigned index);
 extern void mt2_access(IOCU*);
+
+/* Magnetic Drums */
+extern int dr_init(const char *info);
+extern void dr_term(void);
+extern BIT dr_ready(unsigned index);
+extern void dr_access(IOCU*);
 
 /* Disk Control Units (DKx) */
 extern int dk_init(const char *info);

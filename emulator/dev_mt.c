@@ -372,8 +372,9 @@ void mt_access(IOCU *u) {
         }
 
 	if (trace) {
-		if (read) fprintf(trace, "READ");
-			else fprintf(trace, "WRITE");
+		fprintf(trace, unit[u->d_unit][0].name); 
+		if (read) fprintf(trace, " READ");
+			else fprintf(trace, " WRITE");
 		if (usewc) fprintf(trace, " WC=%d", words);
 			else fprintf(trace, " GM");
 		if (reverse) fprintf(trace, " REVERSE");

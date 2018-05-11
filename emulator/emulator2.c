@@ -633,6 +633,8 @@ int handle_option(const char *option) {
                 return cp_init(option);  /* card punch emulation options */
 	} else if (strncasecmp(option, "mt", 2) == 0) {
                 return mt_init(option); /* tape emulation options */
+	} else if (strncasecmp(option, "dr", 2) == 0) {
+                return dr_init(option); /* magnetic drum emulation options */
 	} else if (strncasecmp(option, "dk", 2) == 0) {
                 return dk_init(option); /* disk file emulation options */
 	} else if (strncasecmp(option, "lp", 2) == 0) {
