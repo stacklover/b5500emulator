@@ -193,6 +193,8 @@ typedef struct terminal {
 	BIT paused;
 	BIT utf8mode;
 	BIT insertmode;
+// tracing file
+	FILE *trace;
 } TERMINAL_T;
 
 /***********************************************************************

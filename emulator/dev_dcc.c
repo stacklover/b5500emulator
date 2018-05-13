@@ -34,6 +34,8 @@
 * 2018-04-21  R.Meyer
 *   factored out all physcial connection (PC), all line discipline(LD)
 *   and all emulation (EM) functionality to spearate files
+* 2018-05-13  R.Meyer
+*   added data trace to file
 ***********************************************************************/
 
 #include <stdio.h>
@@ -83,6 +85,7 @@ static TERMINAL_T terminal[NUMTERM];
 static BIT ready;
 static BIT telnet = false;
 
+char ftracedir[80];
 BIT etrace = false;
 BIT dtrace = false;
 BIT ctrace = true;
@@ -128,6 +131,20 @@ static int set_etrace(const char *v, void *) {
 	} else {
 		spo_print("$SPECIFY ON OR OFF\r\n");
 		return 2; // FATAL
+	}
+	return 0; // OK
+}
+
+/***********************************************************************
+* specify file trace directory (or off if empty)
+***********************************************************************/
+static int set_ftrace(const char *v, void *) {
+	// if a name is given, copy it
+	if (strlen(v) > 0) {
+		strncpy(ftracedir, v, sizeof ftracedir - 1);
+		ftracedir[sizeof ftracedir - 1] = 0;
+	} else {
+		ftracedir[0] = 0;
 	}
 	return 0; // OK
 }
@@ -230,6 +247,7 @@ static const command_t dcc_commands[] = {
 	{"CTRACE", set_ctrace},
 	{"DTRACE", set_dtrace},
 	{"ETRACE", set_etrace},
+	{"FTRACE", set_ftrace},
 	{"STATUS", get_status},
 	{NULL, NULL},
 };
@@ -339,6 +357,20 @@ int dcc_init(const char *option) {
 * report connect to system
 ***********************************************************************/
 void dcc_report_connect(TERMINAL_T *t) {
+	// if requested and not open, open trace file
+	if (ftracedir[0] != 0 && t->trace == NULL) {
+		char filename[200];
+		time_t now;
+		struct tm tm;
+
+		time(&now);
+		gmtime_r(&now, &tm);
+		sprintf(filename, "%s/%04d_%02d_%02d_%02d_%02u_%02u",
+			ftracedir,
+			tm.tm_year+1900, tm.tm_mon+1, tm.tm_mday,
+			tm.tm_hour, tm.tm_min, tm.tm_sec);
+		t->trace = fopen(filename, "w");
+	}
 	// do not report again
 	if (!t->connected)
 		t->interrupt = true;
@@ -357,6 +389,11 @@ void dcc_report_disconnect(TERMINAL_T *t) {
 	t->fullbuffer = false; t->bufstate = notready;
 	t->abnormal = true; t->connected = false;
 	t->sysbuf[0] = 0; t->sysidx = 0;
+	// if open, close trace file
+	if (t->trace) {
+		fclose(t->trace);
+		t->trace = NULL;
+	}
 }
 
 /***********************************************************************
@@ -450,9 +487,8 @@ static void dcc_read(IOCU *u) {
 	}
 
 	// now do the read
-
-	if (dtrace)
-		printf("+READ %s |", t->name);
+	if (dtrace) printf("+READ %s '", t->name);
+	if (t->trace) fprintf(t->trace, "R'");
 
 	ptr = 0;
 	gmset = false;
@@ -466,8 +502,8 @@ loop:
 			c = EOM;
 		} else {
 			c = t->sysbuf[ptr++];
-			if (dtrace)
-				printf("%c", c);
+			if (dtrace) printf("%c", c);
+			if (t->trace) fprintf(t->trace, "%c", c);
 		}
 		// note that ptr stays on the current end of sysbuf
 		// causing the rest of the word to be filled with
@@ -484,8 +520,8 @@ loop:
 	if (!gmset && ptr < SYSBUFSIZE)
 		goto loop;
 
-	if (dtrace)
-		printf("|\n");
+	if (dtrace) printf("'\n");
+	if (t->trace) fprintf(t->trace, "'\n");
 
 	// abnormal flag?
 	if (t->abnormal)
@@ -538,8 +574,8 @@ static void dcc_write(IOCU *u) {
 	}
 
 	// now do the write
-	if (dtrace)
-		printf("+WRIT %s |", t->name);
+	if (dtrace) printf("+WRIT %s '", t->name);
+	if (t->trace) fprintf(t->trace, "W'");
 
 	t->sysidx = 0;	// start of sysbuf
 
@@ -564,8 +600,8 @@ loop:
 		}
 		// store char in sysbuf
 		t->sysbuf[t->sysidx++] = c;
-		if (dtrace)
-			printf("%c", c);
+		if (dtrace) printf("%c", c);
+		if (t->trace) fprintf(t->trace, "%c", c);
 	}
 	// if not reached SYSBUFSIZE chars, we go on writing
 	if (t->sysidx < SYSBUFSIZE)
@@ -573,8 +609,8 @@ loop:
 	// coming here means we got a full sysbuf
 	t->fullbuffer = true;
 
-done:	if (dtrace)
-		printf("|\n");
+done:	if (dtrace) printf("'\n");
+	if (t->trace) fprintf(t->trace, "'\n");
 
 	// set flags
 	t->abnormal = false;
