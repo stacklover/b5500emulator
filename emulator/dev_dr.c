@@ -30,8 +30,6 @@
 * for each supported magnetic drum
 ***********************************************************************/
 static struct dr {
-	char	filename[NAMELEN];
-	FILE	*fp;
 	BIT	ready;
 	WORD48	drum[32768];
 } dr[DRUMS];
@@ -66,35 +64,21 @@ static int set_drtrace(const char *v, void *) {
 }
 
 /***********************************************************************
-* specify or close the file for emulation
+* specify ready or not
 ***********************************************************************/
-static int set_drfile(const char *v, void *) {
+static int set_drready(const char *v, void *) {
 	if (!drx) {
-		printf("dr not specified\n");
+		spo_print("$DR NOT SPECIFIED\r\n");
 		return 2; // FATAL
 	}
-	strncpy(drx->filename, v, NAMELEN);
-	drx->filename[NAMELEN-1] = 0;
 
-	// if we are ready, close current file
-	if (drx->ready) {
-		fclose(drx->fp);
-		drx->fp = NULL;
+	if (strcasecmp(v, "ON") == 0) {
+		drx->ready = true;
+	} else if (strcasecmp(v, "OFF") == 0) {
 		drx->ready = false;
-	}
-
-	// now open the new file, if any name was given
-	// if none given, the drive just stays unready
-	if (drx->filename[0]) {
-		drx->fp = fopen(drx->filename, "r+");
-		if (drx->fp) {
-			drx->ready = true;
-			return 0; // OK
-		} else {
-			// cannot open
-			perror(drx->filename);
-			return 2; // FATAL
-		}
+	} else {
+		spo_print("$SPECIFY ON OR OFF\r\n");
+		return 2; // FATAL
 	}
 	return 0; // OK
 }
@@ -106,7 +90,7 @@ static const command_t dr_commands[] = {
 	{"dra",		set_dr,	(void *) 0},
 	{"drb",		set_dr,	(void *) 1},
 	{"trace",	set_drtrace},
-	{"file",	set_drfile},
+	{"ready",	set_drready},
 	{NULL,		NULL},
 };
 

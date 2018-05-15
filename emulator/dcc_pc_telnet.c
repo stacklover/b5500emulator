@@ -69,9 +69,10 @@ static void new_connection(int newsocket, struct sockaddr_in *addr, enum ld ld, 
 
 	if (t != NULL) {
 		// free terminal found
+		snprintf(t->peer_info, sizeof t->peer_info, "%s:%u", host, port);
 		if (ctrace) {
-			t->outidx = sprintf(t->outbuf, "+NEWC %s %s:%u (%d)",
-				t->name, host, port, newsocket);
+			t->outidx = sprintf(t->outbuf, "+NEWC %s %s (%d)",
+				t->name, t->peer_info, newsocket);
 		}
 		dcc_init_terminal(t);
 		telnet_session_clear(&t->session);

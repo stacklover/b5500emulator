@@ -150,6 +150,7 @@ typedef struct terminal {
 // physical connection
 	enum pc pc;			// physical connection
 	enum pcs pcs;			// physical connection state
+	char peer_info[80];		// identification of peer
 	// pc = pc_serial
 	int serial_handle;		// handle of open tty device
 	// pc = pc_canopen

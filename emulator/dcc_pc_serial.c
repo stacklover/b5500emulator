@@ -42,6 +42,7 @@
 * PC SERIAL: POLL TERMINAL
 ***********************************************************************/
 void pc_serial_poll_terminal(TERMINAL_T *t) {
+	snprintf(t->peer_info, sizeof t->peer_info, "Serial not implemented!");
 }
 
 /***********************************************************************

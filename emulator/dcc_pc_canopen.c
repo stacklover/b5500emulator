@@ -57,6 +57,7 @@ void pc_canopen_poll_terminal(TERMINAL_T *t) {
 		} else if (can_read(t->canid, buf, sizeof buf) > 0) {
 			// user entered a line to wake up connection
 			dcc_init_terminal(t);
+			snprintf(t->peer_info, sizeof t->peer_info, "CANopen %d", t->canid);
 			t->ld = ld_teletype;
 			t->em = em_none;
 			t->lds = lds_idle;

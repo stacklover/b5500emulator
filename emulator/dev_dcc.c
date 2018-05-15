@@ -362,7 +362,6 @@ void dcc_report_connect(TERMINAL_T *t) {
 		char filename[200];
 		time_t now;
 		struct tm tm;
-
 		time(&now);
 		gmtime_r(&now, &tm);
 		sprintf(filename, "%s/%04d_%02d_%02d_%02d_%02u_%02u",
@@ -370,6 +369,15 @@ void dcc_report_connect(TERMINAL_T *t) {
 			tm.tm_year+1900, tm.tm_mon+1, tm.tm_mday,
 			tm.tm_hour, tm.tm_min, tm.tm_sec);
 		t->trace = fopen(filename, "w");
+		if (t->trace != NULL) {
+			fprintf(t->trace, "C %04d-%02d-%02d %02d:%02u:%02u UTC\n",
+				tm.tm_year+1900, tm.tm_mon+1, tm.tm_mday,
+				tm.tm_hour, tm.tm_min, tm.tm_sec);
+			fprintf(t->trace, "C %s\n", t->peer_info);
+			fprintf(t->trace, "C %s %ux%u\n",
+				t->session.type,
+				t->session.cols, t->session.rows);
+		}
 	}
 	// do not report again
 	if (!t->connected)
@@ -391,6 +399,13 @@ void dcc_report_disconnect(TERMINAL_T *t) {
 	t->sysbuf[0] = 0; t->sysidx = 0;
 	// if open, close trace file
 	if (t->trace) {
+		time_t now;
+		struct tm tm;
+		time(&now);
+		gmtime_r(&now, &tm);
+		fprintf(t->trace, "C %04d-%02d-%02d %02d:%02u:%02u UTC\n",
+			tm.tm_year+1900, tm.tm_mon+1, tm.tm_mday,
+			tm.tm_hour, tm.tm_min, tm.tm_sec);
 		fclose(t->trace);
 		t->trace = NULL;
 	}
