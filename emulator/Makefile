@@ -20,42 +20,18 @@
 ALL =		$(ODIR)/emulator2.exe \
 		$(ODIR)/processor_panel.exe \
 		$(ODIR)/b9352.exe \
-		$(ODIR)/b9353.exe \
-		#$(ODIR)/emulator.exe \
-		#$(ODIR)/asm-n-run.exe \
-		#$(ODIR)/sptest.exe \
+		$(ODIR)/b9353.exe
 
-OBJTEST	=	$(ODIR)/test.o \
-		$(ODIR)/sp_compare.o \
-		$(ODIR)/sp_add.o \
-		$(ODIR)/pdp_text.o $(ODIR)/init_shares.o \
-		$(ODIR)/execute_cm.o $(ODIR)/execute_wm.o \
-		$(ODIR)/stack.o $(ODIR)/memory.o $(ODIR)/jump_call.o \
-		$(ODIR)/single.o $(ODIR)/double.o \
-		$(ODIR)/misc_cpu.o $(ODIR)/bitfield.o $(ODIR)/stream.o \
-		$(ODIR)/instr_table.o
-
-OBJPANEL =	$(ODIR)/processor_panel.o $(ODIR)/pdp_text.o $(ODIR)/init_shares.o
+OBJPANEL =	$(ODIR)/processor_panel.o \
+		$(ODIR)/pdp_text.o \
+		$(ODIR)/init_shares.o
 
 OBJB9352 =	$(ODIR)/b9352.o
 
 OBJB9353 =	$(ODIR)/b9353.o
 
-OBJEMULATOR =	$(ODIR)/emulator2.o $(ODIR)/init_shares.o \
-		$(ODIR)/execute_cm.o $(ODIR)/execute_wm.o \
-		$(ODIR)/stack.o $(ODIR)/memory.o $(ODIR)/jump_call.o \
-		$(ODIR)/single.o $(ODIR)/double.o \
-		$(ODIR)/misc_cpu.o $(ODIR)/bitfield.o $(ODIR)/stream.o \
-		$(ODIR)/cc2.o \
-		$(ODIR)/dev_spo.o \
-		$(ODIR)/dev_cr.o \
-		$(ODIR)/dev_mt.o \
-		$(ODIR)/dev_lp.o \
-		$(ODIR)/dev_dk.o \
-		$(ODIR)/translatetables.o \
-		$(ODIR)/instr_table.o
-
-OBJEMULATOR2 =	$(ODIR)/emulator2.o $(ODIR)/init_shares.o \
+OBJEMULATOR2 =	$(ODIR)/emulator2.o  \
+		$(ODIR)/init_shares.o \
 		$(ODIR)/b5500_cpu.o \
 		$(ODIR)/cc2.o \
 		$(ODIR)/io.o \
@@ -78,26 +54,9 @@ OBJEMULATOR2 =	$(ODIR)/emulator2.o $(ODIR)/init_shares.o \
 		$(ODIR)/circbuffer.o \
 		$(ODIR)/telnetd.o
 ifeq ($(USECAN),1)
-OBJEMULATOR2 +=	$(ODIR)/canbus.o $(ODIR)/canlib.o
+OBJEMULATOR2 +=	$(ODIR)/canbus.o \
+		$(ODIR)/canlib.o
 endif
-
-OBJASMNRUN =	$(ODIR)/asm-n-run.o \
-		$(ODIR)/pdp_text.o $(ODIR)/init_shares.o \
-		$(ODIR)/execute_cm.o $(ODIR)/execute_wm.o \
-		$(ODIR)/stack.o $(ODIR)/memory.o $(ODIR)/jump_call.o \
-		$(ODIR)/single.o $(ODIR)/double.o \
-		$(ODIR)/misc_cpu.o $(ODIR)/bitfield.o $(ODIR)/stream.o \
-		$(ODIR)/translatetables.o \
-		$(ODIR)/instr_table.o
-
-OBJSPTEST =	$(ODIR)/sptest.o \
-		$(ODIR)/pdp_text.o $(ODIR)/init_shares.o \
-		$(ODIR)/execute_cm.o $(ODIR)/execute_wm.o \
-		$(ODIR)/stack.o $(ODIR)/memory.o $(ODIR)/jump_call.o \
-		$(ODIR)/single.o $(ODIR)/double.o \
-		$(ODIR)/misc_cpu.o $(ODIR)/bitfield.o $(ODIR)/stream.o \
-		$(ODIR)/translatetables.o \
-		$(ODIR)/instr_table.o
 
 INC =		common.h io.h b5500_defs.h canlib.h dcc.h telnetd.h
 
@@ -112,10 +71,6 @@ LFLAGS		= -lrt -lpthread #-lfltk_images -lfltk	-lpng -lz -ljpeg  -lXext -lXft \
 
 all: $(ALL)
 
-$(ODIR)/test.exe:	 $(OBJTEST) Makefile
-	@echo "*** Linking $@..."
-	$(CXX) $(LFLAGS) -o $(ODIR)/test.exe $(OBJTEST)
-
 $(ODIR)/processor_panel.exe:	 $(OBJPANEL) Makefile
 	@echo "*** Linking $@..."
 	$(CXX) $(LFLAGS) -o $(ODIR)/processor_panel.exe $(OBJPANEL)
@@ -128,21 +83,9 @@ $(ODIR)/b9353.exe:	 $(OBJB9353) Makefile
 	@echo "*** Linking $@..."
 	$(CXX) $(LFLAGS) -o $(ODIR)/b9353.exe $(OBJB9353)
 
-$(ODIR)/emulator.exe:	 $(OBJEMULATOR) Makefile
-	@echo "*** Linking $@..."
-	$(CXX) $(LFLAGS) -o $(ODIR)/emulator.exe $(OBJEMULATOR)
-
 $(ODIR)/emulator2.exe:	 $(OBJEMULATOR2) Makefile
 	@echo "*** Linking $@..."
 	$(CXX) $(LFLAGS) -o $(ODIR)/emulator2.exe $(OBJEMULATOR2)
-
-$(ODIR)/asm-n-run.exe:	$(OBJASMNRUN) Makefile
-	@echo "*** Linking $@..."
-	$(CXX) $(LFLAGS) -o $(ODIR)/asm-n-run.exe $(OBJASMNRUN)
-
-$(ODIR)/sptest.exe:  $(OBJSPTEST)	Makefile
-	@echo "*** Linking $@..."
-	$(CXX) $(LFLAGS) -o $(ODIR)/sptest.exe $(OBJSPTEST)
 
 $(ODIR)/%.o: %.c $(INC)	Makefile
 	@echo "*** Compiling $<..."
