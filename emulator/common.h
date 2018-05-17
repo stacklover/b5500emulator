@@ -237,8 +237,10 @@ typedef struct iocu {
 #define RD_16_BUSY	00001		// busy
 	ADDR15		d_addr;		// D register, MEMORY ADDRESS
 	// buffer registers
-	WORD6		ib;		// input buffer
-	WORD6		ob;		// output buffer
+	WORD7		ib;		// input buffer
+	WORD7		ob;		// output buffer
+	WORD7		rb;		// magnetic tape read buffer (not used)
+	WORD7		wb;		// magnetic tape write buffer (not used)
 	// statistics
 	unsigned	calls;
 } IOCU;

@@ -39,7 +39,6 @@ static struct mt {
 	FILE	*fp;			// file handle
 	int	reclen;			// length of record in tbuf
         int	pos;			// position in file
-	//int	recpos;			// position of record begin
 	BIT	ready;			// unit is ready
 	BIT	eof;			// unit has encountered an eof
 	BIT	writering;		// unit has write ring
@@ -52,6 +51,14 @@ static struct mt {
 static FILE *trace = NULL;
 
 static struct mt *mtx = NULL;
+
+/***********************************************************************
+* https://www.geeksforgeeks.org/compute-parity-number-using-xor-table-look/
+***********************************************************************/
+#define P2(n) n,n^1,n^1,n
+#define P4(n) P2(n),P2(n^1),P2(n^1),P2(n)
+#define P6(n) P4(n),P4(n^1),P4(n^1),P4(n)
+static unsigned char parity[256] = {P6(0),P6(1),P6(1),P6(0)};
 
 /***********************************************************************
 * set to mta..mtt
@@ -93,7 +100,6 @@ static int set_mtfile(const char *v, void *) {
 	mtx->fp = NULL;
 	mtx->reclen = 0;
 	mtx->pos = 0;
-	//mtx->recpos = 0;
 	mtx->ready = false;
 	mtx->eof = true;
 	mtx->writering = false;
@@ -135,7 +141,6 @@ static int set_mtnewfile(const char *v, void *) {
 	mtx->fp = NULL;
 	mtx->reclen = 0;
 	mtx->pos = 0;
-	//mtx->recpos = 0;
 	mtx->ready = false;
 	mtx->eof = true;
 	mtx->writering = false;
@@ -226,15 +231,16 @@ BIT mt_ready(unsigned index) {
 * returns 3: record exceeds tape buffer
 * returns 4: tape mark detected
 * returns 5: record does not start with bit 7 set
+* returns 6: parity error
 * start condition: pos must point the record begin
 * end condition: pos points to next record begin
 ***********************************************************************/
-static int mt_read_record(struct mt *mt) {
+static int mt_read_record(struct mt *mt, BIT binary) {
 	int lp;
 	int data;
+	BIT parflag = false;
 
 	mt->reclen = 0;
-	//mt->recpos = mt->pos;
 
 	fseek(mt->fp, mt->pos, SEEK_SET);
 	lp = 0;
@@ -256,7 +262,20 @@ static int mt_read_record(struct mt *mt) {
 			// is it a tape mark?
 			if (mt->reclen == 1 && mt->tbuf[0] == 0x0f)
 				return 4;
-			return 0;
+			if (parflag)
+				return 6;
+			else
+				return 0;
+		}
+		// check parity
+		if (parity[data & 0x7f]) {
+			// odd parity
+			if (!binary)
+				parflag = true;
+		} else {
+			// even parity
+			if (binary)
+				parflag = true;
 		}
 		// trace output
 		if (trace) {
@@ -287,15 +306,16 @@ static int mt_read_record(struct mt *mt) {
 * returns 1: BOT encountered
 * returns 3: record exceeds tape buffer
 * returns 4: tape mark detected
+* returns 6: parity error
 * start condition: pos must point the the record end+1
 * end condition: pos points to the record begin
 ***********************************************************************/
-static int mt_read_record_reverse(struct mt *mt) {
+static int mt_read_record_reverse(struct mt *mt, BIT binary) {
 	int lp;
 	int data;
+	BIT parflag = false;
 
 	mt->reclen = 0;
-	//mt->recpos = mt->pos;
 
 	lp = 0;
 
@@ -310,6 +330,16 @@ static int mt_read_record_reverse(struct mt *mt) {
 		if (data < 0) {
 			mt->eof = true;
 			return 1;
+		}
+		// check parity
+		if (parity[data & 0x7f]) {
+			// odd parity
+			if (!binary)
+				parflag = true;
+		} else {
+			// even parity
+			if (binary)
+				parflag = true;
 		}
 		// store char in buffer
 		if (mt->reclen >= TBUFLEN) {
@@ -334,7 +364,10 @@ static int mt_read_record_reverse(struct mt *mt) {
 			// is it a tape mark?
 			if (mt->reclen == 0)
 				return 4;
-			return 0;
+			if (parflag)
+				return 6;
+			else
+				return 0;
 		}
 	}
 	// we never come here, but the compiler demands it:
@@ -387,12 +420,13 @@ void mt_access(IOCU *u) {
 	* READ Section
 	***************************************************************/
 	if (read) {
+		BIT had_parity = false;
 	        if (trace) fprintf(trace, " ADDR=%05o\n\t'", u->d_addr);
 		// read a record into local buffer
 		if (reverse)
-			i = mt_read_record_reverse(mtx);
+			i = mt_read_record_reverse(mtx, binary);
 		else
-			i = mt_read_record(mtx);
+			i = mt_read_record(mtx, binary);
 
 		// analyze result
 		switch (i) {
@@ -425,13 +459,18 @@ void mt_access(IOCU *u) {
 				fprintf(trace, "' .BCD FORMAT ERROR\n");
 			u->d_result = RD_20_ERR;
 			return;
+		case 6:	// parity error
+			// WC==0 means spacing - ignore parity errors in that case
+			if (words > 0)
+				had_parity = true;
+			// continue as normal record
 		case 0:	// normal record
 	                if (!binary) {
 	                        // translate external BCL as ASCII to BIC??
 	                }
 			if (reverse) {
 				cc = 7;
-				for (i=0; i<mtx->reclen; i++) {
+				for (i=mtx->reclen-1; i>=0; i--) {
 					u->ib = mtx->tbuf[i] & 077;
 					put_ib_reverse(u);
 					cc--;
@@ -482,7 +521,13 @@ void mt_access(IOCU *u) {
 					main_write_inc(u);
 				}
 			}
-			// return good result
+			// report a parity error
+			if (had_parity) {
+				if (trace)
+					fprintf(trace, "\tPARITY ERROR\n");
+				u->d_result = RD_20_ERR;
+			}
+			// return result
 			if (usewc) {
 				u->d_wc = words;
 				if (trace)
@@ -541,7 +586,17 @@ void mt_access(IOCU *u) {
 				if (!binary && u->ob == 037)
 					goto end_of_write;
 				// if MI is set, we still read memory but store 000 in the tape buffer instead
-				mtx->tbuf[mtx->reclen++] = mi ? 000 : u->ob;
+				if (mi) u->ob = 0;
+				if (binary) {
+					// add odd parity
+					if (!parity[u->ob])
+						u->ob |= 0x40;
+				} else {
+					// add even parity
+					if (parity[u->ob])
+						u->ob |= 0x40;
+				}
+				mtx->tbuf[mtx->reclen++] = u->ob;
 			}
                 }
 

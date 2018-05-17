@@ -75,7 +75,7 @@
 #define	_LE8_		"≤"
 #define	_GE8_		"≥"
 #define	_NOT8_		"≠"
-#define	_MULT8_		"x"
+#define	_MULT8_		"×"
 #define	_LEFTARROW8_	"←"
 
 #define	FILLCHAR	' '
