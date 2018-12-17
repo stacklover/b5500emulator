@@ -17,6 +17,7 @@
 #define NUMTERM 32
 #define	NUMSERV 2
 #define TRACE_DCC 0
+#define PEER_INFO_LEN 80
 
 // Special Codes 
 #define	EOM	'~'	// (BIC: left arow) Marks (premature) Buffer End
@@ -150,7 +151,7 @@ typedef struct terminal {
 // physical connection
 	enum pc pc;			// physical connection
 	enum pcs pcs;			// physical connection state
-	char peer_info[80];		// identification of peer
+	char peer_info[PEER_INFO_LEN];	// identification of peer
 	// pc = pc_serial
 	int serial_handle;		// handle of open tty device
 	// pc = pc_canopen

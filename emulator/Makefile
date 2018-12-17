@@ -19,12 +19,15 @@
 
 ALL =		$(ODIR)/emulator2.exe \
 		$(ODIR)/processor_panel.exe \
+		$(ODIR)/datacom_panel.exe \
 		$(ODIR)/b9352.exe \
 		$(ODIR)/b9353.exe
 
 OBJPANEL =	$(ODIR)/processor_panel.o \
 		$(ODIR)/pdp_text.o \
 		$(ODIR)/init_shares.o
+
+OBJDCC =	$(ODIR)/datacom_panel.o
 
 OBJB9352 =	$(ODIR)/b9352.o
 
@@ -74,6 +77,10 @@ all: $(ALL)
 $(ODIR)/processor_panel.exe:	 $(OBJPANEL) Makefile
 	@echo "*** Linking $@..."
 	$(CXX) $(LFLAGS) -o $(ODIR)/processor_panel.exe $(OBJPANEL)
+
+$(ODIR)/datacom_panel.exe:	 $(OBJDCC) Makefile
+	@echo "*** Linking $@..."
+	$(CXX) $(LFLAGS) -o $(ODIR)/datacom_panel.exe $(OBJDCC)
 
 $(ODIR)/b9352.exe:	 $(OBJB9352) Makefile
 	@echo "*** Linking $@..."

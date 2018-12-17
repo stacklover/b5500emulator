@@ -53,6 +53,9 @@
 #include <netinet/in.h>
 #include <netdb.h>
 #include <signal.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <sys/msg.h>
 
 #include "common.h"
 #include "io.h"
@@ -64,20 +67,21 @@
 * string constants
 ***********************************************************************/
 static const char *pc_name[] = {
-	"NONE", "SERIAL", "CANOPEN", "TELNET"};
+	"NONE", "SERI", "CANO", "TELN"};
 static const char *pcs_name[] = {
-	"DISCONNECTED", "PENDING", "ABORTED", "CONNECTED", "FAILED"};
+	"DISC", "PEND", "ABOR", "CONN", "FAIL"};
 static const char *ld_name[] = {
-	"TELETYPE", "CONTENTION"};
+	"TTY ", "CONT"};
 static const char *em_name[] = {
-	"NONE", "TELETYPE", "ANSI"};
+	"NONE", "TTY ", "ANSI"};
 static const char *bufstate_name[] = {
-	"NOTREADY", "IDLE", "INPUTBUSY", "READREADY", "OUTPUTBUSY", "WRITEREADY"};
+	"NRDY", "IDLE", "IBSY", "RRDY", "OBSY", "WRDY"};
 
 /***********************************************************************
 * the terminals
 ***********************************************************************/
-static TERMINAL_T terminal[NUMTERM];
+int shm_dcc;	// DCC shared structures
+static TERMINAL_T *terminal;
 
 /***********************************************************************
 * misc variables
@@ -173,8 +177,9 @@ static int get_status(const char *v, void *) {
 	char buf[OUTBUFSIZE];
 	char *p = buf;
 
-	sprintf(buf, "STATN BUFSTATE   IRQ ABN FBF CONTYPE CONSTATE  "
-			"LINEDISCIP EMLATION CONNECTION\r\n"); 
+	sprintf(buf, "STATN BUFS IRQ ABN FBF TYPE STAT DISC EMUL CONNECTION INFO\r\n"); 
+	spo_print(buf);
+	sprintf(buf, "----- ---- --- --- --- ---- ---- ---- ---- ---------------\r\n"); 
 	spo_print(buf);
 
 	// list all connected terminals
@@ -184,8 +189,7 @@ static int get_status(const char *v, void *) {
 		if (t->pcs > pcs_disconnected) {
 			p = buf;
 			p += sprintf(p,
-				"%-5.5s %-10.10s I=%u A=%u F=%u %-7.7s "
-					"%-9.9s %-10.10s %-8.8s",
+				"%-5.5s %-4.4s I=%u A=%u F=%u %-4.4s %-4.4s %-4.4s %-4.4s",
 				t->name,
 				bufstate_name[t->bufstate],
 				t->interrupt, t->abnormal, t->fullbuffer,
@@ -196,16 +200,17 @@ static int get_status(const char *v, void *) {
 				p += sprintf(p, "\r\n");
 				break;
 			case pc_serial:
-				p += sprintf(p, " H=%d\r\n", t->serial_handle);
+				p += sprintf(p, " %d\r\n", t->serial_handle);
 				break;
 			case pc_canopen:
-				p += sprintf(p, " C=%d\r\n", t->canid);
+				p += sprintf(p, " %d\r\n", t->canid);
 				break;
 			case pc_telnet:
-				p += sprintf(p, " S=%d (%s %ux%u)\r\n",
+				p += sprintf(p, " %d %s %ux%u %s\r\n",
 					t->session.socket,
 					t->session.type,
-					t->session.cols, t->session.rows);
+					t->session.cols, t->session.rows,
+					t->peer_info);
 				break;
 			}
 			spo_print(buf);
@@ -325,6 +330,18 @@ int dcc_init(const char *option) {
 
 		// ignore all SIGPIPEs
 		signal(SIGPIPE, SIG_IGN);
+
+		// establish shared memory
+		shm_dcc = shmget(SHM_DCC, sizeof(TERMINAL_T)*NUMTERM, IPC_CREAT|0644);
+		if (shm_dcc < 0) {
+			perror("shmget DCC");
+			exit(2);
+		}
+		terminal = (TERMINAL_T *)shmat(shm_dcc, NULL, 0);
+		if ((int)terminal == -1) {
+			perror("shmat DCC");
+			exit(2);
+		}
 
 		// init server etc data structures
 		pc_telnet_init();

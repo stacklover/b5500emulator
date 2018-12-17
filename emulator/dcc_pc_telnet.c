@@ -55,7 +55,7 @@ static enum em emno[NUMSERV] = {em_ansi, em_none};
 static void new_connection(int newsocket, struct sockaddr_in *addr, enum ld ld, enum em em) {
 	static const char *msg = "\r\nB5500 TIME SHARING - BUSY\r\nPLEASE CALL BACK LATER\r\n";
 	socklen_t addrlen = sizeof(*addr);
-	char host[40];
+	char host[PEER_INFO_LEN - 6];	// keep space at end for port
 	unsigned port;
 	TERMINAL_T *t;
 	char buf[OUTBUFSIZE];
@@ -70,10 +70,8 @@ static void new_connection(int newsocket, struct sockaddr_in *addr, enum ld ld, 
 	if (t != NULL) {
 		// free terminal found
 		snprintf(t->peer_info, sizeof t->peer_info, "%s:%u", host, port);
-		if (ctrace) {
-			t->outidx = sprintf(t->outbuf, "+NEWC %s %s (%d)",
-				t->name, t->peer_info, newsocket);
-		}
+		t->outidx = sprintf(t->outbuf, "+NEWC %s %s (%d)",
+			t->name, t->peer_info, newsocket);
 		dcc_init_terminal(t);
 		telnet_session_clear(&t->session);
 		telnet_session_open(&t->session, newsocket);
@@ -82,11 +80,9 @@ static void new_connection(int newsocket, struct sockaddr_in *addr, enum ld ld, 
 		t->pcs = pcs_pending;
 	} else {
 		// no free entry found
-		if (ctrace) {
-			sprintf(buf, "+BUSY %s:%u (%d)\r\n",
-				host, port, newsocket);
-			spo_print(buf);
-		}
+		sprintf(buf, "+BUSY %s:%u (%d)\r\n",
+			host, port, newsocket);
+		spo_print(buf);
 		write(newsocket, msg, strlen(msg));
 		close(newsocket);
 	}
@@ -115,16 +111,16 @@ void pc_telnet_poll_terminal(TERMINAL_T *t) {
 				spo_print(t->outbuf);
 			t->pcs = pcs_aborted;
 		} else if (t->session.success_mask & 1) {
-			// negotiations have come up with a bad
+			// negotiations have come up with a bad answer
 			// send message
 			telnet_session_write(&t->session, msg, strlen(msg));
-			t->outidx += sprintf(t->outbuf+t->outidx, " FAILED\r\n");
+			t->outidx += sprintf(t->outbuf+t->outidx, " FAILED %08x\r\n", t->session.success_mask);
 			if (ctrace)
 				spo_print(t->outbuf);
 			t->pcs = pcs_aborted;
 		} else if ((t->session.success_mask & (1u << TN_TERMTYPE)) &&
 			   (t->session.success_mask & (1u << TN_WINDOWSIZE))) {
-			// all negotiations succeeded
+			// negotiations succeeded
 			// report it to system
 			t->outidx += sprintf(t->outbuf+t->outidx, " CONNECTED %s %ux%u\r\n",
 				t->session.type, t->session.cols, t->session.rows);

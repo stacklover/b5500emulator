@@ -277,6 +277,7 @@ typedef struct irq {
 #define SHM_IOC2        (('I'<<24)|('O'<<16)|('C'<<8)|'2')  // shared data of I/O control unit 2
 #define SHM_IOC3        (('I'<<24)|('O'<<16)|('C'<<8)|'3')  // shared data of I/O control unit 3
 #define SHM_IOC4        (('I'<<24)|('O'<<16)|('C'<<8)|'4')  // shared data of I/O control unit 4
+#define SHM_DCC         (('D'<<24)|('C'<<16)|('C'<<8)|'_')  // shared data of Data Communication Controller
 #define MSG_CPUA        (('C'<<24)|('P'<<16)|('U'<<8)|'A')  // messages to cpu A
 #define MSG_CPUB        (('C'<<24)|('P'<<16)|('U'<<8)|'B')  // messages to cpu B
 #define MSG_IOCU        (('I'<<24)|('O'<<16)|('C'<<8)|'U')  // messages to I/O control unit(s)
