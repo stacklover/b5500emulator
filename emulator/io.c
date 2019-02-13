@@ -101,16 +101,16 @@ void put_ib_reverse(IOCU *u) {
 * Print an IO control word
 ***********************************************************************/
 void print_iocw(FILE *fp, IOCU *u) {
-	fprintf(fp, "@%p UNIT=%02u. WC=%04o CMD=%03o CMD2=%o ADDR=%05o",
-		u, u->d_unit, u->d_wc, u->d_control, u->d_result, u->d_addr);
+	fprintf(fp, "_IOCW=%016llo (UNIT=%02u WC=%04o CMD=%03o   CMD2=%04o ADDR=%05o)",
+		u->w, u->d_unit, u->d_wc, u->d_control, u->d_result, u->d_addr);
 }
 
 /***********************************************************************
 * Print an IO result word
 ***********************************************************************/
 void print_ior(FILE *fp, IOCU *u) {
-	fprintf(fp, "@%p UNIT=%02u. WC=%04o CMD=%03o RESULT=%04o ADDR=%05o",
-		u, u->d_unit, u->d_wc, u->d_control, u->d_result, u->d_addr);
+	fprintf(fp, "_ RCW=%016llo (UNIT=%02u WC=%04o CMD=%03o RESULT=%04o ADDR=%05o)",
+		u->w, u->d_unit, u->d_wc, u->d_control, u->d_result, u->d_addr);
 }
 
 /***********************************************************************
@@ -173,8 +173,10 @@ static void perform_io(int cu, WORD48 iocw) {
 	u->d_addr = (u->w & MASK_IODADDR) >> SHFT_IODADDR;
 
 #if 0
-	print_iocw(stdout, u);
-	printf(" - ");
+	if (u->d_unit == 16) {
+		print_iocw(stdout, u);
+		printf("\n");
+	}
 #endif
 
 	BIT reading = (u->d_control & CD_24_READ) ? true : false;
@@ -195,6 +197,13 @@ static void perform_io(int cu, WORD48 iocw) {
 	u->w |= ((WORD48)u->d_control) << SHFT_IODCONTROL;
 	u->w |= ((WORD48)u->d_result) << SHFT_IODRESULT;
 	u->w |= ((WORD48)u->d_addr) << SHFT_IODADDR;
+
+#if 0
+	if (u->d_unit == 16) {
+		print_ior(stdout, u);
+		printf("\n");
+	}
+#endif
 
         // return IO RESULT
 	switch (cu) {
@@ -219,10 +228,7 @@ static void perform_io(int cu, WORD48 iocw) {
 	        CC->CCI11F = true;
 		break;
 	}
-#if 0
-	print_ior(stdout, u);
-	printf ("\n");
-#endif
+
 }
 
 /***********************************************************************

@@ -177,9 +177,9 @@ static int get_status(const char *v, void *) {
 	char buf[OUTBUFSIZE];
 	char *p = buf;
 
-	sprintf(buf, "STATN BUFS IRQ ABN FBF TYPE STAT DISC EMUL CONNECTION INFO\r\n"); 
+	sprintf(buf, "STATN BUFS ENA IRQ ABN FBF TYPE STAT DISC EMUL CONNECTION INFO\r\n"); 
 	spo_print(buf);
-	sprintf(buf, "----- ---- --- --- --- ---- ---- ---- ---- ---------------\r\n"); 
+	sprintf(buf, "----- ---- --- --- --- --- ---- ---- ---- ---- ---------------\r\n"); 
 	spo_print(buf);
 
 	// list all connected terminals
@@ -189,10 +189,10 @@ static int get_status(const char *v, void *) {
 		if (t->pcs > pcs_disconnected) {
 			p = buf;
 			p += sprintf(p,
-				"%-5.5s %-4.4s I=%u A=%u F=%u %-4.4s %-4.4s %-4.4s %-4.4s",
+				"%-5.5s %-4.4s E=%u I=%u A=%u F=%u %-4.4s %-4.4s %-4.4s %-4.4s",
 				t->name,
 				bufstate_name[t->bufstate],
-				t->interrupt, t->abnormal, t->fullbuffer,
+				t->enabled, t->interrupt, t->abnormal, t->fullbuffer,
 				pc_name[t->pc], pcs_name[t->pcs],
 				ld_name[t->ld], em_name[t->em]);
 			switch (t->pc) {
@@ -397,8 +397,9 @@ void dcc_report_connect(TERMINAL_T *t) {
 		}
 	}
 	// do not report again
-	if (!t->connected)
+	if (!t->connected) {
 		t->interrupt = true;
+	}
 	t->fullbuffer = false; t->bufstate = writeready;
 	t->abnormal = true; t->connected = true;
 	t->sysbuf[0] = 0; t->sysidx = 0;
@@ -409,8 +410,9 @@ void dcc_report_connect(TERMINAL_T *t) {
 ***********************************************************************/
 void dcc_report_disconnect(TERMINAL_T *t) {
 	// do not report again
-	if (t->connected)
-		 t->interrupt = true;
+	if (t->connected) {
+		t->interrupt = true;
+	}
 	t->fullbuffer = false; t->bufstate = notready;
 	t->abnormal = true; t->connected = false;
 	t->sysbuf[0] = 0; t->sysidx = 0;
@@ -457,6 +459,7 @@ static void dcc_poll(void) {
 * query DCC ready status
 ***********************************************************************/
 BIT dcc_ready(unsigned index) {
+	unsigned tun, bnr;
 
 	// initialize SPO if not ready
 	if (!ready)
@@ -466,9 +469,16 @@ BIT dcc_ready(unsigned index) {
 	dcc_poll();
 
 	// check for a signal ready sysbuf
-	if (terminal_search(NULL, NULL)) {
+	if (terminal_search(&tun, &bnr)) {
 		// a terminal requesting service has been found - set Datacomm IRQ
-		CC->CCI13F = true;
+		unsigned index = IDX(tun, bnr);
+		TERMINAL_T *t = terminal+index;
+		if (t->enabled && !CC->CCI13F) {
+#if 0
+			printf("+IRQ  %02u/%02u -> SET CCI13F\n", tun, bnr);
+#endif
+			CC->CCI13F = true;
+		}
 	}
 
 	// finally return always ready
@@ -484,9 +494,9 @@ static void dcc_read(IOCU *u) {
 	unsigned bnr = (u->d_wc >> 0) & 0xf;
 	unsigned index = IDX(tun, bnr);
 
-	// resolve critical error cases first
-	if (index >= NUMTERM || !terminal[index].connected) {
-		// terminal number outside range or not connected
+	// test for index within range
+	if (index >= NUMTERM) {
+		// terminal number outside range
 		u->d_result = RD_21_END | RD_20_ERR | RD_18_NRDY;
 		return;
 	}
@@ -496,6 +506,16 @@ static void dcc_read(IOCU *u) {
 	int count;
 	int ptr;
 	BIT gmset;
+
+	// was read
+	t->enabled = true;
+
+	// terminal line in connected state?
+	if (!t->connected) {
+		// terminal not connected
+		u->d_result = RD_21_END | RD_20_ERR | RD_18_NRDY;
+		return;
+	}
 
 	// return for all sysbuf states that do not allow reading
 	switch (t->bufstate) {
@@ -574,15 +594,25 @@ static void dcc_write(IOCU *u) {
 	unsigned bnr = (u->d_wc >> 0) & 0xf;
 	unsigned index = IDX(tun, bnr);
 
-	// resolve critical error cases first
-	if (index >= NUMTERM || !terminal[index].connected) {
-		// terminal number outside range or not connected
+	// test for index within range
+	if (index >= NUMTERM) {
+		// terminal number outside range
 		u->d_result = RD_21_END | RD_20_ERR | RD_18_NRDY;
 		return;
 	}
 
 	TERMINAL_T *t = terminal+index;
 	char c;
+
+	// was written
+	t->enabled = true;
+
+	// terminal line in connected state?
+	if (!t->connected) {
+		// terminal not connected
+		u->d_result = RD_21_END | RD_20_ERR | RD_18_NRDY;
+		return;
+	}
 
 	// return for all sysbuf states that do not allow writing
 	switch (t->bufstate) {
@@ -699,6 +729,8 @@ static void dcc_interrogate(IOCU *u) {
 				u->d_result |= RD_25_ABNORMAL;
 			// clear pending IRQ
 			t->interrupt = false;
+			// was interrogated
+			t->enabled = true;
 		}
 	}
 

@@ -14,6 +14,8 @@
 ************************************************************************
 * 2018-03-21  R.Meyer
 *   extracted from b5500emulator/dev_dcc.c
+* 2019-01-29  R.Meyer
+*   clear telnet structure "type" when new connection arrives
 ***********************************************************************/
 
 #include <stdio.h>
@@ -232,11 +234,9 @@ void telnet_session_close(TELNET_SESSION_T *t) {
 * TELNET Session Clear
 ***********************************************************************/
 void telnet_session_clear(TELNET_SESSION_T *t) {
+	memset(t, 0, sizeof *t);
+	strncpy(t->type, "unknown", sizeof(t->type));
 	t->socket = -1;
-	t->escape = none;
-	t->is_fullduplex = false;
-	t->cols = t->rows = 0;
-	t->success_mask = 0;
 }
 
 /***********************************************************************

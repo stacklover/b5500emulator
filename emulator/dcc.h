@@ -178,6 +178,7 @@ typedef struct terminal {
 	enum em em;			// emulation
 	enum lds lds;			// line discipline state
 // status bits to system
+	BIT enabled;			// line was interrogated at least once
 	BIT connected;
 	BIT interrupt;
 	BIT abnormal;

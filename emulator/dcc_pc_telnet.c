@@ -15,6 +15,10 @@
 * 2018-04-21  R.Meyer
 *   factored out all physcial connection (PC), all line discipline(LD)
 *   and all emulation (EM) functionality to spearate files
+* 2019-01-29  R.Meyer
+*   clear telnet structure "type" when new connection arrives
+* 2019-02-08  R.Meyer
+*   do not insist on TELNET negotiation for TELETYPE lines
 ***********************************************************************/
 
 #include <stdio.h>
@@ -42,9 +46,8 @@
 * the TELNET servers
 ***********************************************************************/
 static TELNET_SERVER_T server[NUMSERV];
-// server[0]: Port   23 - LINE type terminals (B9353 as TELETYPE)
-// server[1]: Port 8023 - BLOCK type terminals (B9352 with external ANSI)
-// server[2]: Port 9023 - BLOCK type terminals (B9352 with protocol)
+// server[0]: Port 23 - BLOCK type terminals (B9352 with external ANSI emulation)
+// server[1]: Port 8023 - LINE type terminals (TELETYPE)
 static unsigned portno[NUMSERV] = {23, 8023};
 static enum ld ldno[NUMSERV] = {ld_contention, ld_teletype};
 static enum em emno[NUMSERV] = {em_ansi, em_none};
@@ -53,7 +56,7 @@ static enum em emno[NUMSERV] = {em_ansi, em_none};
 * handle new incoming TELNET session
 ***********************************************************************/
 static void new_connection(int newsocket, struct sockaddr_in *addr, enum ld ld, enum em em) {
-	static const char *msg = "\r\nB5500 TIME SHARING - BUSY\r\nPLEASE CALL BACK LATER\r\n";
+	static const char *msg = "\r\nB5700 TIME SHARING - BUSY\r\nPLEASE CALL BACK LATER\r\n";
 	socklen_t addrlen = sizeof(*addr);
 	char host[PEER_INFO_LEN - 6];	// keep space at end for port
 	unsigned port;
@@ -92,7 +95,7 @@ static void new_connection(int newsocket, struct sockaddr_in *addr, enum ld ld, 
 * PC TELNET: POLL TERMINAL
 ***********************************************************************/
 void pc_telnet_poll_terminal(TERMINAL_T *t) {
-	static const char *msg = "\r\nB5500 TIME SHARING - YOUR TELNET CLIENT IS NOT COMPATIBLE\r\n";
+	static const char *msg = "\r\nB5700 TIME SHARING - YOUR TELNET CLIENT IS NOT COMPATIBLE\r\n";
 	int cnt = -1;
 
 	switch (t->pcs) {
@@ -119,8 +122,9 @@ void pc_telnet_poll_terminal(TERMINAL_T *t) {
 				spo_print(t->outbuf);
 			t->pcs = pcs_aborted;
 		} else if ((t->session.success_mask & (1u << TN_TERMTYPE)) &&
-			   (t->session.success_mask & (1u << TN_WINDOWSIZE))) {
-			// negotiations succeeded
+			   (t->session.success_mask & (1u << TN_WINDOWSIZE)) ||
+				(t->ld == ld_teletype)) {
+			// negotiations succeeded or it is a TELETYPE discipline
 			// report it to system
 			t->outidx += sprintf(t->outbuf+t->outidx, " CONNECTED %s %ux%u\r\n",
 				t->session.type, t->session.cols, t->session.rows);
