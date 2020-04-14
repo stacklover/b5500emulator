@@ -36,7 +36,7 @@
 
 #include "telnetd.h"
 
-#define	TN_VERBOSE 0
+#define	TN_VERBOSE 1
 
 /***********************************************************************
 * Initial Negotiations

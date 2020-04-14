@@ -15,6 +15,8 @@
 #   changes for	cross compilation
 # 2017-09-30  R.Meyer
 #   overhaul of file names
+# 2020-03-09  R.Meyer
+#   added iTELEX functionality
 #**********************************************************************/
 
 ALL =		$(ODIR)/emulator2.exe \
@@ -50,18 +52,20 @@ OBJEMULATOR2 =	$(ODIR)/emulator2.o  \
 		$(ODIR)/dcc_ld_contention.o \
 		$(ODIR)/dcc_em_b9352_ansi.o \
 		$(ODIR)/dcc_pc_telnet.o \
+		$(ODIR)/dcc_pc_itelex.o \
 		$(ODIR)/dcc_pc_serial.o \
 		$(ODIR)/dcc_pc_canopen.o \
 		$(ODIR)/translatetables.o \
 		$(ODIR)/instr_table.o \
 		$(ODIR)/circbuffer.o \
-		$(ODIR)/telnetd.o
+		$(ODIR)/telnetd.o \
+		$(ODIR)/itelexd.o
 ifeq ($(USECAN),1)
 OBJEMULATOR2 +=	$(ODIR)/canbus.o \
 		$(ODIR)/canlib.o
 endif
 
-INC =		common.h io.h b5500_defs.h canlib.h dcc.h telnetd.h
+INC =		common.h io.h b5500_defs.h canlib.h dcc.h telnetd.h itelexd.h
 
 CFLAGS		= -D_LARGEFILE64_SOURCE	-D_FILE_OFFSET_BITS=64 -pipe -Os \
 		  -D_THREAD_SAFE -D_REENTRANT -DNOSIMH -Wall

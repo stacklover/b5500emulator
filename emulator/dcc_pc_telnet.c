@@ -19,6 +19,8 @@
 *   clear telnet structure "type" when new connection arrives
 * 2019-02-08  R.Meyer
 *   do not insist on TELNET negotiation for TELETYPE lines
+* 2020-03-09  R.Meyer
+*   added iTELEX functionality
 ***********************************************************************/
 
 #include <stdio.h>
@@ -40,17 +42,18 @@
 #include "common.h"
 #include "io.h"
 #include "telnetd.h"
+#include "itelexd.h"
 #include "dcc.h"
 
 /***********************************************************************
 * the TELNET servers
 ***********************************************************************/
-static TELNET_SERVER_T server[NUMSERV];
+static TELNET_SERVER_T server[NUMSERV_T];
 // server[0]: Port 23 - BLOCK type terminals (B9352 with external ANSI emulation)
 // server[1]: Port 8023 - LINE type terminals (TELETYPE)
-static unsigned portno[NUMSERV] = {23, 8023};
-static enum ld ldno[NUMSERV] = {ld_contention, ld_teletype};
-static enum em emno[NUMSERV] = {em_ansi, em_none};
+static unsigned portno[NUMSERV_T] = {23, 8023};
+static enum ld ldno[NUMSERV_T] = {ld_contention, ld_teletype};
+static enum em emno[NUMSERV_T] = {em_ansi, em_none};
 
 /***********************************************************************
 * handle new incoming TELNET session
@@ -76,8 +79,8 @@ static void new_connection(int newsocket, struct sockaddr_in *addr, enum ld ld, 
 		t->outidx = sprintf(t->outbuf, "+NEWC %s %s (%d)",
 			t->name, t->peer_info, newsocket);
 		dcc_init_terminal(t);
-		telnet_session_clear(&t->session);
-		telnet_session_open(&t->session, newsocket);
+		telnet_session_clear(&t->tsession);
+		telnet_session_open(&t->tsession, newsocket);
 		t->pc = pc_telnet;
 		t->ld = ld; t->em = em; t->lds = lds_idle;
 		t->pcs = pcs_pending;
@@ -106,28 +109,28 @@ void pc_telnet_poll_terminal(TERMINAL_T *t) {
 		// connection is pending
 		// poll receive to make negotiation run
 		// (we are not interested in any data yet)
-		cnt = telnet_session_read(&t->session, t->inbuf, sizeof t->inbuf);
+		cnt = telnet_session_read(&t->tsession, t->inbuf, sizeof t->inbuf);
 		if (cnt < 0) {
 			// socket closed by peer
 			t->outidx += sprintf(t->outbuf+t->outidx, " CLOSED\r\n");
 			if (ctrace)
 				spo_print(t->outbuf);
 			t->pcs = pcs_aborted;
-		} else if (t->session.success_mask & 1) {
+		} else if (t->tsession.success_mask & 1) {
 			// negotiations have come up with a bad answer
 			// send message
-			telnet_session_write(&t->session, msg, strlen(msg));
-			t->outidx += sprintf(t->outbuf+t->outidx, " FAILED %08x\r\n", t->session.success_mask);
+			telnet_session_write(&t->tsession, msg, strlen(msg));
+			t->outidx += sprintf(t->outbuf+t->outidx, " FAILED %08x\r\n", t->tsession.success_mask);
 			if (ctrace)
 				spo_print(t->outbuf);
 			t->pcs = pcs_aborted;
-		} else if ((t->session.success_mask & (1u << TN_TERMTYPE)) &&
-			   (t->session.success_mask & (1u << TN_WINDOWSIZE)) ||
+		} else if (((t->tsession.success_mask & (1u << TN_TERMTYPE)) &&
+			    (t->tsession.success_mask & (1u << TN_WINDOWSIZE))) ||
 				(t->ld == ld_teletype)) {
 			// negotiations succeeded or it is a TELETYPE discipline
 			// report it to system
 			t->outidx += sprintf(t->outbuf+t->outidx, " CONNECTED %s %ux%u\r\n",
-				t->session.type, t->session.cols, t->session.rows);
+				t->tsession.type, t->tsession.cols, t->tsession.rows);
 			if (ctrace)
 				spo_print(t->outbuf);
 			t->pcs = pcs_connected;
@@ -152,7 +155,7 @@ void pc_telnet_poll_terminal(TERMINAL_T *t) {
 		}
 		break;
 	case pcs_aborted:
-		telnet_session_close(&t->session);
+		telnet_session_close(&t->tsession);
 		t->pcs = pcs_disconnected;
 		t->pc = pc_none;
 		break;
@@ -163,7 +166,7 @@ void pc_telnet_poll_terminal(TERMINAL_T *t) {
 				t->name);
 			spo_print(t->outbuf);
 		}
-		telnet_session_close(&t->session);
+		telnet_session_close(&t->tsession);
 		dcc_report_disconnect(t);
 		t->pcs = pcs_disconnected;
 		t->pc = pc_none;
@@ -177,7 +180,7 @@ void pc_telnet_poll_terminal(TERMINAL_T *t) {
 void pc_telnet_init(void) {
 	int index;
 
-	for (index=0; index<NUMSERV; index++)
+	for (index=0; index<NUMSERV_T; index++)
 		telnet_server_clear(server+index);
 }
 
@@ -190,7 +193,7 @@ void pc_telnet_poll(BIT telnet) {
 	unsigned index;
 
 	// start/stop servers
-	for (index=0; index<NUMSERV; index++) {
+	for (index=0; index<NUMSERV_T; index++) {
 		if (telnet && server[index].socket <= 2) {
 			telnet_server_start(server+index, portno[index]);
 		} else if (!telnet && server[index].socket > 2) {
@@ -199,7 +202,7 @@ void pc_telnet_poll(BIT telnet) {
 	}
 
 	// poll servers for new connections
-	for (index=0; index<NUMSERV; index++) {
+	for (index=0; index<NUMSERV_T; index++) {
 		if (server[index].socket > 2) {
 			newsocket = telnet_server_poll(server+index, &addr);
 			if (newsocket > 0)
@@ -213,7 +216,7 @@ void pc_telnet_poll(BIT telnet) {
 ***********************************************************************/
 int pc_telnet_read(TERMINAL_T *t, char *buf, int len) {
 	// check for data available
-	return telnet_session_read(&t->session, buf, len);
+	return telnet_session_read(&t->tsession, buf, len);
 }
 
 /***********************************************************************
@@ -222,10 +225,10 @@ int pc_telnet_read(TERMINAL_T *t, char *buf, int len) {
 int pc_telnet_write(TERMINAL_T *t, char *buf, int len) {
 	int cnt;
 	// try to write
-	cnt = telnet_session_write(&t->session, buf, len);
+	cnt = telnet_session_write(&t->tsession, buf, len);
 	// reason to disconnect?
 	if (cnt != len) {
-		telnet_session_close(&t->session);
+		telnet_session_close(&t->tsession);
 		t->pcs = pcs_failed;
 	}
 	return cnt;

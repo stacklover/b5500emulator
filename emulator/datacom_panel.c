@@ -13,6 +13,8 @@
 *   from thin air.
 * 2017-09-30  R.Meyer
 *   overhaul of file names
+* 2020-03-09  R.Meyer
+*   added iTELEX functionality
 ***********************************************************************/
 
 #include <stdio.h>
@@ -29,13 +31,14 @@
 #include "io.h"
 #include "circbuffer.h"
 #include "telnetd.h"
+#include "itelexd.h"
 #include "dcc.h"
 
 /***********************************************************************
 * string constants
 ***********************************************************************/
 static const char *pc_name[] = {
-	"NONE", "SERI", "CANO", "TELN"};
+	"NONE", "SERI", "CANO", "TELN", "ITLX"};
 static const char *pcs_name[] = {
 	"DISC", "PEND", "ABOR", "CONN", "FAIL"};
 static const char *ld_name[] = {
@@ -90,9 +93,14 @@ int main(int argc, char	*argv[])
 				break;
 			case pc_telnet:
 				printf(" %d %s %ux%u %s",
-					t->session.socket,
-					t->session.type,
-					t->session.cols, t->session.rows,
+					t->tsession.socket,
+					t->tsession.type,
+					t->tsession.cols, t->tsession.rows,
+					t->peer_info);
+				break;
+			case pc_itelex:
+				printf(" %d %s",
+					t->isession.socket,
 					t->peer_info);
 				break;
 			}

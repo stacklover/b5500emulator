@@ -15,7 +15,9 @@
 #define	_DCC_H_
 
 #define NUMTERM 32
-#define	NUMSERV 2
+#define	NUMSERV_T 2
+#define	NUMSERV_I 2
+
 #define TRACE_DCC 0
 #define PEER_INFO_LEN 80
 
@@ -131,7 +133,8 @@ enum pc {
 	pc_none=0,	// no connection
 	pc_serial,	// via tty device
 	pc_canopen,	// via CANopen
-	pc_telnet};	// via TELNET server
+	pc_telnet,	// via TELNET server
+	pc_itelex};	// via iTELEX server
 
 /***********************************************************************
 * the physical connection state
@@ -157,7 +160,9 @@ typedef struct terminal {
 	// pc = pc_canopen
 	unsigned canid;			// canif of terminal
 	// pc = pc_telnet
-	TELNET_SESSION_T session;	// TELNET state values
+	TELNET_SESSION_T tsession;	// TELNET state values
+	// pc = pc_itelex
+	ITELEX_SESSION_T isession;	// iTELEX state values
 // system communication buffer
 	char sysbuf[SYSBUFSIZE];	// buffer with raw data from/to system
 	int sysidx;			// number of chars in sysbuf
@@ -169,6 +174,7 @@ typedef struct terminal {
 // output buffer
 	char outbuf[SYSBUFSIZE];	// buffer simulating line to terminal
 	int outidx;
+	BIT disc;			// pending disconnect request
 // keyboard edit buffer
 	char keybuf[KEYBUFSIZE];	// buffer for keyboard editing
 	int keyidx;			// number of chars in keybuf
@@ -215,6 +221,15 @@ extern void pc_telnet_poll(BIT telnet);
 extern void pc_telnet_poll_terminal(TERMINAL_T *t);
 extern int pc_telnet_read(TERMINAL_T *t, char *buf, int len);
 extern int pc_telnet_write(TERMINAL_T *t, char *buf, int len);
+
+/***********************************************************************
+* physical connection by iTELEX
+***********************************************************************/
+extern void pc_itelex_init(void);
+extern void pc_itelex_poll(BIT telnet);
+extern void pc_itelex_poll_terminal(TERMINAL_T *t);
+extern int pc_itelex_read(TERMINAL_T *t, char *buf, int len);
+extern int pc_itelex_write(TERMINAL_T *t, char *buf, int len);
 
 /***********************************************************************
 * physical connection by CANopen

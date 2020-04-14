@@ -36,6 +36,8 @@
 *   and all emulation (EM) functionality to spearate files
 * 2018-05-13  R.Meyer
 *   added data trace to file
+* 2020-03-09  R.Meyer
+*   added iTELEX functionality
 ***********************************************************************/
 
 #include <stdio.h>
@@ -61,13 +63,14 @@
 #include "io.h"
 #include "circbuffer.h"
 #include "telnetd.h"
+#include "itelexd.h"
 #include "dcc.h"
 
 /***********************************************************************
 * string constants
 ***********************************************************************/
 static const char *pc_name[] = {
-	"NONE", "SERI", "CANO", "TELN"};
+	"NONE", "SERI", "CANO", "TELN", "ITLX"};
 static const char *pcs_name[] = {
 	"DISC", "PEND", "ABOR", "CONN", "FAIL"};
 static const char *ld_name[] = {
@@ -88,6 +91,7 @@ static TERMINAL_T *terminal;
 ***********************************************************************/
 static BIT ready;
 static BIT telnet = false;
+static BIT itelex = false;
 
 char ftracedir[80];
 BIT etrace = false;
@@ -169,6 +173,21 @@ static int set_telnet(const char *v, void *) {
 }
 
 /***********************************************************************
+* specify iTELEX on/off
+***********************************************************************/
+static int set_itelex(const char *v, void *) {
+	if (strcasecmp(v, "ON") == 0) {
+		itelex = true;
+	} else if (strcasecmp(v, "OFF") == 0) {
+		itelex = false;
+	} else {
+		spo_print("$SPECIFY ON OR OFF\r\n");
+		return 2; // FATAL
+	}
+	return 0; // OK
+}
+
+/***********************************************************************
 * get status
 ***********************************************************************/
 static int get_status(const char *v, void *) {
@@ -207,9 +226,14 @@ static int get_status(const char *v, void *) {
 				break;
 			case pc_telnet:
 				p += sprintf(p, " %d %s %ux%u %s\r\n",
-					t->session.socket,
-					t->session.type,
-					t->session.cols, t->session.rows,
+					t->tsession.socket,
+					t->tsession.type,
+					t->tsession.cols, t->tsession.rows,
+					t->peer_info);
+				break;
+			case pc_itelex:
+				p += sprintf(p, " %d %s\r\n",
+					t->isession.socket,
 					t->peer_info);
 				break;
 			}
@@ -246,6 +270,7 @@ help:		spo_print("$SPECIFY CANID(1..126) OR OFF\r\n");
 static const command_t dcc_commands[] = {
 	{"DCC", NULL},
 	{"TELNET", set_telnet},
+	{"ITELEX", set_itelex},
 #ifdef USECAN
 	{"CAN", set_can},
 #endif
@@ -272,7 +297,7 @@ void dcc_init_terminal(TERMINAL_T *t) {
 /***********************************************************************
 * Find a terminal that needs service
 ***********************************************************************/
-static BIT terminal_search(unsigned *ptun, unsigned *pbnr) {
+static BIT terminal_search(unsigned *ptun, unsigned *pbnr, BIT do_output) {
 	unsigned index;
 	TERMINAL_T *t;
 
@@ -280,7 +305,7 @@ static BIT terminal_search(unsigned *ptun, unsigned *pbnr) {
 		t = &terminal[index];
 
 		// trigger late output IRQ
-		if (t->bufstate == outputbusy) {
+		if (do_output && t->bufstate == outputbusy) {
 			// now send/interpret the data
 			if (t->ld == ld_teletype)
 				ld_write_teletype(t);
@@ -345,6 +370,7 @@ int dcc_init(const char *option) {
 
 		// init server etc data structures
 		pc_telnet_init();
+		pc_itelex_init();
 		pc_serial_init();
 		pc_canopen_init();
 
@@ -392,8 +418,8 @@ void dcc_report_connect(TERMINAL_T *t) {
 				tm.tm_hour, tm.tm_min, tm.tm_sec);
 			fprintf(t->trace, "C %s\n", t->peer_info);
 			fprintf(t->trace, "C %s %ux%u\n",
-				t->session.type,
-				t->session.cols, t->session.rows);
+				t->tsession.type,
+				t->tsession.cols, t->tsession.rows);
 		}
 	}
 	// do not report again
@@ -403,6 +429,7 @@ void dcc_report_connect(TERMINAL_T *t) {
 	t->fullbuffer = false; t->bufstate = writeready;
 	t->abnormal = true; t->connected = true;
 	t->sysbuf[0] = 0; t->sysidx = 0;
+	t->disc = false;
 }
 
 /***********************************************************************
@@ -439,6 +466,7 @@ static void dcc_poll(void) {
 
 	// poll servers etc.
 	pc_telnet_poll(telnet);
+	pc_itelex_poll(itelex);
 	pc_serial_poll();
 	pc_canopen_poll();
 
@@ -447,6 +475,7 @@ static void dcc_poll(void) {
 		t = &terminal[index];
 		switch (t->pc) {
 		case pc_telnet: pc_telnet_poll_terminal(t); break;
+		case pc_itelex: pc_itelex_poll_terminal(t); break;
 		case pc_serial: pc_serial_poll_terminal(t); break;
 		case pc_canopen: pc_canopen_poll_terminal(t); break;
 		default:
@@ -469,7 +498,7 @@ BIT dcc_ready(unsigned index) {
 	dcc_poll();
 
 	// check for a signal ready sysbuf
-	if (terminal_search(&tun, &bnr)) {
+	if (terminal_search(&tun, &bnr, true)) {
 		// a terminal requesting service has been found - set Datacomm IRQ
 		unsigned index = IDX(tun, bnr);
 		TERMINAL_T *t = terminal+index;
@@ -698,7 +727,7 @@ static void dcc_interrogate(IOCU *u) {
 	// tun == 0: general query - find a terminal that needs service
 	if (tun == 0) {
 		// search if any terminal needs service
-		terminal_search(&tun, &bnr);
+		terminal_search(&tun, &bnr, false);
 	}
 
 	// any found or specific query?

@@ -18,6 +18,8 @@
 * 2018-04-21  R.Meyer
 *   factored out all physcial connection (PC), all line discipline(LD)
 *   and all emulation (EM) functionality to spearate files
+* 2020-03-09  R.Meyer
+*   added iTELEX functionality
 ***********************************************************************/
 
 #include <stdio.h>
@@ -39,6 +41,7 @@
 #include "common.h"
 #include "io.h"
 #include "telnetd.h"
+#include "itelexd.h"
 #include "circbuffer.h"
 #include "dcc.h"
 
@@ -132,14 +135,14 @@ static void redisplay(TERMINAL_T *t, int row1, int row2) {
 			}
 
 			if (p > buf) {
-				telnet_session_write(&t->session, buf, p-buf);
+				telnet_session_write(&t->tsession, buf, p-buf);
 				p = buf;
 			}
 		}
 	}
 	// move cursor to its last position
 	p += sprintf(p, _GOTO_, t->scridy+1, t->scridx+1);
-	telnet_session_write(&t->session, buf, p-buf);
+	telnet_session_write(&t->tsession, buf, p-buf);
 }
 
 /***********************************************************************
@@ -179,7 +182,7 @@ static void cursormove(TERMINAL_T *t) {
 	char buf[20];
 	int len;
 	len = sprintf(buf, _GOTO_, t->scridy+1, t->scridx+1);
-	len = telnet_session_write(&t->session, buf, len);
+	len = telnet_session_write(&t->tsession, buf, len);
 }
 
 /***********************************************************************
@@ -190,7 +193,7 @@ static void erasetoeol(TERMINAL_T *t) {
 	int len;
 	memset(t->scrbuf + t->scridy*COLS + t->scridx, FILLCHAR, COLS - t->scridx);
 	len = sprintf(buf, _EREOL_);
-	len = telnet_session_write(&t->session, buf, len);
+	len = telnet_session_write(&t->tsession, buf, len);
 }
 
 /***********************************************************************
@@ -202,7 +205,7 @@ static void erasescreen(TERMINAL_T *t) {
 	t->scridx = t->scridy = 0;
 	memset(t->scrbuf, FILLCHAR, ROWS*COLS);
 	len = sprintf(buf, _HOME_ _CLS_);
-	len = telnet_session_write(&t->session, buf, len);
+	len = telnet_session_write(&t->tsession, buf, len);
 }
 
 /***********************************************************************
@@ -266,7 +269,7 @@ static void store(TERMINAL_T *t, char ch) {
 		*p++ = ch;
 	}
 
-	telnet_session_write(&t->session, buf, p - buf);
+	telnet_session_write(&t->tsession, buf, p - buf);
 	t->scrbuf[t->scridy*COLS+t->scridx] = ch;
 	t->scridx++;
 	cursorwrap(t);
@@ -352,7 +355,7 @@ int b9352_output(TERMINAL_T *t, char ch) {
 	switch (t->pc) {
 	case pc_serial: cnt = write(t->serial_handle, obuf, op-obuf); break;
 	case pc_canopen: cnt = can_write(t->canid, obuf, op-obuf); break;
-	case pc_telnet: cnt = telnet_session_write(&t->session, obuf, op-obuf); break;
+	case pc_telnet: cnt = telnet_session_write(&t->tsession, obuf, op-obuf); break;
 	default: cnt = 0;
 	}
 

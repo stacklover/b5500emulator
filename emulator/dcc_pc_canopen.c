@@ -15,6 +15,8 @@
 * 2018-04-21  R.Meyer
 *   factored out all physcial connection (PC), all line discipline(LD)
 *   and all emulation (EM) functionality to spearate files
+* 2020-03-09  R.Meyer
+*   added iTELEX functionality
 ***********************************************************************/
 
 #include <stdio.h>
@@ -36,6 +38,7 @@
 #include "common.h"
 #include "io.h"
 #include "telnetd.h"
+#include "itelexd.h"
 #include "dcc.h"
 
 /***********************************************************************

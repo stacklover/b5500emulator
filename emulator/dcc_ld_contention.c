@@ -15,6 +15,8 @@
 * 2018-04-21  R.Meyer
 *   factored out all physcial connection (PC), all line discipline(LD)
 *   and all emulation (EM) functionality to spearate files
+* 2020-03-09  R.Meyer
+*   added iTELEX functionality
 ***********************************************************************/
 
 #include <stdio.h>
@@ -36,6 +38,7 @@
 #include "common.h"
 #include "io.h"
 #include "telnetd.h"
+#include "itelexd.h"
 #include "circbuffer.h"
 #include "dcc.h"
 
@@ -384,7 +387,7 @@ int ld_poll_contention(TERMINAL_T *t) {
 	}
 
 	// check for data available
-	cnt = telnet_session_read(&t->session, ibuf, sizeof ibuf);
+	cnt = telnet_session_read(&t->tsession, ibuf, sizeof ibuf);
 	if (cnt <= 0) // non recoverable error or no data
 		return cnt;
 

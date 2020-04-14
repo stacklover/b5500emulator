@@ -14,7 +14,9 @@
 *   Frame from dev_dcc.c
 * 2018-04-21  R.Meyer
 *   factored out all physcial connection (PC), all line discipline(LD)
-*   and all emulation (EM) functionality to spearate files
+*   and all emulation (EM) functionality to separate files
+* 2020-03-09  R.Meyer
+*   added iTELEX functionality
 ***********************************************************************/
 
 #include <stdio.h>
@@ -36,11 +38,13 @@
 #include "common.h"
 #include "io.h"
 #include "telnetd.h"
+#include "itelexd.h"
 #include "dcc.h"
+
+#define	LDT_VERBOSE 0
 
 /***********************************************************************
 * Convert sysbuf from 6 Bit BIC(in ASCII) to outbuf 8 Bit ASCII
-* release sysbuf
 ***********************************************************************/
 static BIT convert6to8(TERMINAL_T *t) {
 	int iptr;
@@ -71,13 +75,17 @@ static BIT convert6to8(TERMINAL_T *t) {
 			t->outbuf[t->outidx++] = ch;
 		} // switch
 	} // for
+	return disc;
+}
 
+/***********************************************************************
+* release sysbuf
+***********************************************************************/
+static void release_sysbuf(TERMINAL_T *t) {
 	// make sysbuf available again
 	t->sysidx = 0;
 	t->bufstate = t->fullbuffer ? writeready : idle;
 	t->interrupt = true;
-
-	return disc;
 }
 
 /***********************************************************************
@@ -102,7 +110,7 @@ static void convert8to6(TERMINAL_T *t) {
 		}
 	} // while
 
-	// buffer is ready to be ready by the system
+	// buffer is ready to be read by the system
 	t->abnormal = false;
 	t->bufstate = readready;
 	t->interrupt = true;
@@ -115,23 +123,49 @@ static void convert8to6(TERMINAL_T *t) {
 void ld_write_teletype(TERMINAL_T *t) {
 	int ptr = -1;
 
-	// convert sysbuf to outbuf, release sysbuf
-	BIT disc = convert6to8(t);
+	// outbuf empty ?
+	if (t->outidx == 0) {
+		// convert sysbuf to outbuf
+		t->disc = convert6to8(t);
+#if LDT_VERBOSE
+
+		printf("SYSBUF read outidx=%d disc=%d\n", t->outidx, t->disc);
+#endif
+	}
 
 	// send data to physical connections
+#if LDT_VERBOSE
+	printf("WRITE outidx=%d disc=%d\n", t->outidx, t->disc);
+#endif
 	switch (t->pc) {
 	case pc_telnet: ptr = pc_telnet_write(t, t->outbuf, t->outidx); break;
+	case pc_itelex: ptr = pc_itelex_write(t, t->outbuf, t->outidx); break;
 	case pc_serial: ptr = pc_serial_write(t, t->outbuf, t->outidx); break;
 	case pc_canopen: ptr = pc_canopen_write(t, t->outbuf, t->outidx); break;
 	default: t->pcs = pcs_failed;
 	}
+#if LDT_VERBOSE
+	printf("WRITE ptr=%d\n", ptr);
+#endif
 
 	// check for write errors
-	if (ptr != t->outidx)
+	if (ptr < 0)
 		t->pcs = pcs_failed;
 
+	// remove successfully sent chars from output and outidx
+	if (ptr == t->outidx) {
+		// all sent - release sysbuf
+		t->outidx = 0;
+		release_sysbuf(t);
+	} else if (ptr == 0) {
+		// nothing sent
+	} else {
+		memcpy(t->outbuf, t->outbuf+ptr, t->outidx-ptr);
+		t->outidx -= ptr;
+	}
+
 	// disconnect requested?
-	if (disc) {
+	if (t->disc) {
 		if (dtrace) {
 			sprintf(t->outbuf, "+DREQ %s\r\n", t->name);
 			spo_print(t->outbuf);
@@ -146,13 +180,14 @@ void ld_write_teletype(TERMINAL_T *t) {
 ***********************************************************************/
 int ld_poll_teletype(TERMINAL_T *t) {
 	char ibuf[10], obuf[20], ch;
-	int cnt = -1, idx, odx;
+	int cnt = -1, idx, odx, fdx=1;
 
 	// check for data available
 	switch (t->pc) {
-	case pc_telnet: cnt = pc_telnet_read(t, ibuf, sizeof ibuf); break;
-	case pc_serial: cnt = pc_serial_read(t, ibuf, sizeof ibuf); break;
-	case pc_canopen: cnt = pc_canopen_read(t, ibuf, sizeof ibuf); break;
+	case pc_telnet: cnt = pc_telnet_read(t, ibuf, sizeof ibuf); fdx = t->tsession.is_fullduplex; break;
+	case pc_itelex: cnt = pc_itelex_read(t, ibuf, sizeof ibuf); fdx = 0; break;
+	case pc_serial: cnt = pc_serial_read(t, ibuf, sizeof ibuf); fdx = 1; break;
+	case pc_canopen: cnt = pc_canopen_read(t, ibuf, sizeof ibuf); fdx = 1; break;
 	default: return -1;
 	}
 
@@ -184,20 +219,24 @@ int ld_poll_teletype(TERMINAL_T *t) {
 			// backspace
 			if (t->inidx > 0) {
 				t->inidx--;
-				// echo BS+SPACE+BS
-				obuf[odx++] = BS;
-				obuf[odx++] = ' ';
-				obuf[odx++] = BS;
+				if (fdx) {
+					// echo BS+SPACE+BS
+					obuf[odx++] = BS;
+					obuf[odx++] = ' ';
+					obuf[odx++] = BS;
+				}
 			}
 			break;
 		case RUBOUT:
 			// rubout
 			if (t->inidx > 0) {
 				t->inidx--;
-				// echo '\'+CHAR+'\'
-				obuf[odx++] = '\\';
-				obuf[odx++] = t->inbuf[t->inidx];
-				obuf[odx++] = '\\';
+				if (fdx) {
+					// echo '\'+CHAR+'\'
+					obuf[odx++] = '\\';
+					obuf[odx++] = t->inbuf[t->inidx];
+					obuf[odx++] = '\\';
+				}
 			}
 			break;
 		case ESC:
@@ -215,9 +254,11 @@ int ld_poll_teletype(TERMINAL_T *t) {
 				ch = translatetable_bic2ascii[ch&0x7f];
 				t->inbuf[t->inidx++] = ch;
 				// echo
-				obuf[odx++] = ch;
+				if (fdx)
+					obuf[odx++] = ch;
 			} else {
-				obuf[odx++] = BEL;
+				if (fdx)
+					obuf[odx++] = BEL;
 			}
 		}
 	}
@@ -226,6 +267,7 @@ int ld_poll_teletype(TERMINAL_T *t) {
 	if (odx > 0) {
 		switch (t->pc) {
 		case pc_telnet: pc_telnet_write(t, obuf, odx); break;
+		case pc_itelex: pc_itelex_write(t, obuf, odx); break;
 		case pc_serial: pc_serial_write(t, obuf, odx); break;
 		case pc_canopen: pc_canopen_write(t, obuf, odx); break;
 		default: return -1;

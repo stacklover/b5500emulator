@@ -9,7 +9,7 @@
 ************************************************************************
 * translate tables BIC / ASCII / BCL
 ************************************************************************
-* 2017-09-08    R.Meyer
+* 2017-09-08  R.Meyer
 *   Converted Paul's work from Javascript to C
 * 2017-09-30  R.Meyer
 *   overhaul of file names
@@ -36,8 +36,8 @@
 //  | is x (multiply symbol)
 
 //
-// NEVER EVER CHANGE THE TWO FOLLOWING TRANSLATETABLES
-// THOSE ARE USED TO CONVERT BIC TO ASCII FOR STORAGE ON DISK, TAPE, CARDS
+// NEVER EVER CHANGE THE TWO FOLLOWING TRANSLATETABLES ascii2bic and bic2ascii !!!!!
+// THOSE ARE USED TO CONVERT BIC TO ASCII FOR STORAGE ON SIMULATED DISK, TAPE, CARDS
 //
 
 const WORD6 translatetable_ascii2bic[128] = { // Index by 8-bit ASCII to get 6-bit BIC (upcased, invalid=>"?")
@@ -70,6 +70,7 @@ const WORD6 translatetable_bcl2bic[64]   = { // Index by 6-bit BCL to get 6-bit 
         034,021,022,023,024,025,026,027,        // @60-67
         030,031,020,032,033,035,036,037};       // @70-77
 
+#if 0
 const char *translatetable_bic2baudot_as_ascii[64] = {
 // Index by 6-bit BIC to get 8-bit BAUDOT with ASCII representation
 // Note: ASCII # stands for BAUDOT "who are you?" symbol
@@ -82,6 +83,7 @@ const char *translatetable_bic2baudot_as_ascii[64] = {
         "Q", "R", "^S", "^+", "-", ")", ".,", "=(",     // @50: Q R $ * - ) ; <=
         " ", "/", "S", "T", "U", "V", "W", "X",         // @60: _ / S T U V W X  (_ = blank)
         "Y", "Z", ",", "./.", "^I", "=", ".)", "''"};   // @70: Y Z , % ! = ] "
+#endif
 
 // index by BIC to get collation value
 const WORD6 collation[64] = {
