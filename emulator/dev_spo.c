@@ -41,7 +41,6 @@
 ***********************************************************************/
 
 #define NAMELEN 100
-#define	BUFLEN 80
 #define TIMESTAMP 1
 #define	AUTOEXEC 1
 
@@ -51,8 +50,8 @@
 * the SPO
 ***********************************************************************/
 static BIT	ready;
-static char	spoinbuf[BUFLEN];
-static char	spooutbuf[BUFLEN];
+static char	spoinbuf[200];
+static char	spooutbuf[200];
 static time_t	stamp;
 #if AUTOEXEC
 static unsigned autoexec = false;
@@ -89,7 +88,7 @@ static int set_spoload(const char *v, void *) {
 	} else if (strcasecmp(v, "CARD") == 0) {
 		CC->CLS = true;
 	} else {
-		spo_print("$UNKNOWN LOAD TYPE\r\n");
+		spo_print("$UNKNOWN LOAD TYPE\n");
 		return 2; // FATAL
 	}
 	return 0; // OK
@@ -104,7 +103,7 @@ static int set_autoexec(const char *v, void *) {
 	} else if (strcasecmp(v, "OFF") == 0) {
 		autoexec = false;
 	} else {
-		spo_print("$SPECIFY ON OR OFF\r\n");
+		spo_print("$SPECIFY ON OR OFF\n");
 		return 2; // FATAL
 	}
 	return 0; // OK
@@ -123,13 +122,13 @@ static int set_canspo(const char *v, void *) {
 		}
 		// wait for SPO to become ready
 		while (!can_ready(canspo)) {
-			spo_print("$WAITING FOR SPO READY\r\n");
+			spo_print("$WAITING FOR SPO READY\n");
 			sleep(1);
 		}
 	} else if (strcasecmp(v, "OFF") == 0) {
 		canspo = 0;
 	} else {
-help:		spo_print("$SPECIFY CANID(1..126) OR OFF\r\n");
+help:		spo_print("$SPECIFY CANID(1..126) OR OFF\n");
 		return 2; // FATAL
 	}
 	return 0; // OK
@@ -146,7 +145,7 @@ static int set_timestamp(const char *v, void *) {
 	} else if (strcasecmp(v, "OFF") == 0) {
 		timestamp = false;
 	} else {
-		spo_print("$SPECIFY ON OR OFF\r\n");
+		spo_print("$SPECIFY ON OR OFF\n");
 		return 2; // FATAL
 	}
 	return 0; // OK
@@ -222,9 +221,9 @@ BIT spo_ready(unsigned index) {
 		if (*spoinp == '$') {
 			int res = handle_option(spoinp+1);
 			if (res == 0)
-				sprintf(spoinbuf, "$OK\r\n");
+				sprintf(spoinbuf, "$OK\n");
 			else
-				sprintf(spoinbuf, "$ERROR %d\r\n", res);
+				sprintf(spoinbuf, "$ERROR %d\n", res);
 			spo_print(spoinbuf);
 			// mark the input buffer empty again
 			spoinbuf[0] = 0;
@@ -286,7 +285,7 @@ done:
 #if AUTOEXEC
 	// check for end of job and reload card deck if so
 	if (autoexec > 0 && strstr(spooutbuf, auto_trigger1) && strstr(spooutbuf, auto_trigger2)) {
-		sprintf(spooutbuf, "$ ***** AUTOEXEC #%d *****\r\n", autoexec++);
+		sprintf(spooutbuf, "$ ***** AUTOEXEC #%d *****\n", autoexec++);
 		spo_print(spooutbuf);
 		time(&stamp);
 		handle_option(auto_cmd);
@@ -354,7 +353,7 @@ void spo_debug_write(const char *msg) {
 	if (timestamp)
 		spooutp += sprintf(spooutp, "%02d:%02u:%02u ", tm.tm_hour, tm.tm_min, tm.tm_sec);
 #endif
-	spooutp += sprintf(spooutp, "%s\r\n", msg);
+	spooutp += sprintf(spooutp, "%s\n", msg);
 
 	// print it
 	spo_print(spooutbuf);

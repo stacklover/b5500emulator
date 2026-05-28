@@ -17,6 +17,8 @@
 *   and all emulation (EM) functionality to spearate files
 * 2020-03-09  R.Meyer
 *   added iTELEX functionality
+* 2022-06-14  R.Meyer
+*   changed buffer size to 28 chars / made separate buffer size for messages to SPO
 ***********************************************************************/
 
 #include <stdio.h>
@@ -164,7 +166,7 @@ void ld_write_contention(TERMINAL_T *t) {
 	int ptr;
 	char ch;
 	BIT error = false;
-	//char obuf[30];
+	char spobuf[SPOBUFSIZE];
 
 	// convert sysbuf to outbuf, release sysbuf
 	BIT disc = convert6to8(t);
@@ -174,7 +176,7 @@ void ld_write_contention(TERMINAL_T *t) {
 
 	// here we run the terminal end of the line discipline
 	if (etrace)
-		printf("+DATA %s ", t->name);
+		printf(" %s proto ", t->name);
 	ptr = 0;
 	while (ptr < t->outidx && !error) {
 		ch = t->outbuf[ptr++];
@@ -315,8 +317,8 @@ finish:
 	// reason to disconnect?
 	if (disc || error) {
 		if (disc && dtrace) {
-			sprintf(t->outbuf, "+DREQ %s\r\n", t->name);
-			spo_print(t->outbuf);
+			sprintf(spobuf, " %s disconnect request\n", t->name);
+			spo_print(spobuf);
 		}
 		t->pcs = pcs_failed;
 	}
@@ -376,7 +378,7 @@ int ld_poll_contention(TERMINAL_T *t) {
 	// keybuf ready for sending and sysbuf idle?
 	if (t->lds == lds_sendrdy && t->bufstate == idle) {
 		if (etrace)
-			printf("+DATA %s [ENQ]\n", t->name);
+			printf(" %s [ENQ]\n", t->name);
 		t->sysbuf[0] = ENQ + 0x20;
 		t->sysidx = 1;
 		t->abnormal = false;
@@ -398,7 +400,7 @@ int ld_poll_contention(TERMINAL_T *t) {
 		if (b9352_input(t, ch))
 			break;
 	}
-	return idx;	
+	return idx;
 }
 
 

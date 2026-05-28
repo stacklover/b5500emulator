@@ -15,14 +15,14 @@
 * Internally we treat this as 240 Terminals, indexed from 16 to 255
 *
 * Originally a B487 has a total of 448 characters buffer, meaning that,
-* if you use 16 adapters, each adapter can only habe 28 characters of buffer.
+* if you use 16 adapters, each adapter can only have 28 characters of buffer.
 *
 * However, it seems to cause no issues, when we give each adapter 112
-* chars of buffer.
+* chars of buffer. We are not sure about this anymore. Trying with 28 for now.
 *
 * operational notes:
 *   there is no word or character count given in the IOCW
-*   by default, all 112 chars (14 words) are valid
+*   by default, all 28/56/112 chars (3.5/7/14 words) are valid
 *   a shorter message is ended with the EOM character, which is never
 *   part of a message
 *
@@ -38,6 +38,8 @@
 *   added data trace to file
 * 2020-03-09  R.Meyer
 *   added iTELEX functionality
+* 2022-06-14  R.Meyer
+*   changed buffer size to 28 chars / made separate buffer size for messages to SPO
 ***********************************************************************/
 
 #include <stdio.h>
@@ -74,7 +76,7 @@ static const char *pc_name[] = {
 static const char *pcs_name[] = {
 	"DISC", "PEND", "ABOR", "CONN", "FAIL"};
 static const char *ld_name[] = {
-	"TTY ", "CONT"};
+	"????", "TTY ", "CONT"};
 static const char *em_name[] = {
 	"NONE", "TTY ", "ANSI"};
 static const char *bufstate_name[] = {
@@ -107,7 +109,7 @@ static int set_ctrace(const char *v, void *) {
 	} else if (strcasecmp(v, "OFF") == 0) {
 		ctrace = false;
 	} else {
-		spo_print("$SPECIFY ON OR OFF\r\n");
+		spo_print("$SPECIFY ON OR OFF\n");
 		return 2; // FATAL
 	}
 	return 0; // OK
@@ -122,7 +124,7 @@ static int set_dtrace(const char *v, void *) {
 	} else if (strcasecmp(v, "OFF") == 0) {
 		dtrace = false;
 	} else {
-		spo_print("$SPECIFY ON OR OFF\r\n");
+		spo_print("$SPECIFY ON OR OFF\n");
 		return 2; // FATAL
 	}
 	return 0; // OK
@@ -137,7 +139,7 @@ static int set_etrace(const char *v, void *) {
 	} else if (strcasecmp(v, "OFF") == 0) {
 		etrace = false;
 	} else {
-		spo_print("$SPECIFY ON OR OFF\r\n");
+		spo_print("$SPECIFY ON OR OFF\n");
 		return 2; // FATAL
 	}
 	return 0; // OK
@@ -166,7 +168,7 @@ static int set_telnet(const char *v, void *) {
 	} else if (strcasecmp(v, "OFF") == 0) {
 		telnet = false;
 	} else {
-		spo_print("$SPECIFY ON OR OFF\r\n");
+		spo_print("$SPECIFY ON OR OFF\n");
 		return 2; // FATAL
 	}
 	return 0; // OK
@@ -181,7 +183,7 @@ static int set_itelex(const char *v, void *) {
 	} else if (strcasecmp(v, "OFF") == 0) {
 		itelex = false;
 	} else {
-		spo_print("$SPECIFY ON OR OFF\r\n");
+		spo_print("$SPECIFY ON OR OFF\n");
 		return 2; // FATAL
 	}
 	return 0; // OK
@@ -193,12 +195,12 @@ static int set_itelex(const char *v, void *) {
 static int get_status(const char *v, void *) {
 	TERMINAL_T *t;
 	unsigned index;
-	char buf[OUTBUFSIZE];
+	char buf[SPOBUFSIZE];
 	char *p = buf;
 
-	sprintf(buf, "STATN BUFS ENA IRQ ABN FBF TYPE STAT DISC EMUL CONNECTION INFO\r\n"); 
+	sprintf(buf, "STATN BUFS ENA IRQ ABN FBF TYPE STAT DISC EMUL CONNECTION INFO\n"); 
 	spo_print(buf);
-	sprintf(buf, "----- ---- --- --- --- --- ---- ---- ---- ---- ---------------\r\n"); 
+	sprintf(buf, "----- ---- --- --- --- --- ---- ---- ---- ---- ---------------\n"); 
 	spo_print(buf);
 
 	// list all connected terminals
@@ -216,23 +218,23 @@ static int get_status(const char *v, void *) {
 				ld_name[t->ld], em_name[t->em]);
 			switch (t->pc) {
 			case pc_none:
-				p += sprintf(p, "\r\n");
+				p += sprintf(p, "\n");
 				break;
 			case pc_serial:
-				p += sprintf(p, " %d\r\n", t->serial_handle);
+				p += sprintf(p, " %d\n", t->serial_handle);
 				break;
 			case pc_canopen:
-				p += sprintf(p, " %d\r\n", t->canid);
+				p += sprintf(p, " %d\n", t->canid);
 				break;
 			case pc_telnet:
-				p += sprintf(p, " %d %s %ux%u %s\r\n",
+				p += sprintf(p, " %d %s %ux%u %s\n",
 					t->tsession.socket,
 					t->tsession.type,
 					t->tsession.cols, t->tsession.rows,
 					t->peer_info);
 				break;
 			case pc_itelex:
-				p += sprintf(p, " %d %s\r\n",
+				p += sprintf(p, " %d %s\n",
 					t->isession.socket,
 					t->peer_info);
 				break;
@@ -257,7 +259,7 @@ static int set_can(const char *v, void *) {
 	} else if (strcasecmp(v, "OFF") == 0) {
 		terminal[15].canid = 0;
 	} else {
-help:		spo_print("$SPECIFY CANID(1..126) OR OFF\r\n");
+help:		spo_print("$SPECIFY CANID(1..126) OR OFF\n");
 		return 2; // FATAL
 	}
 	return 0; // OK
@@ -303,8 +305,7 @@ static BIT terminal_search(unsigned *ptun, unsigned *pbnr, BIT do_output) {
 
 	for (index = 0; index < NUMTERM; index++) {
 		t = &terminal[index];
-
-		// trigger late output IRQ
+		// physically send output
 		if (do_output && t->bufstate == outputbusy) {
 			// now send/interpret the data
 			if (t->ld == ld_teletype)
@@ -312,7 +313,23 @@ static BIT terminal_search(unsigned *ptun, unsigned *pbnr, BIT do_output) {
 			else
 				ld_write_contention(t);
 		}
-
+		// retrigger IRQ if buffer is writeready and no data comes
+		if (t->bufstate == writeready) {
+			t->delay++;
+			if (t->delay > 100000) {
+				if (dtrace)
+					printf("\n %s buffer is 'write ready' but MCP sends no data.\n"
+						 "       Trying to fix...\n\n", t->name);
+				t->delay = 0;
+				t->interrupt = true;
+				t->bufstate = idle;
+				t->inmode = true;
+				t->outmode = !t->outmode;
+				t->outlastwasmode = false;
+				t->eotcount = 0;
+			}
+		} else
+			t->delay = 0;
 		// is this requiring service now?
 		if (t->interrupt)  {
 			// something found
@@ -382,13 +399,15 @@ int dcc_init(const char *option) {
 			// TODO: this next part is kindy hacky, should be
 			// TODO: parametrized
 			// TODO: preferable read SYSDISK-MAKER.CARD...
-			if (index < 15) {
+			if (index >= 0 && index < 15) {
 				t->ld = ld_teletype;
 			} else if (index == 15) {
 				t->ld = ld_teletype;
 				t->pc = pc_canopen;
-			} else {
+			} else if (index >= 16 && index < 32) {
 				t->ld = ld_contention;
+			} else {
+				t->ld = ld_unassigned;
 			}
 		}
 	}
@@ -503,8 +522,8 @@ BIT dcc_ready(unsigned index) {
 		unsigned index = IDX(tun, bnr);
 		TERMINAL_T *t = terminal+index;
 		if (t->enabled && !CC->CCI13F) {
-#if 0
-			printf("+IRQ  %02u/%02u -> SET CCI13F\n", tun, bnr);
+#if 1
+			printf(" %s set CCI13F (%s)\n", t->name, bufstate_name[t->bufstate]);
 #endif
 			CC->CCI13F = true;
 		}
@@ -552,7 +571,9 @@ static void dcc_read(IOCU *u) {
 	case writeready:
 		// awaiting write data
 		u->d_result = RD_21_END;
-		break;
+		if (dtrace)
+			printf(" %s read not allowed (buffer idle or write ready)\n", t->name);
+		return;
 	case readready:
 		// sysbuf is filled with read data, continue after switch
 		break;
@@ -560,16 +581,22 @@ static void dcc_read(IOCU *u) {
 	case outputbusy:
 		// sysbuf is currently in use - return with flags
 		u->d_result = RD_21_END | RD_20_ERR;
+		if (dtrace)
+			printf(" %s read not allowed (buffer busy)\n", t->name);
 		return;
 	case notready:
 		// sysbuf is not in any useful state - return with flags
 		u->d_result = RD_21_END | RD_20_ERR | RD_18_NRDY;
+		if (dtrace)
+			printf(" %s read not allowed (buffer not ready)\n", t->name);
 		return;
 	}
 
 	// now do the read
-	if (dtrace) printf("+READ %s '", t->name);
-	if (t->trace) fprintf(t->trace, "R'");
+	if (dtrace)
+		printf(" %s read  '", t->name);
+	if (t->trace)
+		fprintf(t->trace, "R'");
 
 	ptr = 0;
 	gmset = false;
@@ -583,8 +610,10 @@ loop:
 			c = EOM;
 		} else {
 			c = t->sysbuf[ptr++];
-			if (dtrace) printf("%c", c);
-			if (t->trace) fprintf(t->trace, "%c", c);
+			if (dtrace)
+				printf("%c", c);
+			if (t->trace)
+				fprintf(t->trace, "%c", c);
 		}
 		// note that ptr stays on the current end of sysbuf
 		// causing the rest of the word to be filled with
@@ -601,8 +630,10 @@ loop:
 	if (!gmset && ptr < SYSBUFSIZE)
 		goto loop;
 
-	if (dtrace) printf("'\n");
-	if (t->trace) fprintf(t->trace, "'\n");
+	if (dtrace)
+		printf("'\n");
+	if (t->trace)
+		fprintf(t->trace, "'\n");
 
 	// abnormal flag?
 	if (t->abnormal)
@@ -652,21 +683,29 @@ static void dcc_write(IOCU *u) {
 	case readready:
 		// sysbuf is filled with read data - return with flags
 		u->d_result = RD_21_END;
+		if (dtrace)
+			printf(" %s write not allowed (buffer read ready)\n", t->name);
 		return;
 	case inputbusy:
 	case outputbusy:
 		// sysbuf is currently in use - return with flags
 		u->d_result = RD_21_END | RD_20_ERR;
+		if (dtrace)
+			printf(" %s write not allowed (buffer busy)\n", t->name);
 		return;
 	case notready:
 		// sysbuf is not in any useful state - return with flags
 		u->d_result = RD_21_END | RD_20_ERR | RD_18_NRDY;
+		if (dtrace)
+			printf(" %s write not allowed (buffer not ready)\n", t->name);
 		return;
 	}
 
 	// now do the write
-	if (dtrace) printf("+WRIT %s '", t->name);
-	if (t->trace) fprintf(t->trace, "W'");
+	if (dtrace)
+		printf(" %s write '", t->name);
+	if (t->trace)
+		fprintf(t->trace, "W'");
 
 	t->sysidx = 0;	// start of sysbuf
 
@@ -691,8 +730,10 @@ loop:
 		}
 		// store char in sysbuf
 		t->sysbuf[t->sysidx++] = c;
-		if (dtrace) printf("%c", c);
-		if (t->trace) fprintf(t->trace, "%c", c);
+		if (dtrace)
+			printf("%c", c);
+		if (t->trace)
+			fprintf(t->trace, "%c", c);
 	}
 	// if not reached SYSBUFSIZE chars, we go on writing
 	if (t->sysidx < SYSBUFSIZE)
@@ -700,8 +741,10 @@ loop:
 	// coming here means we got a full sysbuf
 	t->fullbuffer = true;
 
-done:	if (dtrace) printf("'\n");
-	if (t->trace) fprintf(t->trace, "'\n");
+done:	if (dtrace)
+		printf("'%s(%d)\n", t->fullbuffer ? " FB" : "", t->sysidx);
+	if (t->trace)
+		fprintf(t->trace, "'%s(%d)\n", t->fullbuffer ? " FB" : "", t->sysidx);
 
 	// set flags
 	t->abnormal = false;
@@ -752,13 +795,14 @@ static void dcc_interrogate(IOCU *u) {
 				break;
 			case notready:
 				u->d_result = RD_20_ERR | RD_18_NRDY;
+				break;
 			}
 			// abnornal flag?
 			if (t->abnormal)
 				u->d_result |= RD_25_ABNORMAL;
 			// clear pending IRQ
 			t->interrupt = false;
-			// was interrogated
+			// was interrogated 1st time
 			t->enabled = true;
 		}
 	}

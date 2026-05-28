@@ -17,6 +17,8 @@
 *   and all emulation (EM) functionality to separate files
 * 2020-03-09  R.Meyer
 *   added iTELEX functionality
+* 2022-06-14  R.Meyer
+*   changed buffer size to 28 chars / made separate buffer size for messages to SPO
 ***********************************************************************/
 
 #include <stdio.h>
@@ -56,14 +58,14 @@ static BIT convert6to8(TERMINAL_T *t) {
 		ch = t->sysbuf[iptr];
 		// some characters have special control functions on output
 		switch (ch) {
-		case '>': // BIC: greater than
-			t->outbuf[t->outidx++] = NUL; // DC1
+		case '>': // BIC: greater than - should be DC1, but we use NUL
+			t->outbuf[t->outidx++] = NUL;
 			break;
 		case '}': // BIC: greater or equal
 			disc = true;
 			break;
-		case '<': // BIC: less than
-			t->outbuf[t->outidx++] = NUL; // RUBOUT
+		case '<': // BIC: less than - should be RUBOUT, but we use NUL
+			t->outbuf[t->outidx++] = NUL;
 			break;
 		case '{': // BIC: less or equal
 			t->outbuf[t->outidx++] = CR;
@@ -167,7 +169,7 @@ void ld_write_teletype(TERMINAL_T *t) {
 	// disconnect requested?
 	if (t->disc) {
 		if (dtrace) {
-			sprintf(t->outbuf, "+DREQ %s\r\n", t->name);
+			sprintf(t->outbuf, " %s disconnect request\n", t->name);
 			spo_print(t->outbuf);
 		}
 		t->pcs = pcs_failed;
@@ -199,21 +201,27 @@ int ld_poll_teletype(TERMINAL_T *t) {
 	for (idx = 0; idx < cnt && t->lds != lds_sendrdy; idx++) {
 		ch = ibuf[idx];
 
+		// this proved to be rather irritating, because empty lines got ignored (CR,CR)
 		// make any sequence of CR,LF codes behave like a single CR
-		if (ch == CR || ch == LF) {
-			// prevent further line ending chars of that sequence from causing action
-			if (t->escaped)
-				continue;
-			ch = CR;
-			t->escaped = true;
-		} else {
-			t->escaped = false;
-		}
+		//if (ch == CR || ch == LF) {
+		//	// prevent further line ending chars of that sequence from causing action
+		//	if (t->escaped)
+		//		continue;
+		//	ch = CR;
+		//	t->escaped = true;
+		//} else {
+		//	t->escaped = false;
+		//}
+		// LF will be ignored
 
 		switch (ch) {
 		case CR:
 			// end of line - mark keybuf as ready to send
 			t->lds = lds_sendrdy;
+			break;
+		case NUL:
+		case LF:
+			// ignore those
 			break;
 		case BS:
 			// backspace
@@ -248,7 +256,8 @@ int ld_poll_teletype(TERMINAL_T *t) {
 			obuf[odx++] = LF;
 			break;
 		default:
-			if (ch >= ' ' && ch <= 0x7e && t->keyidx < KEYBUFSIZE) {
+			// seems wrong buffer checked: if (ch >= ' ' && ch <= 0x7e && t->keyidx < KEYBUFSIZE) {
+			if (ch >= ' ' && ch <= 0x7e && t->inidx < INBUFSIZE) {
 				// if printable, add to keybuf
 				ch = translatetable_ascii2bic[ch&0x7f];
 				ch = translatetable_bic2ascii[ch&0x7f];

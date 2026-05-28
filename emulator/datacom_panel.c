@@ -42,7 +42,7 @@ static const char *pc_name[] = {
 static const char *pcs_name[] = {
 	"DISC", "PEND", "ABOR", "CONN", "FAIL"};
 static const char *ld_name[] = {
-	"TTY ", "CONT"};
+	"OFF", "TTY ", "CONT"};
 static const char *em_name[] = {
 	"NONE", "TTY ", "ANSI"};
 static const char *bufstate_name[] = {
@@ -74,7 +74,9 @@ int main(int argc, char	*argv[])
 	printf("\033[2J");
 	while (1) {
 		printf("\033[H");
-		for (i=0; i<NUMTERM-1; i++) {
+		printf("LINE# LSTA IRQ ABN FLB PROT STAT DSPL EMUL SO Terminal/Address Info\n");
+		printf("----- ---- --- --- --- ---- ---- ---- ---- -- ---------------------\n");
+		for (i=0; i<NUMTERM; i++) {
 			t = &terminal[i];
 			printf("%-5.5s %-4.4s I=%u A=%u F=%u %-4.4s %-4.4s %-4.4s %-4.4s",
 				t->name,

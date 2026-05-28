@@ -21,6 +21,8 @@
 *   do not insist on TELNET negotiation for TELETYPE lines
 * 2020-03-09  R.Meyer
 *   added iTELEX functionality
+* 2022-06-14  R.Meyer
+*   changed buffer size to 28 chars / made separate buffer size for messages to SPO
 ***********************************************************************/
 
 #include <stdio.h>
@@ -64,7 +66,8 @@ static void new_connection(int newsocket, struct sockaddr_in *addr, enum ld ld, 
 	char host[PEER_INFO_LEN - 6];	// keep space at end for port
 	unsigned port;
 	TERMINAL_T *t;
-	char buf[OUTBUFSIZE];
+	char spobuf[SPOBUFSIZE];
+	int spoidx;
 
 	// get the peer info
 	getnameinfo((struct sockaddr*)addr, addrlen, host, sizeof(host), NULL, 0, 0);
@@ -72,12 +75,10 @@ static void new_connection(int newsocket, struct sockaddr_in *addr, enum ld ld, 
 
 	// find a free terminal to handle this line procedure
 	t = dcc_find_free_terminal(ld);
-
 	if (t != NULL) {
 		// free terminal found
+		spoidx = sprintf(spobuf, " %s", t->name);
 		snprintf(t->peer_info, sizeof t->peer_info, "%s:%u", host, port);
-		t->outidx = sprintf(t->outbuf, "+NEWC %s %s (%d)",
-			t->name, t->peer_info, newsocket);
 		dcc_init_terminal(t);
 		telnet_session_clear(&t->tsession);
 		telnet_session_open(&t->tsession, newsocket);
@@ -86,12 +87,14 @@ static void new_connection(int newsocket, struct sockaddr_in *addr, enum ld ld, 
 		t->pcs = pcs_pending;
 	} else {
 		// no free entry found
-		sprintf(buf, "+BUSY %s:%u (%d)\r\n",
-			host, port, newsocket);
-		spo_print(buf);
+		spoidx = sprintf(spobuf, " BUSY!");
 		write(newsocket, msg, strlen(msg));
 		close(newsocket);
 	}
+
+	// print incoming
+	sprintf(spobuf+spoidx, " incoming TELNET(%d) from %s:%u\n", newsocket, host, port);
+	spo_print(spobuf);
 }
 
 /***********************************************************************
@@ -100,6 +103,7 @@ static void new_connection(int newsocket, struct sockaddr_in *addr, enum ld ld, 
 void pc_telnet_poll_terminal(TERMINAL_T *t) {
 	static const char *msg = "\r\nB5700 TIME SHARING - YOUR TELNET CLIENT IS NOT COMPATIBLE\r\n";
 	int cnt = -1;
+	char spobuf[SPOBUFSIZE];
 
 	switch (t->pcs) {
 	case pcs_disconnected:
@@ -112,27 +116,30 @@ void pc_telnet_poll_terminal(TERMINAL_T *t) {
 		cnt = telnet_session_read(&t->tsession, t->inbuf, sizeof t->inbuf);
 		if (cnt < 0) {
 			// socket closed by peer
-			t->outidx += sprintf(t->outbuf+t->outidx, " CLOSED\r\n");
-			if (ctrace)
-				spo_print(t->outbuf);
+			if (ctrace) {
+				sprintf(spobuf, " %s closed by peer\n", t->name);
+				spo_print(spobuf);
+			}
 			t->pcs = pcs_aborted;
 		} else if (t->tsession.success_mask & 1) {
 			// negotiations have come up with a bad answer
+			if (ctrace) {
+				sprintf(spobuf, " %s failed %08x\n",
+					t->name, t->tsession.success_mask);
+				spo_print(spobuf);
+			}
 			// send message
 			telnet_session_write(&t->tsession, msg, strlen(msg));
-			t->outidx += sprintf(t->outbuf+t->outidx, " FAILED %08x\r\n", t->tsession.success_mask);
-			if (ctrace)
-				spo_print(t->outbuf);
 			t->pcs = pcs_aborted;
 		} else if (((t->tsession.success_mask & (1u << TN_TERMTYPE)) &&
 			    (t->tsession.success_mask & (1u << TN_WINDOWSIZE))) ||
 				(t->ld == ld_teletype)) {
 			// negotiations succeeded or it is a TELETYPE discipline
 			// report it to system
-			t->outidx += sprintf(t->outbuf+t->outidx, " CONNECTED %s %ux%u\r\n",
-				t->tsession.type, t->tsession.cols, t->tsession.rows);
-			if (ctrace)
-				spo_print(t->outbuf);
+			if (ctrace) {
+				sprintf(spobuf, " %s connected\n", t->name);
+				spo_print(spobuf);
+			}
 			t->pcs = pcs_connected;
 			dcc_report_connect(t);
 		} else {
@@ -148,6 +155,7 @@ void pc_telnet_poll_terminal(TERMINAL_T *t) {
 		case ld_contention:
 			cnt = ld_poll_contention(t);
 			break;
+		default:;
 		}
 		if (cnt < 0) {
 			// socket closed by peer
@@ -159,12 +167,11 @@ void pc_telnet_poll_terminal(TERMINAL_T *t) {
 		t->pcs = pcs_disconnected;
 		t->pc = pc_none;
 		break;
-
 	case pcs_failed:
 		if (ctrace) {
-			t->outidx = sprintf(t->outbuf, "+CLSD %s\r\n",
+			sprintf(spobuf, " %s closed\n",
 				t->name);
-			spo_print(t->outbuf);
+			spo_print(spobuf);
 		}
 		telnet_session_close(&t->tsession);
 		dcc_report_disconnect(t);

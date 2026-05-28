@@ -159,7 +159,7 @@ void signalInterrupt(const char *id, const char *cause) {
         else if (CC->CCI06F) temp = 025;	// Printer 1 finished
         else if (CC->CCI07F) temp = 026;	// Printer 2 finished
         else if (CC->CCI12F) temp = 033;	// P2 busy
-        else if (CC->CCI13F) temp = 034;	// Inquiry request
+        else if (CC->CCI13F) temp = 034;	// Datacomm
         else if (CC->CCI14F) temp = 035;	// Special interrupt 1
         else if (CC->CCI15F) temp = 036;	// Disk file 1 read check finished
         else if (CC->CCI16F) temp = 037;	// Disk file 2 read check finished

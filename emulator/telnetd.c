@@ -36,7 +36,7 @@
 
 #include "telnetd.h"
 
-#define	TN_VERBOSE 1
+#define	TN_VERBOSE 0
 
 /***********************************************************************
 * Initial Negotiations
@@ -271,6 +271,21 @@ int telnet_session_read(TELNET_SESSION_T *t, char *buf, int len) {
 * Returns number of bytes written or -1 on non-recoverable error
 ***********************************************************************/
 int telnet_session_write(TELNET_SESSION_T *t, const char *buf, int len) {
+	if (buf == NULL) {
+		printf("telnet_session_write: NULL buf\n");
+		return -1;
+	}
+	// actually we should not be called with length == 0, but if, say it (23-08-16)
+	if (len == 0) {
+		printf("telnet_session_write: len is 0\n", len);
+		return 0;
+	}
+	// we should also not be called with negative or big lengths
+	if (len < 0 || len >= 100) {
+		printf("telnet_session_write: len %d out of plausible area\n", len);
+		return -1;
+	}
+	// we should also not be called with a file number that is reserved for standard I/O
 	if (t->socket > 2) {	// prevent accidential use of std files
 		int cnt = write(t->socket, buf, len);
 		if (cnt < 0) {	// cnt < 0 : error occured

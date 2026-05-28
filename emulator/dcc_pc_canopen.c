@@ -17,6 +17,8 @@
 *   and all emulation (EM) functionality to spearate files
 * 2020-03-09  R.Meyer
 *   added iTELEX functionality
+* 2022-06-14  R.Meyer
+*   changed buffer size to 28 chars / made separate buffer size for messages to SPO
 ***********************************************************************/
 
 #include <stdio.h>

@@ -262,30 +262,31 @@ const uint8 rank[64] = {
 * The is the only function that accesses the core memory.
 * E       Operation
 * -----------------
-* 2       A = [S], set AROF
-* 3       B = [S], set BROF
-* 4       A = [M], set AROF
-* 5       B = [M], set BROF
-* 6       M = [M]<18:32>
-* 10      [S] = A
-* 11      [S] = B
-* 12      [M] = A
-* 13      [M] = B
+* 002     A = [S], set AROF
+* 003     B = [S], set BROF
+* 004     A = [M], set AROF
+* 005     B = [M], set BROF
+* 006     M = [M]<18:32>
+* 010     [S] = A
+* 011     [S] = B
+* 012     [M] = A
+* 013     [M] = B
+* 020	  P = [C], set PROF
 * as bits:
-* 1       B/A
-* 2       S
-* 4       M
-* 8       Write/Read
-* 16      Fetch
+* 001     B, not A
+* 002     S
+* 004     M
+* 010     Write, not Read
+* 020     Instructions Fetch
 ***********************************************************************/
 BIT memory_cycle(CPU *cpu, uint8 E) {
 	ADDR15 addr = 0;
 
 	cpu->rE = E;		/* for display */
 	/* which register holds the address ? */
-	if (E & 020)    addr = C;
-	else if (E & 4) addr = M;
-	else if (E & 2) addr = S;
+	if      (E & 020) addr = C;
+	else if (E & 004) addr = M;
+	else if (E & 002) addr = S;
 	/* sanity check - should never happen to be true */
 	if (addr >= MAXMEM) {
 		causeMemoryIrq(cpu, IRQ_INVA, "addr >= MAXMEM");
@@ -303,7 +304,7 @@ BIT memory_cycle(CPU *cpu, uint8 E) {
 		PROF = true;
 	} else if (E & 010) {
 		/* write to memory */
-		if (E & 1)
+		if (E & 001)
 			MAIN[addr] = B;
 		else
 			MAIN[addr] = A;
@@ -313,10 +314,10 @@ BIT memory_cycle(CPU *cpu, uint8 E) {
 #endif
 	} else {
 		/* read from memory */
-		if (E == 6) {
+		if (E == 006) {
 			B = MAIN[addr];
 			M = FF(B);
-		} else if (E & 1) {
+		} else if (E & 001) {
 			B = MAIN[addr];
 			BROF = true;
 		} else {

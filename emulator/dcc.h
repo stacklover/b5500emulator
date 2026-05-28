@@ -55,18 +55,20 @@
 #define	ESC	0x1b	// escape
 #define	RS	0x1e	// "shift out" - protected area start
 #define	US	0x1f	// "shift in" - protected area end
+#define SPC	0x20	// space
 #define	RUBOUT	0x7f	// rubout - punch all holes on tape
 
 // tnr/bnr to index and back
-#define	IDX(tnr,bnr)	(((tun)-1)*16+(bnr))
+#define	IDX(tun,bnr)	(((tun)-1)*16+(bnr))	// this macro was wrong until 2022-04-21 !!
 #define	TUN(index)	((index)/16+1)
 #define	BNR(index)	((index)%16)
 
 // buffer sizes
-#define	SYSBUFSIZE	112
-#define	INBUFSIZE	200
-#define	OUTBUFSIZE	200
-#define	KEYBUFSIZE	100
+#define	SYSBUFSIZE	28 	// was 112 - size of buffer to/from DCCMCP
+#define	INBUFSIZE	200	// input buffer for TCP connection
+#define	OUTBUFSIZE	200	// output buffer for TCP connection
+#define	KEYBUFSIZE	100	// size of buffer for keyboard emulation
+#define	SPOBUFSIZE	200	// size of buffer for console messages (traces)
 
 /***********************************************************************
 * the sysbuf states
@@ -115,7 +117,8 @@ enum lds {
 * the line discipline used
 ***********************************************************************/
 enum ld {
-	ld_teletype=0,	// teletype discipline, except input buffer editing
+	ld_unassigned=0,// unassigned, cannot be used
+	ld_teletype,	// teletype discipline, except input buffer editing
 	ld_contention};	// burroughs contention (half duplex)
 
 /***********************************************************************
@@ -167,7 +170,8 @@ typedef struct terminal {
 	char sysbuf[SYSBUFSIZE];	// buffer with raw data from/to system
 	int sysidx;			// number of chars in sysbuf
 	enum bufstate bufstate;		// current state of sysbuf
-	BIT fullbuffer;
+	BIT fullbuffer;			// buffer is fully used, no EOM in it
+	int delay;			// delay to slow down sending
 // input buffer
 	char inbuf[SYSBUFSIZE];		// buffer simulating line from terminal
 	int inidx;

@@ -14,6 +14,8 @@
 ************************************************************************
 * 2020-03-09  R.Meyer
 *   copied and modified from telnetd.c
+* 2022-04-11
+*   added ASCII Packet handling
 ***********************************************************************/
 
 #include <stdio.h>
@@ -42,10 +44,10 @@
 const uint8_t ascii2reduced[128] = {
   // ASCII 0D, 0A are allowed
   // other ASCII 00-1F are translated to "NUL"
-  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, // 00-07
-  0x00,0x00,0x0a,0x00,0x00,0x0d,0x00,0x00, // 08-0F
-  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, // 10-17
-  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, // 18-1F
+  0   ,0   ,0   ,0   ,0   ,0   ,0   ,0   , // 00-07
+  0   ,0   ,10  ,0   ,0   ,13  ,0   ,0   , // 08-0F
+  0   ,0   ,0   ,0   ,0   ,0   ,0   ,0   , // 10-17
+  0   ,0   ,0   ,0   ,0   ,0   ,0   ,0   , // 18-1F
   // ASCII 20 is translated to SPACE
   // ASCII 2A is translated to BELL
   // ASCII 21-2F are translated to symbols where possible, otherwise to space
@@ -59,10 +61,10 @@ const uint8_t ascii2reduced[128] = {
   0x50,0x51,0x52,0x53,0x54,0x55,0x56,0x57, // 50-57 PQRSTUVW <-> PQRSTUVW
   0x58,0x59,0x5a,0x20,0x20,0x20,0x20,0x20, // 58-5F XYZ[\]^_ <-> XYZ
   // ASCII 61-6A are translated to letters
-  0x20,0x41,0x42,0x43,0x44,0x45,0x46,0x47, // 40-47 @abcdefg <->  ABCDEFG
-  0x48,0x49,0x4a,0x4b,0x4c,0x4d,0x4e,0x4f, // 48-4F hijklmno <-> HIJKLMNO
-  0x50,0x51,0x52,0x53,0x54,0x55,0x56,0x57, // 50-57 pqrstuvw <-> PQRSTUVW
-  0x58,0x59,0x5a,0x20,0x20,0x20,0x20,0x20, // 58-5F xyz{|}~  <-> XYZ
+  0x20,0x41,0x42,0x43,0x44,0x45,0x46,0x47, // 60-67 @abcdefg <->  ABCDEFG
+  0x48,0x49,0x4a,0x4b,0x4c,0x4d,0x4e,0x4f, // 68-6F hijklmno <-> HIJKLMNO
+  0x50,0x51,0x52,0x53,0x54,0x55,0x56,0x57, // 70-77 pqrstuvw <-> PQRSTUVW
+  0x58,0x59,0x5a,0x20,0x20,0x20,0x20,0x20, // 78-7F xyz{|}~  <-> XYZ
 };
 
 /***********************************************************************
@@ -73,18 +75,18 @@ const uint8_t ascii2ita2[128] = {
   // ASCII 0D is translated to "CR"
   // ASCII 0A is translated to "LF"
   // other ASCII 00-1F are translated to "NUL"
-  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, // 00-07
-  0x00,0x00,0x02,0x00,0x00,0x08,0x00,0x00, // 08-0F
-  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, // 10-17
-  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, // 18-1F
+  0   ,0   ,0   ,0   ,0   ,0   ,0   ,0   , // 00-07
+  0   ,0   ,ITA2_LF,0   ,0   ,ITA2_CR,0   ,0   , // 08-0F
+  0   ,0   ,0   ,0   ,0   ,0   ,0   ,0   , // 10-17
+  0   ,0   ,0   ,0   ,0   ,0   ,0   ,0   , // 18-1F
   // ASCII 20 is translated to SPACE
   // ASCII 21-2F are translated to symbols where possible
-  0x04,0x80,0x80,0x4D,0x5A,0x80,0x80,0x45, // 20-27  !"#$%&' <->    fg  '	f=DIG+f g=DIG+g
+  0x04,0x80,0x80,0x4D,0x5A,0x80,0x80,0x45, // 20-27  !"#$%&' <->    fg  '	f=DIG+f (SQUARE) g=DIG+g (SQUARE with hor. line)
   0x4F,0x52,0x4B,0x51,0x4C,0x43,0x5C,0x5D, // 28-2F ()*+,-./ <-> ()§+,-./	§=BELL
   0x56,0x57,0x53,0x41,0x4A,0x50,0x55,0x47, // 30-37 01234567 <-> 01234567
   0x46,0x58,0x4E,0x80,0x80,0x5E,0x80,0x59, // 38-3F 89:;<=>? <-> 89:  = ?
   // ASCII 41-5A are translated to letters
-  0x54,0x23,0x39,0x2E,0x29,0x21,0x2D,0x3A, // 40-47 @ABCDEFG <-> hABCDEFG	h=DIG+h
+  0x54,0x23,0x39,0x2E,0x29,0x21,0x2D,0x3A, // 40-47 @ABCDEFG <-> hABCDEFG	h=DIG+h (SQUARE with diag. line)
   0x34,0x26,0x2B,0x2F,0x32,0x3C,0x2C,0x38, // 48-4F HIJKLMNO <-> HIJKLMNO
   0x36,0x37,0x2A,0x25,0x30,0x27,0x3E,0x33, // 50-57 PQRSTUVW <-> PQRSTUVW
   0x3D,0x35,0x31,0x80,0x80,0x80,0x80,0x80, // 58-5F XYZ[\]^_ <-> XYZ
@@ -92,7 +94,7 @@ const uint8_t ascii2ita2[128] = {
   0x80,0x23,0x39,0x2E,0x29,0x21,0x2D,0x3A, // 60-67  ABCDEFG <->  ABCDEFG
   0x34,0x26,0x2B,0x2F,0x32,0x3C,0x2C,0x38, // 68-6F HIJKLMNO <-> HIJKLMNO
   0x36,0x37,0x2A,0x25,0x30,0x27,0x3E,0x33, // 70-77 PQRSTUVW <-> PQRSTUVW
-  0x3D,0x35,0x31,0x80,0x80,0x80,0x80,0x80, // 78-7F XYZ{|}~§ <-> XYZ		§=RUBOUT
+  0x3D,0x35,0x31,0x80,0x80,0x80,0x80,0x49, // 78-7F XYZ{|}~§ <-> XYZ	d	§=RUBOUT, d=DIG+d (WHOIS)
 };
 
 /***********************************************************************
@@ -103,7 +105,7 @@ static char greet_baudot[] = {
 };
 
 static char greet_ascii[] = {
-	0x06, 0x01, 0x00, 0x0d, 0x0a, 'B', '5', '7', '0', '0',
+	0x06, 0x01, 0x00, 13, 10, 'B', '5', '7', '0', '0',
 };
 
 /***********************************************************************
@@ -265,10 +267,11 @@ step2:
 #if IT_VERBOSE
 				dumpbuf(t->buf, plen+2, "iTELEX packet found");
 #endif
+				k = 0;	// no receive bytes yet
 				switch(t->buf[0]) {
-				case IT_BAU:
+				case IT_BAU:	// BAUDOT packet
 					// now convert to ASCII
-					for (i = 0, k = 0; i < plen; i++) {
+					for (i = 0; i < plen; i++) {
 						uint8_t ch = iswap(t->buf[i+2]);
 						// handle special codes first
 						if (ch == ITA2_UNSHIFT) {
@@ -276,36 +279,43 @@ step2:
 						} else if (ch == ITA2_SHIFT) {
 							t->rbuzi = true;
 						} else if (ch == ITA2_CR) {
-							t->buf[k++] = '\r';
+							buf[k++] = '\r';
 						} else if (ch == ITA2_SPACE) {
-							t->buf[k++] = ' ';
+							buf[k++] = ' ';
 						} else if (ch == ITA2_LF) {
-							t->buf[k++] = '\n';
+							buf[k++] = '\n';
 						} else if (ch == ITA2_NULL) {
-							t->buf[k++] = 0;
+							buf[k++] = 0x1b;	// code 32 converts to ESC to clear full line
 						} else {
 							// look it up in table
-							// we must do a reverse loop, to find non capital letters instead of capital letters
-							for (int m=127; m>=0; m--) {
+							// we must do a reverse loop, to find non capital letters instead of capital letters - WHY???
+							//for (int m=127; m>=0; m--) {
+							for (int m=0; m<0x80; m++) {
 								if (ascii2ita2[m] == (ch | (t->rbuzi ? TAB_SHIFT : TAB_UNSHIFT))) {
-									t->buf[k++] = m;
+									buf[k++] = m;
 									break;
 								}
 							}
 							// not in table --> no char received
 						 }
 					}
-					// now crunch buf
-					t->bidx -= (plen + 2 - k);
-					memcpy(t->buf + k, t->buf + (plen + 2), t->bidx);
 #if IT_VERBOSE
-					dumpbuf(t->buf, t->bidx, "converted to ASCII");
+					dumpbuf(buf, k, "converted to ASCII");
 #endif
 					// increment our receive byte counter
 					t->rnr += plen;
-					// let this be picked up next round
-					return 0;
-				case IT_ACK:
+					break;
+				case IT_ASC:	// ASCII packet
+					// no conversion needed, but remove 2 byte header
+					t->bidx -= 2;
+					memcpy(buf, t->buf + 2, (k = plen));
+#if IT_VERBOSE
+					dumpbuf(buf, k, "already in ASCII");
+#endif
+					// increment our receive byte counter
+					t->rnr += plen;
+					break;
+				case IT_ACK:	// ACKNOWLEDGE packet
 					if (plen != 1)
 						break;
 					t->sack = t->buf[2];
@@ -315,34 +325,25 @@ step2:
 					// send our own ack
 					sendack(t);
 					break;
-				default:
+				default:	// all other packets are ignored
 					;
 				}
-				// remove command from buffer
+				// remove packet from buffer
 				t->bidx -= plen+2;
 				memcpy(t->buf, t->buf + (plen+2), t->bidx);
+				return k;
 			}
 		}
 	}
 
-	// try to find string of ASCII data and return it
-	if (t->bidx > 0) {
-		for (i = 0; i < t->bidx; i++) {
-			// stop at any iTELEX Packet command
-			if (iscommand(t->buf[i]))
-				break;
-		}
-		if (i > len)
-			i = len;
-		if (i > 0) {
-			memcpy(buf, t->buf, i);
-			memcpy(t->buf, t->buf + i, t->bidx - i);
-			t->bidx -= i;
-#if IT_VERBOSE
-			dumpbuf((const unsigned char *)buf, i, "returning ASCII");
-#endif
-			return i;
-		}
+	// non packet data is just ignored !
+	while (t->bidx > 0) {
+		// stop at any iTELEX Packet command
+		if (iscommand(t->buf[0]))
+			break;
+		// remove this byte
+		memcpy(t->buf, t->buf + 1, t->bidx - 1);
+		t->bidx -= i;
 	}
 
 	// nothing found
@@ -374,8 +375,8 @@ int itelex_session_write(ITELEX_SESSION_T *t, const char *buf, int len) {
 #endif
 				return 0;
 			}
-			buf2[0] = 2; // baudot data
-			buf2[1] = 0; // length
+			buf2[0] = IT_BAU; // baudot data
+			buf2[1] = 0;	  // length
 			t->tbuzi = -1;
 			for (len2 = 0, cnt = 0; cnt < len && len2 < 39; cnt++) {
 				uint8_t ch = ascii2ita2[buf[cnt] & 0x7f];
@@ -405,7 +406,7 @@ int itelex_session_write(ITELEX_SESSION_T *t, const char *buf, int len) {
 			if (len2 > 0) {
 				buf2[1] = len2;
 #if IT_VERBOSE
-				dumpbuf(buf2, len2+2, "iTELEX packet to send");
+				dumpbuf(buf2, len2+2, "iTELEX BAUDOT packet to send");
 #endif
 				t->snr += len2;
 				cnt2 = write(t->socket, buf2, len2+2);
@@ -420,16 +421,19 @@ int itelex_session_write(ITELEX_SESSION_T *t, const char *buf, int len) {
 			}
 		} else {
 			// convert ASCII to reduced ASCII
-			for (cnt = 0, len2 = 0; cnt < len; cnt++) {
-				if ((buf2[len2] = ascii2reduced[buf[cnt] & 0x7f]) > 0)
+			buf2[0] = IT_ASC; // ascii data
+			buf2[1] = 0;	  // length
+			for (len2 = 0, cnt = 0; cnt < len && len2 < 39; cnt++) {
+				if ((buf2[len2 + 2] = ascii2reduced[buf[cnt] & 0x7f]) > 0)
 					len2++;
 			}
 			if (len2 > 0) {
+				buf2[1] = len2;
 #if IT_VERBOSE
-				dumpbuf(buf2, len2, "ASCII to send");
+				dumpbuf(buf2, len2+2, "iTELEX ASCII packet to send");
 #endif
 				t->snr += len2;
-				cnt2 = write(t->socket, buf2, len2);
+				cnt2 = write(t->socket, buf2, len2+2);
 				if (cnt2 < 0) {	// cnt < 0 : error occured
 					if (errno == EAGAIN) {
 						printf("itelex_session_write: EAGAIN\n");

@@ -20,6 +20,8 @@
 *   and all emulation (EM) functionality to spearate files
 * 2020-03-09  R.Meyer
 *   added iTELEX functionality
+* 2022-06-14  R.Meyer
+*   changed buffer size to 28 chars / made separate buffer size for messages to SPO
 ***********************************************************************/
 
 #include <stdio.h>
@@ -83,10 +85,11 @@
 
 #define	FILLCHAR	' '
 
+#define BUFLEN 40	// make sure it can hold the escape sequences!
+
 /***********************************************************************
 * Redisplay memory on ANSI terminal
 ***********************************************************************/
-#define BUFLEN 40	// make sure it can hold the escape sequences!
 static void redisplay(TERMINAL_T *t, int row1, int row2) {
 	char buf[BUFLEN];
 	char *p = buf;
@@ -179,7 +182,7 @@ static void cursorwrap(TERMINAL_T *t) {
 * position cursor on ANSI screen
 ***********************************************************************/
 static void cursormove(TERMINAL_T *t) {
-	char buf[20];
+	char buf[BUFLEN];
 	int len;
 	len = sprintf(buf, _GOTO_, t->scridy+1, t->scridx+1);
 	len = telnet_session_write(&t->tsession, buf, len);
@@ -189,7 +192,7 @@ static void cursormove(TERMINAL_T *t) {
 * erase to end of line
 ***********************************************************************/
 static void erasetoeol(TERMINAL_T *t) {
-	char buf[20];
+	char buf[BUFLEN];
 	int len;
 	memset(t->scrbuf + t->scridy*COLS + t->scridx, FILLCHAR, COLS - t->scridx);
 	len = sprintf(buf, _EREOL_);
@@ -200,7 +203,7 @@ static void erasetoeol(TERMINAL_T *t) {
 * erase screen and home
 ***********************************************************************/
 static void erasescreen(TERMINAL_T *t) {
-	char buf[20];
+	char buf[BUFLEN];
 	int len;
 	t->scridx = t->scridy = 0;
 	memset(t->scrbuf, FILLCHAR, ROWS*COLS);
@@ -234,7 +237,7 @@ static void char_delete(TERMINAL_T *t) {
 * store char and move cursor with wrap
 ***********************************************************************/
 static void store(TERMINAL_T *t, char ch) {
-	char buf[20];
+	char buf[BUFLEN];
 	char *p = buf;
 
 	switch (ch) {
@@ -279,7 +282,7 @@ static void store(TERMINAL_T *t, char ch) {
 * emulation b9352 output (data in ch)
 ***********************************************************************/
 int b9352_output(TERMINAL_T *t, char ch) {
-	char obuf[OUTBUFSIZE];
+	char obuf[BUFLEN];
 	char *op = obuf;
 	int cnt = 0;
 
@@ -351,12 +354,14 @@ int b9352_output(TERMINAL_T *t, char ch) {
 		}
 	}
 
-	// try to write to terminal
-	switch (t->pc) {
-	case pc_serial: cnt = write(t->serial_handle, obuf, op-obuf); break;
-	case pc_canopen: cnt = can_write(t->canid, obuf, op-obuf); break;
-	case pc_telnet: cnt = telnet_session_write(&t->tsession, obuf, op-obuf); break;
-	default: cnt = 0;
+	// try to write to terminal, if anything is left to send (23-08-16)
+	if (op-obuf > 0) {
+		switch (t->pc) {
+		case pc_serial: cnt = write(t->serial_handle, obuf, op-obuf); break;
+		case pc_canopen: cnt = can_write(t->canid, obuf, op-obuf); break;
+		case pc_telnet: cnt = telnet_session_write(&t->tsession, obuf, op-obuf); break;
+		default: cnt = 0;
+		}
 	}
 
 	// reason to disconnect?
@@ -453,6 +458,10 @@ int b9352_input(TERMINAL_T *t, char ch) {
 		int lineend = linestart + COLS;
 		int cursor = linestart + t->scridx;
 		int startpos, endpos;
+
+		// ignore CR while buffer is not idle
+		if (t->bufstate != idle)
+			return false;
 
 		// abort any escape sequence
 		t->escaped = false;

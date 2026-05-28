@@ -48,7 +48,7 @@ typedef int t_stat;
 #define WMOP_PRL                00111   /* Program Release */
 #define WMOP_LNG                00115   /* Logical Negate */
 #define WMOP_CID                00121   /* Conditional Integer Store Destructive */
-#define WMOP_GEQ                00125   /* WMOP_B greater than or equal to A */
+#define WMOP_GEQ                00125   /* B greater than or equal to A */
 #define WMOP_BBC                00131   /* Branch Backward Conditional */
 #define WMOP_BRT                00135   /* Branch Return */
 #define WMOP_INX                00141   /* Index */
@@ -60,7 +60,7 @@ typedef int t_stat;
 #define WMOP_RTN                00235   /* Return normal */
 #define WMOP_COC                00241   /* Construct Operand Call */
 #define WMOP_SUB                00301   /* Subtract */
-#define WMOP_DLS                00305   /* WMOP_Double Precision Subtract */
+#define WMOP_DLS                00305   /* Double Precision Subtract */
 #define WMOP_MUL                00401   /* Multiply */
 #define WMOP_DLM                00405   /* Double Precision Multiply */
 #define WMOP_RTR                00411   /* Read Timer */
@@ -129,7 +129,7 @@ typedef int t_stat;
 #define WMOP_FCE                00075   /* Compare Field Equal XX */
 
 /* Character Mode */
-#define CMOP_EXC                00000   /* CMOP_Exit Character Mode */
+#define CMOP_EXC                00000   /* Exit Character Mode */
 #define CMOP_CMX                00100   /* Exit Character Mode In Line */
 #define CMOP_BSD                00002   /* Skip Bit Destiniation */
 #define CMOP_BSS                00003   /* SKip Bit Source */
@@ -170,7 +170,7 @@ typedef int t_stat;
 #define CMOP_TSA                00056   /* Transfer Source Address */
 #define CMOP_JRV                00057   /* Jump Reverse Unconditional */
 #define CMOP_CEQ                00060   /* Compare Equal */
-#define CMOP_CNE                00061   /* COmpare for Not Equal */
+#define CMOP_CNE                00061   /* Compare for Not Equal */
 #define CMOP_CEG                00062   /* Compare For Greater Or Equal */
 #define CMOP_CGR                00063   /* Compare For Greater */
 #define CMOP_BIS                00064   /* Set Bit */
@@ -196,7 +196,7 @@ typedef int t_stat;
 #define MANT            00007777777777777LL
 #define NORM            00007000000000000LL
 #define ROUND           00004000000000000LL
-#define PRESENT         01000000000000000LL     /* Oprand Type */
+#define PRESENT         01000000000000000LL     /* Operand Type */
 #define DFLAG           02000000000000000LL     /* Descriptor */
 #define WCOUNT          00017770000000000LL
 #define WCOUNT_V        30
