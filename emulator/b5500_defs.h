@@ -29,11 +29,6 @@
 #include <stdio.h>
 #include "common.h"
 #undef PRESENT
-typedef unsigned long long t_uint64;
-typedef unsigned long uint32;
-typedef unsigned short uint16;
-typedef unsigned char uint8;
-typedef int t_stat;
 
 /* Word mode opcodes */
 #define WMOP_LITC               00000   /* Load literal */

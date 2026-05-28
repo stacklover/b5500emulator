@@ -160,7 +160,7 @@ WORD48 readTimer(CPU *cpu) { (void)cpu;
 ***********************************************************************/
 const char *relsym(unsigned offset, BIT cEnabled) {
         static char buf[32];
-        if (cpu->bSALF) {
+        if (cpu->SALF) {
                 // subroutine level - check upper 3 bits of the 10 bit offset
                 switch ((offset >> 7) & 7) {
                 case 0:
@@ -173,8 +173,8 @@ const char *relsym(unsigned offset, BIT cEnabled) {
 prtuse:
                         if (offset < MAXNAME && name[offset][0] != 0) {
                                 // do we have a memory address?
-                                if (MAIN[(cpu->rR) + offset] & MASK_FLAG)
-                                        sprintf(buf, "%s=%05llo", name[offset], MAIN[(cpu->rR) + offset] & MASK_ADDR);
+                                if (MAIN[(cpu->R) + offset] & MASK_FLAG)
+                                        sprintf(buf, "%s=%05llo", name[offset], MAIN[(cpu->R) + offset] & MASK_ADDR);
                                 else
                                         sprintf(buf, "%s", name[offset]);
                                 return buf;
@@ -186,7 +186,7 @@ prtuse:
                         // pattern 10x xxxxxxx - F+ or (R+7)+ relative
                         // reach 0..255
                         offset &= 0xff;
-                        if (cpu->bMSFF) {
+                        if (cpu->MSFF) {
                                 // during function parameter loading its (R+7)+
                                 sprintf(buf, "PARAMETERLOADING %u", offset);
                                 return buf;
@@ -209,7 +209,7 @@ prtuse:
                         // pattern 111 xxxxxxx - F- or (R+7)- relative
                         // reach 0..127 (negative direction)
                         offset &= 0x7f;
-                        if (cpu->bMSFF) {
+                        if (cpu->MSFF) {
                                 sprintf(buf, "PARAMETER %u", offset);
                                 return buf;
                         } else {
@@ -360,17 +360,17 @@ void memdump(CPU *cpu) {
 
 	if (cpu) {
 		fprintf(mfp, "\tA=%016lo(%u) GH=%02o Y=%02o M=%05o F=%05o N=%d NCSF=%u T=%04o\n",
-			cpu->rA, cpu->bAROF,
-			cpu->rGH,
-			(WORD6)cpu->rY, cpu->rM,
-			cpu->rF,
-			cpu->rN, cpu->bNCSF, cpu->rT);
+			cpu->A, cpu->AROF,
+			cpu->GH,
+			(WORD6)cpu->Y, cpu->M,
+			cpu->F,
+			cpu->N, cpu->NCSF, cpu->T);
 		fprintf(mfp, "\tB=%016lo(%u) KV=%02o Z=%02o S=%05o R=%05o MSFF=%u SALF=%u\n",
-			cpu->rB, cpu->bBROF,
-			cpu->rKV,
-			cpu->rZ, cpu->rS,
-			cpu->rR,
-			cpu->bMSFF, cpu->bSALF);
+			cpu->B, cpu->BROF,
+			cpu->KV,
+			cpu->Z, cpu->S,
+			cpu->R,
+			cpu->MSFF, cpu->SALF);
 	}
 
         do {
@@ -407,7 +407,7 @@ void memdump(CPU *cpu) {
 void start(CPU *cpu)
 {
 	prepMessage(cpu); printf("start\n");
-	cpu->bHLTF = false;
+	cpu->HLTF = false;
 }
 
 /***********************************************************************
@@ -416,10 +416,10 @@ void start(CPU *cpu)
 void stop(CPU *cpu)
 {
 	prepMessage(cpu); printf("stop\n");
-	cpu->rT = 0;
-	cpu->bTROF = false;	// idle the processor
-	cpu->bPROF = false;
-	cpu->bHLTF = true;
+	cpu->T = 0;
+	cpu->TROF = false;	// idle the processor
+	cpu->PROF = false;
+	cpu->HLTF = true;
 }
 
 /***********************************************************************
@@ -428,14 +428,14 @@ void stop(CPU *cpu)
 void preset(CPU *cpu, ADDR15 runAddr)
 {
 	prepMessage(cpu); printf("preset to %05o\n", runAddr);
-        cpu->rC = runAddr;
-        cpu->rL = 0;
-        cpu->rT = 0;
-        cpu->bPROF = false;	// cause memory read
-        cpu->bTROF = false;	// cause instrction fetch
-        cpu->rR = 0;
-        cpu->rS = 0;
-	cpu->bHLTF = true;
+        cpu->C = runAddr;
+        cpu->L = 0;
+        cpu->T = 0;
+        cpu->PROF = false;	// cause memory read
+        cpu->TROF = false;	// cause instrction fetch
+        cpu->R = 0;
+        cpu->S = 0;
+	cpu->HLTF = true;
 }
 
 /***********************************************************************
@@ -489,8 +489,8 @@ void sim_traceinstr(CPU *cpu) {
 	if (dotrcins) {
 		ADDR15 c;
 		WORD2 l;
-		c = cpu->rC;
-		l = cpu->rL;
+		c = cpu->C;
+		l = cpu->L;
 		if (l == 0) {
 			l = 3;
 			c--;
@@ -502,7 +502,7 @@ void sim_traceinstr(CPU *cpu) {
 		fprintf(tracefp, "\n");
 		codesym(c, l);
 		// print the instruction itself
-		printinstr(cpu->rT, cpu->bCWMF);
+		printinstr(cpu->T, cpu->CWMF);
 		// end the line
 		fprintf(tracefp, "\n");
 	}
@@ -513,32 +513,32 @@ void sim_traceinstr(CPU *cpu) {
 * word mode and char mode are different printouts
 ***********************************************************************/
 void sim_printregs(CPU *cpu) {
-	if (cpu->bCWMF) {
+	if (cpu->CWMF) {
 		fprintf(tracefp, "\tSI(M:GH)=%05o:%02o A=%s (%u) Y=%02o\n",
-			cpu->rM, cpu->rGH,
-			word2string(cpu->rA), cpu->bAROF,
-			(WORD6)cpu->rY);
+			cpu->M, cpu->GH,
+			word2string(cpu->A), cpu->AROF,
+			(WORD6)cpu->Y);
 		fprintf(tracefp, "\tDI(S:KV)=%05o:%02o B=%s (%u) Z=%02o\n",
-			cpu->rS, cpu->rKV,
-			word2string(cpu->rB), cpu->bBROF,
-			cpu->rZ);
+			cpu->S, cpu->KV,
+			word2string(cpu->B), cpu->BROF,
+			cpu->Z);
 		fprintf(tracefp, "\tR=%05o N=%d F=%05o TFFF=%u SALF=%u NCSF=%u T=%04o\n",
-			cpu->rR, cpu->rN, cpu->rF,
-			cpu->bTFFF, cpu->bSALF, cpu->bNCSF, cpu->rT);
-		fprintf(tracefp, "\tX=__%014lo %s\n", cpu->rX, lcw2string(cpu->rX));
+			cpu->R, cpu->N, cpu->F,
+			cpu->TFFF, cpu->SALF, cpu->NCSF, cpu->T);
+		fprintf(tracefp, "\tX=__%014lo %s\n", cpu->X, lcw2string(cpu->X));
 	} else {
 		fprintf(tracefp, "\tA=%016lo(%u) GH=%02o Y=%02o M=%05o F=%05o N=%d NCSF=%u T=%04o\n",
-			cpu->rA, cpu->bAROF,
-			cpu->rGH,
-			(WORD6)cpu->rY, cpu->rM,
-			cpu->rF,
-			cpu->rN, cpu->bNCSF, cpu->rT);
+			cpu->A, cpu->AROF,
+			cpu->GH,
+			(WORD6)cpu->Y, cpu->M,
+			cpu->F,
+			cpu->N, cpu->NCSF, cpu->T);
 		fprintf(tracefp, "\tB=%016lo(%u) KV=%02o Z=%02o S=%05o R=%05o MSFF=%u SALF=%u\n",
-			cpu->rB, cpu->bBROF,
-			cpu->rKV,
-			cpu->rZ, cpu->rS,
-			cpu->rR,
-			cpu->bMSFF, cpu->bSALF);
+			cpu->B, cpu->BROF,
+			cpu->KV,
+			cpu->Z, cpu->S,
+			cpu->R,
+			cpu->MSFF, cpu->SALF);
 	}
 }
 
@@ -551,7 +551,7 @@ void execute(ADDR15 addr) {
 runagain:
         start(cpu);
 
-        while (!cpu->bHLTF) {
+        while (!cpu->HLTF) {
                 instr_count++;
 
                 run(cpu);
@@ -717,7 +717,7 @@ int main(int argc, char *argv[])
 			tracefp = fopen("instrace.txt", "w");
                         break;
                 case 'z':
-                        cpu->bUS14X = true; /* stop on ZPI */
+                        cpu->US14X = true; /* stop on ZPI */
                         break;
                 case 'l':
                         listfile.name = optarg; /* file with listing */
