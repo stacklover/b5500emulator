@@ -94,7 +94,10 @@ static struct dk *dkx = NULL;
 /***********************************************************************
 * set to dka/dkb
 ***********************************************************************/
-static int set_dk(const char *v, void *data) {dkx = dk+(int)data; return 0; }
+static int set_dk(const char *v, void *data) {
+	dkx = dk+(intptr_t)data;
+	return 0;
+}
 
 /***********************************************************************
 * specify or close the trace file

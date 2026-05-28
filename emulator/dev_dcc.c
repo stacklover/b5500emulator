@@ -223,9 +223,11 @@ static int get_status(const char *v, void *) {
 			case pc_serial:
 				p += sprintf(p, " %d\n", t->serial_handle);
 				break;
+#if USECAN
 			case pc_canopen:
 				p += sprintf(p, " %d\n", t->canid);
 				break;
+#endif
 			case pc_telnet:
 				p += sprintf(p, " %d %s %ux%u %s\n",
 					t->tsession.socket,
@@ -380,7 +382,7 @@ int dcc_init(const char *option) {
 			exit(2);
 		}
 		terminal = (TERMINAL_T *)shmat(shm_dcc, NULL, 0);
-		if ((int)terminal == -1) {
+		if (terminal == (void *)-1) {
 			perror("shmat DCC");
 			exit(2);
 		}
@@ -389,8 +391,9 @@ int dcc_init(const char *option) {
 		pc_telnet_init();
 		pc_itelex_init();
 		pc_serial_init();
+#if USECAN
 		pc_canopen_init();
-
+#endif
 		// init terminal data structures
 		for (index=0; index<NUMTERM; index++) {
 			TERMINAL_T *t = terminal+index;
@@ -399,11 +402,16 @@ int dcc_init(const char *option) {
 			// TODO: this next part is kindy hacky, should be
 			// TODO: parametrized
 			// TODO: preferable read SYSDISK-MAKER.CARD...
+#if USECAN
 			if (index >= 0 && index < 15) {
 				t->ld = ld_teletype;
 			} else if (index == 15) {
 				t->ld = ld_teletype;
 				t->pc = pc_canopen;
+#else
+			if (index >= 0 && index < 16) {
+				t->ld = ld_teletype;
+#endif
 			} else if (index >= 16 && index < 32) {
 				t->ld = ld_contention;
 			} else {
@@ -487,8 +495,9 @@ static void dcc_poll(void) {
 	pc_telnet_poll(telnet);
 	pc_itelex_poll(itelex);
 	pc_serial_poll();
+#if USECAN
 	pc_canopen_poll();
-
+#endif
 	// poll existing connections
 	for (index = 0; index < NUMTERM; index++) {
 		t = &terminal[index];
@@ -496,7 +505,9 @@ static void dcc_poll(void) {
 		case pc_telnet: pc_telnet_poll_terminal(t); break;
 		case pc_itelex: pc_itelex_poll_terminal(t); break;
 		case pc_serial: pc_serial_poll_terminal(t); break;
+#if USECAN
 		case pc_canopen: pc_canopen_poll_terminal(t); break;
+#endif
 		default:
 			;
 		}

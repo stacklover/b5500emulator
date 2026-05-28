@@ -50,7 +50,10 @@ static struct cr *crx = NULL;
 /***********************************************************************
 * set to cra/crb
 ***********************************************************************/
-static int set_cr(const char *v, void *data) {crx = cr+(int)data; return 0; }
+static int set_cr(const char *v, void *data) {
+	crx = cr+(intptr_t)data;
+	return 0;
+}
 
 /***********************************************************************
 * specify or close the trace file

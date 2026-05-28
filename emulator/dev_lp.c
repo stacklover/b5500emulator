@@ -67,7 +67,10 @@ static struct lp *lpx = NULL;
 /***********************************************************************
 * set to lpa/lpb
 ***********************************************************************/
-static int set_lp(const char *v, void *data) {lpx = lp+(int)data; return 0; }
+static int set_lp(const char *v, void *data) {
+	lpx = lp+(intptr_t)data;
+	return 0;
+}
 
 /***********************************************************************
 * specify printer type

@@ -143,7 +143,9 @@ void ld_write_teletype(TERMINAL_T *t) {
 	case pc_telnet: ptr = pc_telnet_write(t, t->outbuf, t->outidx); break;
 	case pc_itelex: ptr = pc_itelex_write(t, t->outbuf, t->outidx); break;
 	case pc_serial: ptr = pc_serial_write(t, t->outbuf, t->outidx); break;
+#if USECAN
 	case pc_canopen: ptr = pc_canopen_write(t, t->outbuf, t->outidx); break;
+#endif
 	default: t->pcs = pcs_failed;
 	}
 #if LDT_VERBOSE
@@ -189,7 +191,9 @@ int ld_poll_teletype(TERMINAL_T *t) {
 	case pc_telnet: cnt = pc_telnet_read(t, ibuf, sizeof ibuf); fdx = t->tsession.is_fullduplex; break;
 	case pc_itelex: cnt = pc_itelex_read(t, ibuf, sizeof ibuf); fdx = 0; break;
 	case pc_serial: cnt = pc_serial_read(t, ibuf, sizeof ibuf); fdx = 1; break;
+#if USECAN
 	case pc_canopen: cnt = pc_canopen_read(t, ibuf, sizeof ibuf); fdx = 1; break;
+#endif
 	default: return -1;
 	}
 
@@ -278,7 +282,9 @@ int ld_poll_teletype(TERMINAL_T *t) {
 		case pc_telnet: pc_telnet_write(t, obuf, odx); break;
 		case pc_itelex: pc_itelex_write(t, obuf, odx); break;
 		case pc_serial: pc_serial_write(t, obuf, odx); break;
+#if USECAN
 		case pc_canopen: pc_canopen_write(t, obuf, odx); break;
+#endif
 		default: return -1;
 		}
 	}

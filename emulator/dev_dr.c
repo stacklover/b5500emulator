@@ -43,7 +43,10 @@ static struct dr *drx = NULL;
 /***********************************************************************
 * set to dra
 ***********************************************************************/
-static int set_dr(const char *v, void *data) {drx = dr+(int)data; return 0; }
+static int set_dr(const char *v, void *data) {
+	drx = dr+(intptr_t)data;
+	return 0;
+}
 
 /***********************************************************************
 * specify or close the trace file

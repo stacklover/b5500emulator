@@ -23,6 +23,7 @@
 
 #ifndef COMMON_H
 #define COMMON_H
+#include <cstdint>
 
 /*
  * some compile time switches
@@ -41,23 +42,23 @@
  *   will be issued by compilers on wrong types in function calls
  *   (I wish we had some of the type strictness of pascal here)
  */
-typedef unsigned char BIT;              // a single bit
+typedef uint8_t BIT;              // a single bit
 #define true 1
 #define false 0
-typedef unsigned char WORD2;            // 2 bits
-typedef unsigned char WORD3;            // 3 bits
-typedef unsigned char WORD4;            // 4 bits
-typedef unsigned char WORD5;            // 5 bits
-typedef unsigned char WORD6;            // 6 bits
-typedef unsigned char WORD7;            // 7 bits
-typedef unsigned char WORD8;            // 8 bits
-typedef unsigned short ADDR9;           // 9 bits higher part of memory address
-typedef unsigned short WORD10;          // 10 bits word count
-typedef unsigned short WORD12;          // 12 bits instruction register
-typedef unsigned short ADDR15;          // 15 bits memory address
-typedef unsigned long WORD21;           // 21 bits
-typedef unsigned long long WORD39;      // 39 bits mantissa extension
-typedef unsigned long long WORD48;      // 48 bits machine word
+typedef uint8_t WORD2;            // 2 bits
+typedef uint8_t WORD3;            // 3 bits
+typedef uint8_t WORD4;            // 4 bits
+typedef uint8_t WORD5;            // 5 bits
+typedef uint8_t WORD6;            // 6 bits
+typedef uint8_t WORD7;            // 7 bits
+typedef uint8_t WORD8;            // 8 bits
+typedef uint16_t ADDR9;           // 9 bits higher part of memory address
+typedef uint16_t WORD10;          // 10 bits word count
+typedef uint16_t WORD12;          // 12 bits instruction register
+typedef uint16_t ADDR15;          // 15 bits memory address
+typedef uint32_t WORD21;           // 21 bits
+typedef uint64_t WORD39;      // 39 bits mantissa extension
+typedef uint64_t WORD48;      // 48 bits machine word
 
 /*
  * masks that should be used when assigning to above types when overflow is possible
@@ -504,7 +505,7 @@ extern const UNIT unit[32][2];
 
 /*
  * For all single precision operations we use the 64 bits of the host
- * machine's "unsigned long long" (typedef WORD48) to hold the
+ * machine's "uint64_t" (typedef WORD48) to hold the
  * mantissa as follows:
  *
  * Bit 39 holds the carry bit (checked after addition),

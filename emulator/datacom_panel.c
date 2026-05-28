@@ -66,7 +66,7 @@ int main(int argc, char	*argv[])
 		exit(2);
 	}
 	terminal = (TERMINAL_T *)shmat(shm_dcc, NULL, 0);
-	if ((int)terminal == -1) {
+	if (terminal == (void *)-1) {
 		perror("shmat DCC");
 		exit(2);
 	}
