@@ -45,7 +45,7 @@ static struct cp *cpx = NULL;
 /***********************************************************************
 * set to cpa
 ***********************************************************************/
-static int set_cp(const char *v, void *data) {
+static int set_cp(const char *, void *data) {
 	cpx = cp+(intptr_t)data;
 	return 0;
 }
@@ -107,9 +107,9 @@ static int set_cpfile(const char *v, void *) {
 ***********************************************************************/
 static const command_t cp_commands[] = {
 	{"cpa",		set_cp,	(void *) 0},
-	{"trace",	set_cptrace},
-	{"file",	set_cpfile},
-	{NULL,		NULL},
+	{"trace",	set_cptrace, NULL},
+	{"file",	set_cpfile, NULL},
+	{NULL,		NULL, NULL},
 };
 
 /***********************************************************************

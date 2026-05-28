@@ -230,7 +230,7 @@ void itelex_session_clear(ITELEX_SESSION_T *t) {
 * ITELEX Session Read
 * Returns number of bytes read or -1 on non-recoverable error
 ***********************************************************************/
-int itelex_session_read(ITELEX_SESSION_T *t, char *buf, int len) {
+int itelex_session_read(ITELEX_SESSION_T *t, char *buf, int) {
 	//dumpbuf(t->buf, t->bidx, "@itelex_session_read - rest of buffer");
 	// step 1: try to fill buffer
 	int i = IT_BUFLEN-t->bidx;

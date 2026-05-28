@@ -67,32 +67,33 @@ endif
 
 INC =		common.h io.h b5500_defs.h canlib.h dcc.h telnetd.h itelexd.h
 
-CFLAGS		= -D_LARGEFILE64_SOURCE	-D_FILE_OFFSET_BITS=64 -pipe -Os \
-		  -D_THREAD_SAFE -D_REENTRANT -DNOSIMH -Wall
-ifeq ($(USECAN),1)
-CFLAGS		+= -DUSECAN=1
-endif
+USECAN ?= 0
 
-LFLAGS		= -lrt -lpthread #-lfltk_images -lfltk	-lpng -lz -ljpeg  -lXext -lXft \
-		  #-lfontconfig	-lXinerama -ldl -lm -lX11
+CFLAGS = -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64 -pipe -Os \
+         -D_REENTRANT -DNOSIMH -Wall -pthread \
+         -DUSECAN=$(USECAN)
+
+CFLAGS += -Wextra -Werror
+
+LFLAGS = -pthread -lrt
 
 all: $(ALL)
 
 $(ODIR)/processor_panel.exe:	 $(OBJPANEL) Makefile
 	@echo "*** Linking $@..."
-	$(CXX) $(LFLAGS) -o $(ODIR)/processor_panel.exe $(OBJPANEL)
+	$(CXX) -o $(ODIR)/processor_panel.exe $(OBJPANEL) $(LFLAGS)
 
 $(ODIR)/datacom_panel.exe:	 $(OBJDCC) Makefile
 	@echo "*** Linking $@..."
-	$(CXX) $(LFLAGS) -o $(ODIR)/datacom_panel.exe $(OBJDCC)
+	$(CXX) -o $(ODIR)/datacom_panel.exe $(OBJDCC) $(LFLAGS)
 
 $(ODIR)/b9352.exe:	 $(OBJB9352) Makefile
 	@echo "*** Linking $@..."
-	$(CXX) $(LFLAGS) -o $(ODIR)/b9352.exe $(OBJB9352)
+	$(CXX) -o $(ODIR)/b9352.exe $(OBJB9352) $(LFLAGS)
 
 $(ODIR)/b9353.exe:	 $(OBJB9353) Makefile
 	@echo "*** Linking $@..."
-	$(CXX) $(LFLAGS) -o $(ODIR)/b9353.exe $(OBJB9353)
+	$(CXX) -o $(ODIR)/b9353.exe $(OBJB9353) $(LFLAGS)
 
 $(ODIR)/emulator2.exe:	 $(OBJEMULATOR2) Makefile
 	@echo "*** Linking $@..."

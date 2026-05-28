@@ -171,7 +171,7 @@ void ld_write_teletype(TERMINAL_T *t) {
 	// disconnect requested?
 	if (t->disc) {
 		if (dtrace) {
-			sprintf(t->outbuf, " %s disconnect request\n", t->name);
+			sprintf(t->outbuf, " %s disc req\n", t->name);
 			spo_print(t->outbuf);
 		}
 		t->pcs = pcs_failed;

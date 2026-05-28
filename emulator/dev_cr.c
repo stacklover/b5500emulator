@@ -50,7 +50,7 @@ static struct cr *crx = NULL;
 /***********************************************************************
 * set to cra/crb
 ***********************************************************************/
-static int set_cr(const char *v, void *data) {
+static int set_cr(const char *, void *data) {
 	crx = cr+(intptr_t)data;
 	return 0;
 }
@@ -113,9 +113,9 @@ static int set_crfile(const char *v, void *) {
 static const command_t cr_commands[] = {
 	{"cra",		set_cr,	(void *) 0},
 	{"crb", 	set_cr, (void *) 1},
-	{"trace",	set_crtrace},
-	{"file",	set_crfile},
-	{NULL,		NULL},
+	{"trace",	set_crtrace, NULL},
+	{"file",	set_crfile, NULL},
+	{NULL,		NULL, NULL},
 };
 
 /***********************************************************************
@@ -178,7 +178,7 @@ notready:
 
 	// warn if a binary line is not exactly 160 chars
         if ((u->d_control & CD_27_BINARY) && strlen(crx->cbuf) != (unsigned)chars) {
-                printf("*\tWARNING: binary card incorrect length(%u). abort\n", strlen(crx->cbuf));
+                printf("*\tWARNING: binary card incorrect length(%lu). abort\n", strlen(crx->cbuf));
         }
 
 	// a "?" is an illegal char when at column 0 and in alpha mode

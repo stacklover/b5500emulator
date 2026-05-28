@@ -63,7 +63,7 @@ static unsigned char parity[256] = {P6(0),P6(1),P6(1),P6(0)};
 /***********************************************************************
 * set to mta..mtt
 ***********************************************************************/
-static int set_mt(const char *v, void *data) {
+static int set_mt(const char *, void *data) {
 	mtx = mt+(intptr_t)data;
 	return 0;
 }
@@ -172,7 +172,7 @@ static int set_mtnewfile(const char *v, void *) {
 /***********************************************************************
 * set the writering flag
 ***********************************************************************/
-static int set_mtwritering(const char *v, void *) {
+static int set_mtwritering(const char *, void *) {
 	if (!mtx) {
 		printf("mt not specified\n");
 		return 2; // FATAL
@@ -203,11 +203,11 @@ static const command_t mt_commands[] = {
 	{"mtr",		set_mt, (void *) 13},
 	{"mts",		set_mt, (void *) 14},
 	{"mtt",		set_mt, (void *) 15},
-	{"trace",	set_mttrace},
-	{"file",	set_mtfile},
-	{"newfile",	set_mtnewfile},
-	{"writering",	set_mtwritering},
-	{NULL,		NULL},
+	{"trace",	set_mttrace, NULL},
+	{"file",	set_mtfile, NULL},
+	{"newfile",	set_mtnewfile, NULL},
+	{"writering",	set_mtwritering, NULL},
+	{NULL,		NULL, NULL},
 };
 
 /***********************************************************************
@@ -467,6 +467,7 @@ void mt_access(IOCU *u) {
 			if (words > 0)
 				had_parity = true;
 			// continue as normal record
+			/* fall through */
 		case 0:	// normal record
 	                if (!binary) {
 	                        // translate external BCL as ASCII to BIC??

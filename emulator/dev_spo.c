@@ -156,18 +156,18 @@ static int set_timestamp(const char *v, void *) {
 * command table
 ***********************************************************************/
 static const command_t spo_commands[] = {
-	{"SPO", NULL},
-	{"LOAD", set_spoload},
+	{"SPO", NULL, NULL},
+	{"LOAD", set_spoload, NULL},
 #if AUTOEXEC
-	{"AUTOEXEC", set_autoexec},
+	{"AUTOEXEC", set_autoexec, NULL},
 #endif
 #ifdef USECAN
-	{"CAN", set_canspo},
+	{"CAN", set_canspo, NULL},
 #endif
 #ifdef TIMESTAMP
-	{"TIMESTAMP", set_timestamp},
+	{"TIMESTAMP", set_timestamp, NULL},
 #endif
-	{NULL, NULL},
+	{NULL, NULL, NULL},
 };
 
 /***********************************************************************
@@ -188,7 +188,7 @@ int spo_init(const char *option) {
 * if the buffer contains the "#" escape, the line is handled in the
 * emulator, otherwise the "INPUT REQUEST" interupt is caused
 ***********************************************************************/
-BIT spo_ready(unsigned index) {
+BIT spo_ready(unsigned) {
         struct timeval tv = {0, 0};
 	char *spoinp = NULL;
 

@@ -287,7 +287,7 @@ void clearInterrupt(ADDR15 iar) {
 * handle 60Hz timer
 * warning: this can be called from another thread or even interrupt context
 ***********************************************************************/
-void timer60hz(union sigval sv) {
+void timer60hz(union sigval sv) { (void)sv;
 	WORD6 temp = CC->TM;
 	temp = (temp+1) & 077;
 	CC->TM = temp;
@@ -359,7 +359,7 @@ void fetch(ACCESSOR *acc)
                 acc->MAED = false;      // no address error
                 acc->word = MAIN[acc->addr & MASKMEM];
                 if (watched)
-                        printf("\t[%05o]->%016llo OK (%s)\n",
+                        printf("\t[%05o]->%016lo OK (%s)\n",
                                 acc->addr, acc->word, acc->id);
         }
 }
@@ -383,7 +383,7 @@ void store(ACCESSOR *acc)
                 acc->MAED = false;      // no address error
                 MAIN[acc->addr & MASKMEM] = acc->word;
                 if (watched)
-                        printf("\t[%05o]<-%016llo OK (%s)\n",
+                        printf("\t[%05o]<-%016lo OK (%s)\n",
                                 acc->addr, acc->word, acc->id);
         }
 }

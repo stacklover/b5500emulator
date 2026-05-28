@@ -230,7 +230,7 @@ static int socket_open(const char *host, unsigned port) {
 /***********************************************************************
 * User Input Thread Function
 ***********************************************************************/
-static void *user_input_function(void *v) {
+static void *user_input_function(void *) {
 	char buf[5];
 	char *p;
 loop:

@@ -67,7 +67,7 @@ static struct lp *lpx = NULL;
 /***********************************************************************
 * set to lpa/lpb
 ***********************************************************************/
-static int set_lp(const char *v, void *data) {
+static int set_lp(const char *, void *data) {
 	lpx = lp+(intptr_t)data;
 	return 0;
 }
@@ -142,9 +142,9 @@ static int set_lpfile(const char *v, void *) {
 static const command_t lp_commands[] = {
 	{"lpa",		set_lp,	(void *) 0},
 	{"lpb", 	set_lp, (void *) 1},
-	{"type",	set_lptype},
-	{"file",	set_lpfile},
-	{NULL,		NULL},
+	{"type",	set_lptype, NULL},
+	{"file",	set_lpfile, NULL},
+	{NULL,		NULL, NULL},
 };
 
 /***********************************************************************

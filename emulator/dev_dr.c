@@ -43,7 +43,7 @@ static struct dr *drx = NULL;
 /***********************************************************************
 * set to dra
 ***********************************************************************/
-static int set_dr(const char *v, void *data) {
+static int set_dr(const char *, void *data) {
 	drx = dr+(intptr_t)data;
 	return 0;
 }
@@ -92,9 +92,9 @@ static int set_drready(const char *v, void *) {
 static const command_t dr_commands[] = {
 	{"dra",		set_dr,	(void *) 0},
 	{"drb",		set_dr,	(void *) 1},
-	{"trace",	set_drtrace},
-	{"ready",	set_drready},
-	{NULL,		NULL},
+	{"trace",	set_drtrace, NULL},
+	{"ready",	set_drready, NULL},
+	{NULL,		NULL, NULL},
 };
 
 /***********************************************************************

@@ -192,7 +192,7 @@ static int set_itelex(const char *v, void *) {
 /***********************************************************************
 * get status
 ***********************************************************************/
-static int get_status(const char *v, void *) {
+static int get_status(const char *, void *) {
 	TERMINAL_T *t;
 	unsigned index;
 	char buf[SPOBUFSIZE];
@@ -223,11 +223,9 @@ static int get_status(const char *v, void *) {
 			case pc_serial:
 				p += sprintf(p, " %d\n", t->serial_handle);
 				break;
-#if USECAN
 			case pc_canopen:
 				p += sprintf(p, " %d\n", t->canid);
 				break;
-#endif
 			case pc_telnet:
 				p += sprintf(p, " %d %s %ux%u %s\n",
 					t->tsession.socket,
@@ -247,7 +245,7 @@ static int get_status(const char *v, void *) {
 	return 0; // OK
 }
 
-#ifdef USECAN
+#if USECAN
 /***********************************************************************
 * specify canid on/off
 ***********************************************************************/
@@ -272,18 +270,18 @@ help:		spo_print("$SPECIFY CANID(1..126) OR OFF\n");
 * command table
 ***********************************************************************/
 static const command_t dcc_commands[] = {
-	{"DCC", NULL},
-	{"TELNET", set_telnet},
-	{"ITELEX", set_itelex},
-#ifdef USECAN
-	{"CAN", set_can},
+	{"DCC", NULL, NULL},
+	{"TELNET", set_telnet, NULL},
+	{"ITELEX", set_itelex, NULL},
+#if USECAN
+	{"CAN", set_can, NULL},
 #endif
-	{"CTRACE", set_ctrace},
-	{"DTRACE", set_dtrace},
-	{"ETRACE", set_etrace},
-	{"FTRACE", set_ftrace},
-	{"STATUS", get_status},
-	{NULL, NULL},
+	{"CTRACE", set_ctrace, NULL},
+	{"DTRACE", set_dtrace, NULL},
+	{"ETRACE", set_etrace, NULL},
+	{"FTRACE", set_ftrace, NULL},
+	{"STATUS", get_status, NULL},
+	{NULL, NULL, NULL},
 };
 
 /***********************************************************************
@@ -517,7 +515,7 @@ static void dcc_poll(void) {
 /***********************************************************************
 * query DCC ready status
 ***********************************************************************/
-BIT dcc_ready(unsigned index) {
+BIT dcc_ready(unsigned) {
 	unsigned tun, bnr;
 
 	// initialize SPO if not ready

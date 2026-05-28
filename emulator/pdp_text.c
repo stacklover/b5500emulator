@@ -270,20 +270,20 @@ void b5500_pdp_text1(CPU *cpu)
 
 void b5500_pdp_text2(CPU *cpu)
 {
-	printf("%s X=%013llo J=%02o  Q=%o%o%o%o%o%o%o%o%o R=%05o  \n",
+	printf("%s X=%013lo J=%02o  Q=%o%o%o%o%o%o%o%o%o R=%05o  \n",
 		cpu->id, cpu->rX, cpu->rJ,
 		cpu->bQ09F, cpu->bQ08F, cpu->bQ07F,
 		cpu->bQ06F, cpu->bQ05F, cpu->bQ04F,
 		cpu->bQ03F, cpu->bQ02F, cpu->bQ01F,
 		cpu->rR);
 
-	printf("A=%016llo AROF=%o GH=%02o Y=%02o M=%05o  \n",
+	printf("A=%016lo AROF=%o GH=%02o Y=%02o M=%05o  \n",
 		cpu->rA, cpu->bAROF, cpu->rGH, cpu->rY, cpu->rM);
 
-	printf("B=%016llo BROF=%o KV=%02o Z=%02o S=%05o  \n",
+	printf("B=%016lo BROF=%o KV=%02o Z=%02o S=%05o  \n",
 		cpu->rB, cpu->bBROF, cpu->rKV, cpu->rZ, cpu->rS);
 
-	printf("P=%016llo PROF=%o T=%04o.%o C:L=%05o:%o  \n",
+	printf("P=%016lo PROF=%o T=%04o.%o C:L=%05o:%o  \n",
 		cpu->rP, cpu->bPROF, cpu->rT, cpu->bTROF,
 		cpu->rC, cpu->rL);
 
@@ -309,7 +309,7 @@ void b5500_ccdp_text2(volatile CENTRAL_CONTROL *cc)
 
 void b5500_iodp_text2(IOCU *io)
 {
-	printf("IO W=%016llo IB=%02o OB=%02o CALLS=%010u  \n",
+	printf("IO W=%016lo IB=%02o OB=%02o CALLS=%010u  \n",
 		io->w, io->ib, io->ob, io->calls);
 
 	printf("   D=(UNIT=%02d WC=%04d CONTROL=%03o RESULT=%04o ADDR=%05o)  \n",

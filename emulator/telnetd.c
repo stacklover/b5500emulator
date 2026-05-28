@@ -277,7 +277,7 @@ int telnet_session_write(TELNET_SESSION_T *t, const char *buf, int len) {
 	}
 	// actually we should not be called with length == 0, but if, say it (23-08-16)
 	if (len == 0) {
-		printf("telnet_session_write: len is 0\n", len);
+		printf("telnet_session_write: len is 0\n");
 		return 0;
 	}
 	// we should also not be called with negative or big lengths

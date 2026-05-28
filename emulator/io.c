@@ -118,11 +118,12 @@ void print_ior(FILE *fp, IOCU *u) {
 * table of I/O units
 * indexed by unit designator and read bit of I/O descriptor
 ***********************************************************************/
+#define UNIT_NONE { NULL, 0, 0, NULL, NULL, NULL }
 const UNIT unit[32][2] = {
 	/*NO     NAME RDYBIT INDEX READYF    WRITEF    NULL     NAME RDYBIT INDEX READYF    READF     BOOTF */
-        /*00*/ {{NULL, 0, 0},                                  {NULL, 0, 0}},
+        /*00*/ { UNIT_NONE,                                     UNIT_NONE},
         /*01*/ {{"MTA", 47-47, 0, mt_ready, mt_access, NULL},  {"MTA", 47-47, 0, mt_ready, mt_access, NULL}},
-        /*02*/ {{NULL, 0, 0},                                  {NULL, 0, 0}},
+        /*02*/ { UNIT_NONE,                                     UNIT_NONE},
         /*03*/ {{"MTB", 47-46, 1, mt_ready, mt_access, NULL},  {"MTB", 47-46, 1, mt_ready, mt_access, NULL}},
         /*04*/ {{"DRA", 47-31, 0, dr_ready, dr_access, NULL},  {"DRA", 47-31, 0, dr_ready, dr_access, NULL}},         
         /*05*/ {{"MTC", 47-45, 2, mt_ready, mt_access, NULL},  {"MTC", 47-45, 2, mt_ready, mt_access, NULL}},
@@ -134,21 +135,21 @@ const UNIT unit[32][2] = {
         /*11*/ {{"MTF", 47-42, 5, mt_ready, mt_access, NULL},  {"MTF", 47-42, 5, mt_ready, mt_access, NULL}},
         /*12*/ {{"DKB", 47-28, 1, dk_ready, dk_access, NULL},  {"DKB", 47-28, 1, dk_ready, dk_access, NULL}},
         /*13*/ {{"MTH", 47-41, 6, mt_ready, mt_access, NULL},  {"MTH", 47-41, 6, mt_ready, mt_access, NULL}},
-        /*14*/ {{NULL, 0, 0},                                  {"CRB", 47-23, 1, cr_ready, cr_read, NULL}},
+        /*14*/ { UNIT_NONE,                                    {"CRB", 47-23, 1, cr_ready, cr_read, NULL}},
         /*15*/ {{"MTJ", 47-40, 7, mt_ready, mt_access, NULL},  {"MTJ", 47-40, 7, mt_ready, mt_access, NULL}},
         /*16*/ {{"DCC", 47-17, 0, dcc_ready, dcc_access, NULL},{"DCC", 47-17, 0, dcc_ready, dcc_access, NULL}},
         /*17*/ {{"MTK", 47-39, 8, mt_ready, mt_access, NULL},  {"MTK", 47-39, 8, mt_ready, mt_access, NULL}},
-        /*18*/ {{"PPA", 47-21, 0},                             {"PRA", 47-20, 0}},
+        /*18*/ {{"PPA", 47-21, 0, NULL,     NULL,      NULL},  {"PRA", 47-20, 0, NULL,     NULL,      NULL}},
         /*19*/ {{"MTL", 47-38, 9, mt_ready, mt_access, NULL},  {"MTL", 47-38, 9, mt_ready, mt_access, NULL}},
-        /*20*/ {{"PPB", 47-19, 1},                             {"PRB", 47-18, 1}},
+        /*20*/ {{"PPB", 47-19, 1, NULL,     NULL,      NULL},  {"PRB", 47-18, 1, NULL,     NULL,      NULL}},
         /*21*/ {{"MTM", 47-37, 10, mt_ready, mt_access, NULL}, {"MTM", 47-37, 10, mt_ready, mt_access, NULL}},
-        /*22*/ {{"LPA", 47-27, 0, lp_ready, lp_write, NULL},   {NULL, 0, 0}},
+        /*22*/ {{"LPA", 47-27, 0, lp_ready, lp_write, NULL},    UNIT_NONE},
         /*23*/ {{"MTN", 47-36, 11, mt_ready, mt_access, NULL}, {"MTN", 47-36, 11, mt_ready, mt_access, NULL}},
-        /*24*/ {{NULL, 0, 0},                                  {NULL, 0, 0}},
+        /*24*/ { UNIT_NONE,                                     UNIT_NONE},
         /*25*/ {{"MTP", 47-35, 12, mt_ready, mt_access, NULL}, {"MTP", 47-35, 12, mt_ready, mt_access, NULL}},
-        /*26*/ {{"LPB", 47-26, 1, lp_ready, lp_write, NULL},   {NULL, 0, 0}},
+        /*26*/ {{"LPB", 47-26, 1, lp_ready, lp_write, NULL},    UNIT_NONE},
         /*27*/ {{"MTR", 47-34, 13, mt_ready, mt_access, NULL}, {"MTR", 47-34, 13, mt_ready, mt_access, NULL}},
-        /*28*/ {{NULL, 0, 0},                                  {NULL, 0, 0}},
+        /*28*/ { UNIT_NONE,                                     UNIT_NONE},
         /*29*/ {{"MTS", 47-33, 14, mt_ready, mt_access, NULL}, {"MTS", 47-33, 14, mt_ready, mt_access, NULL}},
         /*30*/ {{"SPO", 47-22, 0, spo_ready, spo_write, NULL}, {"SPO", 47-22, 0, NULL, spo_read, NULL}},
         /*31*/ {{"MTT", 47-32, 15, mt_ready, mt_access, NULL}, {"MTT", 47-32, 15, mt_ready, mt_access, NULL}},
@@ -235,7 +236,7 @@ static void perform_io(int cu, WORD48 iocw) {
 /***********************************************************************
 * the IIO operation is executed here
 ***********************************************************************/
-void initiateIO(CPU *cpu) {
+void initiateIO(CPU *) {
 	struct iomsgbuf msg;
 	WORD48 w;
 
@@ -277,7 +278,7 @@ void initiateIO(CPU *cpu) {
 /***********************************************************************
 * check which units are ready
 ***********************************************************************/
-WORD48 interrogateUnitStatus(CPU *cpu) {
+WORD48 interrogateUnitStatus(CPU *) {
 	int i, j;
 	WORD48 unitsready = 0LL;
 
@@ -293,7 +294,7 @@ WORD48 interrogateUnitStatus(CPU *cpu) {
 /***********************************************************************
 * interrogate the next free I/O channel
 ***********************************************************************/
-WORD48 interrogateIOChannel(CPU *cpu) {
+WORD48 interrogateIOChannel(CPU *) {
         WORD48 result = 0LL;
 
 	// find first not busy IOCU
@@ -316,8 +317,8 @@ WORD48 interrogateIOChannel(CPU *cpu) {
 /***********************************************************************
 * I/O handling thread
 ***********************************************************************/
-static void *io_function(void *p) {
-	size_t	len;
+static void *io_function(void *) {
+	ssize_t	len;
 	struct iomsgbuf msg;
 	WORD48	iocw;
 loop:
@@ -337,7 +338,7 @@ loop:
 /***********************************************************************
 * Status
 ***********************************************************************/
-static int io_status(const char *v, void *) {
+static int io_status(const char *, void *) {
 	printf("$CALLS: %u %u %u %u\n",
 		IO[0]->calls, IO[1]->calls, IO[2]->calls, IO[3]->calls);
 	return 0; // OK
@@ -347,9 +348,9 @@ static int io_status(const char *v, void *) {
 * command table
 ***********************************************************************/
 static const command_t io_commands[] = {
-	{"IO", NULL},
-	{"STA", io_status},
-	{NULL, NULL},
+	{"IO", NULL, NULL},
+	{"STA", io_status, NULL},
+	{NULL, NULL, NULL},
 };
 
 /***********************************************************************

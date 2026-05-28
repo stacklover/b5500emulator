@@ -54,7 +54,7 @@ static const char *bufstate_name[] = {
 int shm_dcc;	// DCC shared structures
 static TERMINAL_T *terminal;
 
-int main(int argc, char	*argv[])
+int main(int, char *[])
 {
 	int i;
 	TERMINAL_T *t;

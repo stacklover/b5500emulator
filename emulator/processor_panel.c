@@ -23,7 +23,7 @@
 #include <unistd.h>
 #include "common.h"
 
-int main(int argc, char	*argv[])
+int main(int, char *[])
 {
 	int i;
 	b5500_init_shares();

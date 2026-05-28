@@ -94,7 +94,7 @@ static struct dk *dkx = NULL;
 /***********************************************************************
 * set to dka/dkb
 ***********************************************************************/
-static int set_dk(const char *v, void *data) {
+static int set_dk(const char *, void *data) {
 	dkx = dk+(intptr_t)data;
 	return 0;
 }
@@ -196,11 +196,11 @@ static int set_dkfile(const char *v, void *) {
 static const command_t dk_commands[] = {
 	{"dka",		set_dk,	(void *) 0},
 	{"dkb", 	set_dk, (void *) 1},
-	{"rwtrace",	set_dkrwtrace},
-	{"trace",	set_dktrace},
-	{"eus",		set_dkeus},
-	{"file",	set_dkfile},
-	{NULL,		NULL},
+	{"rwtrace",	set_dkrwtrace, NULL},
+	{"trace",	set_dktrace, NULL},
+	{"eus",		set_dkeus, NULL},
+	{"file",	set_dkfile, NULL},
+	{NULL,		NULL, NULL},
 };
 
 /***********************************************************************

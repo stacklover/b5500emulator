@@ -27,7 +27,7 @@
 #include "common.h"
 #include "io.h"
 
-#ifdef USECAN
+#if USECAN
 #include <linux/can.h>
 #include <linux/can/raw.h>
 #include <linux/can/error.h> 
@@ -144,8 +144,8 @@ void getlin(FILEHANDLE *f) { /* get next line */
 /***********************************************************************
 * read the current timer value
 ***********************************************************************/
-WORD48 readTimer(CPU *cpu) {
-        WORD48 result = 0;
+WORD48 readTimer(CPU *cpu) { (void)cpu;
+		WORD48 result = 0;
 
         if (CC->CCI03F)
                 result =  CC->TM | 0100;
@@ -359,13 +359,13 @@ void memdump(CPU *cpu) {
         }
 
 	if (cpu) {
-		fprintf(mfp, "\tA=%016llo(%u) GH=%02o Y=%02o M=%05o F=%05o N=%d NCSF=%u T=%04o\n",
+		fprintf(mfp, "\tA=%016lo(%u) GH=%02o Y=%02o M=%05o F=%05o N=%d NCSF=%u T=%04o\n",
 			cpu->rA, cpu->bAROF,
 			cpu->rGH,
 			(WORD6)cpu->rY, cpu->rM,
 			cpu->rF,
 			cpu->rN, cpu->bNCSF, cpu->rT);
-		fprintf(mfp, "\tB=%016llo(%u) KV=%02o Z=%02o S=%05o R=%05o MSFF=%u SALF=%u\n",
+		fprintf(mfp, "\tB=%016lo(%u) KV=%02o Z=%02o S=%05o R=%05o MSFF=%u SALF=%u\n",
 			cpu->rB, cpu->bBROF,
 			cpu->rKV,
 			cpu->rZ, cpu->rS,
@@ -380,7 +380,7 @@ void memdump(CPU *cpu) {
                 for (i=0; i<4; i++) {
                         w = MAIN[memaddr+i];
                         for (j=0; j<8; j++) {
-                                bufp += sprintf(bufp, "%02llo", (w>>42)&077);
+                                bufp += sprintf(bufp, "%02lo", (w>>42)&077);
                                 w<<=6;
                         }
                         *bufp++ = ' ';
@@ -452,7 +452,7 @@ void run(CPU *cpu)
 
 #if 0
 	// check for any registers gone wild
-#define CHECK(R,M,T) if((cpu->rR) & ~(M))printf("*\tCHECK "T" = %llo\n", (WORD48)(cpu->rR))
+#define CHECK(R,M,T) if((cpu->rR) & ~(M))printf("*\tCHECK "T" = %lo\n", (WORD48)(cpu->rR))
 	CHECK(A, MASK_WORD48, "A");
 	CHECK(B, MASK_WORD48, "B");
 	CHECK(C, MASK_ADDR15, "C");
@@ -525,15 +525,15 @@ void sim_printregs(CPU *cpu) {
 		fprintf(tracefp, "\tR=%05o N=%d F=%05o TFFF=%u SALF=%u NCSF=%u T=%04o\n",
 			cpu->rR, cpu->rN, cpu->rF,
 			cpu->bTFFF, cpu->bSALF, cpu->bNCSF, cpu->rT);
-		fprintf(tracefp, "\tX=__%014llo %s\n", cpu->rX, lcw2string(cpu->rX));
+		fprintf(tracefp, "\tX=__%014lo %s\n", cpu->rX, lcw2string(cpu->rX));
 	} else {
-		fprintf(tracefp, "\tA=%016llo(%u) GH=%02o Y=%02o M=%05o F=%05o N=%d NCSF=%u T=%04o\n",
+		fprintf(tracefp, "\tA=%016lo(%u) GH=%02o Y=%02o M=%05o F=%05o N=%d NCSF=%u T=%04o\n",
 			cpu->rA, cpu->bAROF,
 			cpu->rGH,
 			(WORD6)cpu->rY, cpu->rM,
 			cpu->rF,
 			cpu->rN, cpu->bNCSF, cpu->rT);
-		fprintf(tracefp, "\tB=%016llo(%u) KV=%02o Z=%02o S=%05o R=%05o MSFF=%u SALF=%u\n",
+		fprintf(tracefp, "\tB=%016lo(%u) KV=%02o Z=%02o S=%05o R=%05o MSFF=%u SALF=%u\n",
 			cpu->rB, cpu->bBROF,
 			cpu->rKV,
 			cpu->rZ, cpu->rS,
@@ -741,7 +741,7 @@ int main(int argc, char *argv[])
                 }
         }
 
-#ifdef USECAN
+#if USECAN
 	// init canbus
 	can_init("can1");
 #endif
@@ -866,10 +866,10 @@ void trap305(CPU *cpu) {
                 }
         }
         if (bestmatch > 0)
-                sprintf(buf, "%05o:%o (PRT[%3o]+%04o) @305 changed: @%016llo",
+                sprintf(buf, "%05o:%o (PRT[%3o]+%04o) @305 changed: @%016lo",
 			c, l, bestmatch, ((c - bestaddr) << 2) + l, MAIN[0305]);
         else
-                sprintf(buf, "%05o:%o @305 changed: @%016llo",
+                sprintf(buf, "%05o:%o @305 changed: @%016lo",
 			c, l, MAIN[0305]);
 
 	spo_debug_write(buf);
