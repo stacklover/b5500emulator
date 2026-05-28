@@ -45,7 +45,10 @@ static struct cp *cpx = NULL;
 /***********************************************************************
 * set to cpa
 ***********************************************************************/
-static int set_cp(const char *v, void *data) {cpx = cp+(int)data; return 0; }
+static int set_cp(const char *v, void *data) {
+	cpx = cp+(intptr_t)data;
+	return 0;
+}
 
 /***********************************************************************
 * specify or close the trace file

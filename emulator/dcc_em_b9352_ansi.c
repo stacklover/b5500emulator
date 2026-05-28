@@ -354,7 +354,9 @@ int b9352_output(TERMINAL_T *t, char ch) {
 	// try to write to terminal
 	switch (t->pc) {
 	case pc_serial: cnt = write(t->serial_handle, obuf, op-obuf); break;
+#if USECAN
 	case pc_canopen: cnt = can_write(t->canid, obuf, op-obuf); break;
+#endif
 	case pc_telnet: cnt = telnet_session_write(&t->tsession, obuf, op-obuf); break;
 	default: cnt = 0;
 	}

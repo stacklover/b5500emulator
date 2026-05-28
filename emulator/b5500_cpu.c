@@ -113,7 +113,7 @@
 #include <stdio.h>
 extern FILE *tracefp;
 
-const t_uint64 bit_mask[64] = {
+const uint64_t bit_mask[64] = {
         00000000000000001LL,
         00000000000000002LL,
         00000000000000004LL,
@@ -233,10 +233,10 @@ const uint8 rank[64] = {
 #define LF(x)    (uint16)(((x) & RL) >> RL_V)
 #define RF(x)    (uint16)(((x) & RFIELD) >> RFIELD_V)
 
-#define toF(x)   ((((t_uint64)(x)) << FFIELD_V) & FFIELD)
-#define toC(x)   (((t_uint64)(x)) & CORE)
-#define toL(x)   ((((t_uint64)(x)) << RL_V) & RL)
-#define toR(x)   ((((t_uint64)(x)) << RFIELD_V) & RFIELD)
+#define toF(x)   ((((uint64_t)(x)) << FFIELD_V) & FFIELD)
+#define toC(x)   (((uint64_t)(x)) & CORE)
+#define toL(x)   ((((uint64_t)(x)) << RL_V) & RL)
+#define toR(x)   ((((uint64_t)(x)) << RFIELD_V) & RFIELD)
 
 #define replF(y, x)   ((y & ~FFIELD) | toF(x))
 #define replC(y, x)   ((y & ~CORE) | toC(x))
@@ -249,12 +249,12 @@ const uint8 rank[64] = {
                  ((MSFF)?SMSFF:0) | ((SALF)?SSALF:0))
 #define ICW      (FLAG | DFLAG | toR(R) | ((VARF)?SVARF:0) | \
                  ((MSFF)?SMSFF:0) | ((SALF)?SSALF:0)) | toC(M)
-#define Pointer(x)      ((t_uint64)((((x) & 070) >> 3) | ((x & 07) << 8)))
+#define Pointer(x)      ((uint64_t)((((x) & 070) >> 3) | ((x & 07) << 8)))
 #define RCW(x)   (FLAG | DFLAG | toF(F) | toC(C) | toL(L) | \
                  (Pointer(GH) << RGH_V) | (Pointer(KV) << RKV_V)) | \
                  ((x)?PRESENT:0)
 #define LCW(f, x)        toF(f) | toC(C) | toL(L) | \
-                         (((t_uint64)(x) << REPFLD_V) & REPFLD)
+                         (((uint64_t)(x) << REPFLD_V) & REPFLD)
 #define VARIANT(x) ((x) >> 6)
 
 
@@ -328,7 +328,7 @@ BIT memory_cycle(CPU *cpu, uint8 E) {
 }
 
 /* Set registers based on MSCW */
-void set_via_MSCW(CPU *cpu, t_uint64 word) {
+void set_via_MSCW(CPU *cpu, uint64_t word) {
 	F = FF(word);
 	R = RF(word);
 	MSFF = (word & SMSFF) != 0;
@@ -339,7 +339,7 @@ void set_via_MSCW(CPU *cpu, t_uint64 word) {
    if no_set_lc is non-zero don't set LC from RCW.
    if no_bits is non-zero don't set GH and KV,
    return BROF flag  */
-int  set_via_RCW(CPU *cpu, t_uint64 word, int no_set_lc, int no_bits) {
+int  set_via_RCW(CPU *cpu, uint64_t word, int no_set_lc, int no_bits) {
 	if (!no_set_lc) {
 		L = LF(word);
 		C = CF(word);
@@ -357,13 +357,13 @@ int  set_via_RCW(CPU *cpu, t_uint64 word, int no_set_lc, int no_bits) {
 }
 
 /* Set the stack pointer from INCW */
-void set_via_INCW(CPU *cpu, t_uint64 word) {
+void set_via_INCW(CPU *cpu, uint64_t word) {
 	S = CF(word);
 	CWMF = (word & SCWMF) != 0;
 }
 
 /* Set registers from ICW */
-void set_via_ICW(CPU *cpu, t_uint64 word) {
+void set_via_ICW(CPU *cpu, uint64_t word) {
 	M = CF(word);
 	MSFF = (word & SMSFF) != 0;
 	SALF = (word & SSALF) != 0;
@@ -780,7 +780,7 @@ void initiate(CPU *cpu) {
 /* Save processor state in case of error or halt */
 void storeInterrupt(CPU *cpu, int forced, int test) {
 	int         f;
-	t_uint64    temp;
+	uint64_t    temp;
 
 	if (forced || test)
 		NCSF = 0;
@@ -829,7 +829,7 @@ void storeInterrupt(CPU *cpu, int forced, int test) {
 	} else {
 		B = FLAG|DFLAG|toC(S);
 	}
-	//B |= ((t_uint64)Q) << 35;	// TODO: why are the IRQ flags stored here?
+	//B |= ((uint64_t)Q) << 35;	// TODO: why are the IRQ flags stored here?
 	M = R | 010;
 	memory_cycle(cpu, 015);  /* Store B in M */
 	R = 0;
@@ -877,7 +877,7 @@ void storeInterrupt(CPU *cpu, int forced, int test) {
 uint8   compare(CPU *cpu) {
     int         sign_a, sign_b;
     int         exp_a, exp_b;
-    t_uint64    ma, mb;
+    uint64_t    ma, mb;
 
     sign_a = (A & MSIGN) != 0;
     sign_b = (B & MSIGN) != 0;
@@ -972,7 +972,7 @@ void add(CPU *cpu, int opcode) {
        exp_b = -exp_b;
     /* Larger exponent to A */
     if (exp_b > exp_a) {
-        t_uint64 temp;
+        uint64_t temp;
         temp = A;
         A = B;
         B = temp;
@@ -1072,15 +1072,15 @@ void add(CPU *cpu, int opcode) {
 #endif
        exp_b &= 077;
     }
-    B = (B & MANT) | ((t_uint64)(exp_b & 0177) << EXPO_V) |
+    B = (B & MANT) | ((uint64_t)(exp_b & 0177) << EXPO_V) |
         ((sb) ? MSIGN: 0);
 }
 
 /*
  * Perform a 40 bit multiply on A and B, result into B,X
  */
-void mult_step(t_uint64 a, t_uint64 *b, t_uint64 *x) {
-    t_uint64  u0,u1,v0,v1,t,w1,w2,w3,k;
+void mult_step(uint64_t a, uint64_t *b, uint64_t *x) {
+    uint64_t  u0,u1,v0,v1,t,w1,w2,w3,k;
 
     /* Split into 32 bit and 8 bit */
     u0 = a >> 32; u1 = a & 0xffffffff;
@@ -1197,14 +1197,14 @@ void multiply(CPU *cpu) {
        exp_b &= 077;
     }
     /* Put the pieces back together */
-    B = (B & MANT) | ((t_uint64)(exp_b & 0177) << EXPO_V) | (f? MSIGN: 0);
+    B = (B & MANT) | ((uint64_t)(exp_b & 0177) << EXPO_V) | (f? MSIGN: 0);
 }
 
 
 /* Do divide instruction */
 void divide(CPU *cpu, int op) {
     int exp_a, exp_b, q, sa, sb;
-    t_uint64 t;
+    uint64_t t;
 
     AB_valid(cpu);
     AROF = 0;
@@ -1278,12 +1278,12 @@ void divide(CPU *cpu, int op) {
                 break;          /* quotient has become normalized */
             } else {
                 B <<= 3;       /* shift the remainder left one octade */
-                X = (X<<3) + (t_uint64)q;  /* shift quotient digit into the
+                X = (X<<3) + (uint64_t)q;  /* shift quotient digit into the
                                         working quotient */
                 --exp_b;
             }
         } else {
-            X = (X<<3) + (t_uint64)q;  /* shift quotient digit into the
+            X = (X<<3) + (uint64_t)q;  /* shift quotient digit into the
                                          working quotient */
             if ((X & NORM) != 0) {
                 break;              /* quotient has become normalized */
@@ -1356,7 +1356,7 @@ void divide(CPU *cpu, int op) {
     }
 
     /* Put the pieces back together */
-    B = (X & MANT) | ((t_uint64)(exp_b & 0177) << EXPO_V) | (sb? MSIGN: 0);
+    B = (X & MANT) | ((uint64_t)(exp_b & 0177) << EXPO_V) | (sb? MSIGN: 0);
 }
 
 
@@ -1367,7 +1367,7 @@ void double_add(CPU *cpu, int opcode) {
     int         exp_a, exp_b;
     int         sa, sb;
     int         ld;
-    t_uint64    temp, tY;
+    uint64_t    temp, tY;
 
     AB_valid(cpu);
     X = A;              /* Save registers. X = H, tY=L*/
@@ -1390,7 +1390,7 @@ void double_add(CPU *cpu, int opcode) {
        exp_b = -exp_b;
     /* Larger exponent to A */
     if (exp_b > exp_a) {
-        t_uint64 temp;
+        uint64_t temp;
         temp = A;
         A = B;
         B = temp;
@@ -1513,7 +1513,7 @@ void double_add(CPU *cpu, int opcode) {
 #endif
        exp_b &= 077;
     }
-    A = (B & MANT) | ((t_uint64)(exp_b & 0177) << EXPO_V) |
+    A = (B & MANT) | ((uint64_t)(exp_b & 0177) << EXPO_V) |
         (sb ? MSIGN: 0);
     B = X;
 }
@@ -1525,7 +1525,7 @@ void double_mult(CPU *cpu) {
     int         exp_a, exp_b;
     int         f;
     int         ld;
-    t_uint64    m7, m6, tY;
+    uint64_t    m7, m6, tY;
 
     AB_valid(cpu);
     X = A;              /* Save registers. X = H, tY=L*/
@@ -1639,7 +1639,7 @@ void double_mult(CPU *cpu) {
 #endif
        exp_b &= 077;
     }
-    A = (A & MANT) | ((t_uint64)(exp_b & 0177) << EXPO_V) |
+    A = (A & MANT) | ((uint64_t)(exp_b & 0177) << EXPO_V) |
         (f ? MSIGN: 0);
 }
 
@@ -1651,7 +1651,7 @@ void double_divide(CPU *cpu) {
     int f;
     int         n;
     int         q;
-    t_uint64    Q1, q1, tY;
+    uint64_t    Q1, q1, tY;
 
     AB_valid(cpu);
     X = A;              /* Save registers. X = H, tY=L*/
@@ -1726,7 +1726,7 @@ void double_divide(CPU *cpu) {
         }
 
         B <<= 3;            /* shift the remainder left one octade */
-        X = (X<<3) + (t_uint64)q;  /* shift quotient digit into the
+        X = (X<<3) + (uint64_t)q;  /* shift quotient digit into the
                                       working quotient */
         --exp_b;
     n++;
@@ -1751,7 +1751,7 @@ void double_divide(CPU *cpu) {
     }
 
     /* Save Q1 in x R1 in B */
-    Q1 = (X & MANT) | ((t_uint64)(exp_b & 0177) << EXPO_V) |
+    Q1 = (X & MANT) | ((uint64_t)(exp_b & 0177) << EXPO_V) |
                         (f ? MSIGN: 0);
     X = 0;
     /* Now divide R1 by M3 resulting in q1, R2 */
@@ -1764,7 +1764,7 @@ void double_divide(CPU *cpu) {
         }
 
         B <<= 3;            /* shift the remainder left one octade */
-        X = (X<<3) + (t_uint64)q;  /* shift quotient digit into the
+        X = (X<<3) + (uint64_t)q;  /* shift quotient digit into the
                          working quotient */
     }
 
@@ -1782,7 +1782,7 @@ void double_divide(CPU *cpu) {
         }
 
         B <<= 3;            /* shift the remainder left one octade */
-        X = (X<<3) + (t_uint64)q;  /* shift quotient digit into the
+        X = (X<<3) + (uint64_t)q;  /* shift quotient digit into the
                          working quotient */
     }
 
@@ -1846,7 +1846,7 @@ void relativeAddr(CPU *cpu, int store) {
 * emulate ONE instrruction
 ***********************************************************************/
 void sim_instr(CPU *cpu) {
-	t_uint64            temp = 0LL;
+	uint64_t            temp = 0LL;
 	uint16              atemp;
 	uint8               opcode;
 	uint8               field;
@@ -2119,7 +2119,7 @@ void sim_instr(CPU *cpu) {
                 adjust_dest(cpu);
                 A = B;
                 AROF = BROF;
-                B = ((t_uint64)(KV & 070) << (FFIELD_V - 3)) | toC(S);
+                B = ((uint64_t)(KV & 070) << (FFIELD_V - 3)) | toC(S);
                 S = (F - field) & CORE;
                 memory_cycle(cpu, 013);      /* Store B in S */
                 S = CF(B);
@@ -2132,7 +2132,7 @@ void sim_instr(CPU *cpu) {
                 adjust_source(cpu);
                 A = B;
                 AROF = BROF;
-                B = ((t_uint64)(GH & 070) << (FFIELD_V - 3)) | toC(M);
+                B = ((uint64_t)(GH & 070) << (FFIELD_V - 3)) | toC(M);
                 M = (F - field) & CORE;
                 memory_cycle(cpu, 015);      /* Store B in M */
                 M = CF(B);
@@ -2185,17 +2185,23 @@ void sim_instr(CPU *cpu) {
                     f = 4;
                 switch(opcode) {
                 case CMOP_TEQ:  /* Test for Equal 24 */
-                        TFFF = (f == 1);  break;
+                        TFFF = (f == 1);
+			break;
                 case CMOP_TNE:  /* Test for Not-Equal 25 */
-                        TFFF = (f != 1);  break;
+                        TFFF = (f != 1);
+			break;
                 case CMOP_TEG:  /* Test for Greater Or Equal 26   */
-                        TFFF = ((f & 5) != 0); break;
+                        TFFF = ((f & 5) != 0);
+			break;
                 case CMOP_TGR:  /* Test For Greater 27 */
-                        TFFF = (f == 4); break;
+                        TFFF = (f == 4);
+			break;
                 case CMOP_TEL:  /* Test For Equal or Less 34 */
-                        TFFF = ((f & 3) != 0); break;
+                        TFFF = ((f & 3) != 0);
+			break;
                 case CMOP_TLS:  /* Test For Less 35 */
-                        TFFF = (f == 2); break;
+                        TFFF = (f == 2);
+			break;
                 case CMOP_TAN:  /* Test for Alphanumeric 36 */
                         if (f & 4) {
                             TFFF = !((i == 34) | (i == 44));
@@ -2332,7 +2338,7 @@ void sim_instr(CPU *cpu) {
                 field = (uint8)((B & REPFLD) >> REPFLD_V);
                 if (field) {
                      X &= ~REPFLD;
-                     X |= ((t_uint64)(field - 1) << REPFLD_V) & REPFLD;
+                     X |= ((uint64_t)(field - 1) << REPFLD_V) & REPFLD;
                      L = LF(B);
                      C = CF(B);
                      PROF = 0;
@@ -2407,7 +2413,7 @@ void sim_instr(CPU *cpu) {
                     /* Lastly Add in new digit */
                     j = (A & ROUND) != 0;
                     A &= ~ROUND;
-                    B += (t_uint64)j;
+                    B += (uint64_t)j;
                     A <<= 1;
                     i--;
                 }
@@ -2427,7 +2433,7 @@ void sim_instr(CPU *cpu) {
                         B &= ~temp;
                         if (i == 0 && f)
                             j |= 040;
-                        B |= ((t_uint64)j) << bit_number[KV | 07];
+                        B |= ((uint64_t)j) << bit_number[KV | 07];
                         BROF = 1;
                         next_dest(cpu, 0);
                     }
@@ -2468,7 +2474,7 @@ void sim_instr(CPU *cpu) {
                 while(field > 0) {
                    A >>= 1;
                    if (B & 1)
-                        A |= ((t_uint64)1) << 27;
+                        A |= ((uint64_t)1) << 27;
                    /* BCD divide by 2 */
                    temp = B & 0x0011111110LL;
                    temp = (temp >> 4) | (temp >> 3);
@@ -2596,7 +2602,7 @@ void sim_instr(CPU *cpu) {
                         }
                         temp = 077LL << bit_number[KV | 07];
                         B &= ~temp;
-                        B |= ((t_uint64)i) << bit_number[KV | 07];
+                        B |= ((uint64_t)i) << bit_number[KV | 07];
                         prev_src(cpu, 0);
                         prev_dest(cpu, 0);
                         fill_src(cpu);
@@ -2655,7 +2661,7 @@ void sim_instr(CPU *cpu) {
                    }
                    temp = 077LL << bit_number[KV | 07];
                    B &= ~temp;
-                   B |= ((t_uint64)i) << bit_number[KV | 07];
+                   B |= ((uint64_t)i) << bit_number[KV | 07];
                    next_dest(cpu, 0);
                    field--;
                 }
@@ -2688,7 +2694,7 @@ void sim_instr(CPU *cpu) {
                         temp = 060LL << bit_number[KV | 07];
                    }
                    B &= ~temp;
-                   B |= ((t_uint64)i) << bit_number[KV | 07];
+                   B |= ((uint64_t)i) << bit_number[KV | 07];
                    next_src(cpu, 0);
                    next_dest(cpu, 0);
                    field--;
@@ -3155,17 +3161,23 @@ control:
                         i = compare(cpu);
                         switch(field) {
                         case VARIANT(WMOP_GEQ):
-                                if ((i & 5) != 0) f = 1; break;
+                                if ((i & 5) != 0) f = 1;
+				break;
                         case VARIANT(WMOP_GTR):
-                                if (i == 4) f = 1; break;
+                                if (i == 4) f = 1;
+				break;
                         case VARIANT(WMOP_NEQ):
-                                if (i != 1) f = 1; break;
+                                if (i != 1) f = 1;
+				break;
                         case VARIANT(WMOP_LEQ):
-                                if ((i & 3) != 0) f = 1; break;
+                                if ((i & 3) != 0) f = 1;
+				break;
                         case VARIANT(WMOP_LSS):
-                                if (i == 2) f = 1; break;
+                                if (i == 2) f = 1;
+				break;
                         case VARIANT(WMOP_EQL):
-                                if (i == 1) f = 1; break;
+                                if (i == 1) f = 1;
+				break;
                         }
                         B = f;
                         AROF = 0;
@@ -3503,18 +3515,18 @@ control:
                 case VARIANT(WMOP_LLL): /* Link List Look-up */
                         AB_valid(cpu);
 			if (dotrcins)
-				fprintf(tracefp, "*\tLLL A=%016llo B=%016llo\n", A, B);
+				fprintf(tracefp, "*\tLLL A=%016lo B=%016lo\n", A, B);
                         A = MANT ^ A;
                         do {
                             M = CF(B);
                             memory_cycle(cpu, 5); /* B=[M] */
 				if (dotrcins)
-					fprintf(tracefp, "*\t    A=%016llo B=%016llo\n", A, B);
+					fprintf(tracefp, "*\t    A=%016lo B=%016lo\n", A, B);
                             temp = (B & MANT) + (A & MANT);
                         } while ((temp & EXPO) == 0);
                         A = FLAG | PRESENT | toC(M);
 			if (dotrcins)
-				fprintf(tracefp, "*\t    A=%016llo END\n", A);
+				fprintf(tracefp, "*\t    A=%016lo END\n", A);
                         break;
 
                 case VARIANT(WMOP_CMN): /* Enter Character Mode In Line */
@@ -3754,7 +3766,7 @@ cpu_show_size(FILE *st, UNIT *uptr, int32 val, CONST void *desc)
 t_stat
 cpu_set_size(UNIT * uptr, int32 val, CONST char *cptr, void *desc)
 {
-    t_uint64            mc = 0;
+    uint64_t            mc = 0;
     uint32              i;
 
     cpu_unit[0].flags &= ~UNIT_MSIZE;

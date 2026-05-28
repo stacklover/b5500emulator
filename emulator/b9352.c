@@ -67,6 +67,7 @@
 #include <netdb.h>
 #include <signal.h>
 #include <arpa/inet.h>
+#include <pthread.h>
 
 /***********************************************************************
 * defines for screen resolution and storage

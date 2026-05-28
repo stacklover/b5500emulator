@@ -49,9 +49,9 @@
 * the TELNET servers
 ***********************************************************************/
 static TELNET_SERVER_T server[NUMSERV_T];
-// server[0]: Port 23 - BLOCK type terminals (B9352 with external ANSI emulation)
+// server[0]: Port 7023 - BLOCK type terminals (B9352 with external ANSI emulation)
 // server[1]: Port 8023 - LINE type terminals (TELETYPE)
-static unsigned portno[NUMSERV_T] = {23, 8023};
+static unsigned portno[NUMSERV_T] = {7023, 8023};
 static enum ld ldno[NUMSERV_T] = {ld_contention, ld_teletype};
 static enum em emno[NUMSERV_T] = {em_ansi, em_none};
 

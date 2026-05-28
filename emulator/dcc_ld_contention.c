@@ -341,7 +341,9 @@ int ld_poll_contention(TERMINAL_T *t) {
 		switch (t->pc) {
 		case pc_telnet: cnt = pc_telnet_read(t, ibuf, sizeof ibuf); break;
 		case pc_serial: cnt = pc_serial_read(t, ibuf, sizeof ibuf); break;
+#if USECAN
 		case pc_canopen: cnt = pc_canopen_read(t, ibuf, sizeof ibuf); break;
+#endif
 		default: return -1;
 		}
 

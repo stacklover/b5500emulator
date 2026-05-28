@@ -108,42 +108,42 @@ void b5500_init_shares(void)
 	}
 
 	MAIN = (WORD48*)shmat(shm_main,	NULL, 0);
-	if ((int)MAIN == -1) {
+	if (MAIN == (void *)-1) {
 		perror("shmat MAIN");
 		exit(2);
 	}
 	P[0] = (CPU *)shmat(shm_cpu[0], NULL,	0);
-	if ((int)P[0]	== -1) {
+	if (P[0] == (void *)-1) {
 		perror("shmat P1");
 		exit(2);
 	}
 	P[1] = (CPU *)shmat(shm_cpu[1], NULL,	0);
-	if ((int)P[1]	== -1) {
+	if (P[1] == (void *)-1) {
 		perror("shmat P2");
 		exit(2);
 	}
 	CC = (CENTRAL_CONTROL*)shmat(shm_cc, NULL, 0);
-	if ((int)CC == -1) {
+	if (CC == (void *)-1) {
 		perror("shmat CC");
 		exit(2);
 	}
 	IO[0] = (IOCU *)shmat(shm_ioc[0], NULL,	0);
-	if ((int)IO[0]	== -1) {
+	if (IO[0] == (void *)-1) {
 		perror("shmat IOC1");
 		exit(2);
 	}
 	IO[1] = (IOCU *)shmat(shm_ioc[1], NULL,	0);
-	if ((int)IO[1]	== -1) {
+	if (IO[1] == (void *)-1) {
 		perror("shmat IOC2");
 		exit(2);
 	}
 	IO[2] = (IOCU *)shmat(shm_ioc[2], NULL,	0);
-	if ((int)IO[2]	== -1) {
+	if (IO[2] == (void *)-1) {
 		perror("shmat IOC3");
 		exit(2);
 	}
 	IO[3] = (IOCU *)shmat(shm_ioc[3], NULL,	0);
-	if ((int)IO[3]	== -1) {
+	if (IO[3] == (void *)-1) {
 		perror("shmat IOC4");
 		exit(2);
 	}

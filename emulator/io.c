@@ -26,6 +26,7 @@
 #include <sys/types.h>
 #include <sys/ipc.h>
 #include <sys/msg.h>
+#include <pthread.h>
 #include "common.h"
 #include "io.h"
 
@@ -101,7 +102,7 @@ void put_ib_reverse(IOCU *u) {
 * Print an IO control word
 ***********************************************************************/
 void print_iocw(FILE *fp, IOCU *u) {
-	fprintf(fp, "_IOCW=%016llo (UNIT=%02u WC=%04o CMD=%03o   CMD2=%04o ADDR=%05o)",
+	fprintf(fp, "_IOCW=%016lo (UNIT=%02u WC=%04o CMD=%03o   CMD2=%04o ADDR=%05o)",
 		u->w, u->d_unit, u->d_wc, u->d_control, u->d_result, u->d_addr);
 }
 
@@ -109,7 +110,7 @@ void print_iocw(FILE *fp, IOCU *u) {
 * Print an IO result word
 ***********************************************************************/
 void print_ior(FILE *fp, IOCU *u) {
-	fprintf(fp, "_ RCW=%016llo (UNIT=%02u WC=%04o CMD=%03o RESULT=%04o ADDR=%05o)",
+	fprintf(fp, "_ RCW=%016lo (UNIT=%02u WC=%04o CMD=%03o RESULT=%04o ADDR=%05o)",
 		u->w, u->d_unit, u->d_wc, u->d_control, u->d_result, u->d_addr);
 }
 

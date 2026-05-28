@@ -63,7 +63,10 @@ static unsigned char parity[256] = {P6(0),P6(1),P6(1),P6(0)};
 /***********************************************************************
 * set to mta..mtt
 ***********************************************************************/
-static int set_mt(const char *v, void *data) {mtx = mt+(int)data; return 0; }
+static int set_mt(const char *v, void *data) {
+	mtx = mt+(intptr_t)data;
+	return 0;
+}
 
 /***********************************************************************
 * specify or close the trace file
@@ -554,7 +557,7 @@ void mt_access(IOCU *u) {
 		        if (trace) fprintf(trace, "-> REWIND\n");
 			// we should also have MI=1, BINARY=0, USEWC=0
 			if (!mi || binary || usewc)
-				printf("* WARNING: TAPE REWIND WITH UNEXPECTED OPTIONS IOCW=%016llo\n", u->w);
+				printf("* WARNING: TAPE REWIND WITH UNEXPECTED OPTIONS IOCW=%016lo\n", u->w);
 		        mtx->pos = 0;
 		        mtx->eof = false;
 		        return;
@@ -566,7 +569,7 @@ void mt_access(IOCU *u) {
                 if (trace) fprintf(trace, " ADDR=%05o\n\t'", u->d_addr);
 		// we should also have BINARY equal to USEWC
 		if (binary != usewc)
-			printf("* WARNING: TAPE WRITE WITH UNEXPECTED OPTIONS IOCW=%016llo\n", u->w);
+			printf("* WARNING: TAPE WRITE WITH UNEXPECTED OPTIONS IOCW=%016lo\n", u->w);
 		if (!mtx->writering) {
 		        // return no ring status
 		        if (trace)

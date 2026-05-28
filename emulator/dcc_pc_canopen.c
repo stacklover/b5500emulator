@@ -19,6 +19,8 @@
 *   added iTELEX functionality
 ***********************************************************************/
 
+#if USECAN
+
 #include <stdio.h>
 #include <string.h>
 #include <stddef.h>
@@ -127,4 +129,4 @@ int pc_canopen_write(TERMINAL_T *t, char *buf, int len) {
 	return cnt;
 }
 
-
+#endif
